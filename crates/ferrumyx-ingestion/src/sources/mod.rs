@@ -2,6 +2,9 @@
 
 pub mod pubmed;
 pub mod europepmc;
+pub mod biorxiv;
+pub mod clinicaltrials;
+pub mod crossref;
 
 use async_trait::async_trait;
 use crate::models::PaperMetadata;

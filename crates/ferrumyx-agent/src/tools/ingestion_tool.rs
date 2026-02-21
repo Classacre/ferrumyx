@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use ferrumyx_ingestion::pipeline::{
-    IngestionJob, IngestionSourceSpec, run_ingestion,
+    IngestionJob, IngestionSourceSpec, run_ingestion, build_query,
 };
 use ferrumyx_ingestion::pg_repository::PgIngestionRepository;
 
@@ -68,7 +68,7 @@ impl FerrumyxTool for IngestPubmedTool {
             pubmed_api_key: api_key,
         };
 
-        tracing::info!(tool = "ingest_pubmed", query = %ferrumyx_ingestion::pipeline::build_query(&job), "Running ingestion");
+        tracing::info!(tool = "ingest_pubmed", query = %build_query(&job), "Running ingestion");
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 

@@ -21,6 +21,9 @@ use uuid::Uuid;
 use crate::models::{IngestionSource, SectionType};
 use crate::sources::pubmed::PubMedClient;
 use crate::sources::europepmc::EuropePmcClient;
+use crate::sources::biorxiv::BioRxivClient;
+use crate::sources::clinicaltrials::ClinicalTrialsClient;
+use crate::sources::crossref::CrossRefClient;
 use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::pg_repository::PgIngestionRepository;
@@ -45,6 +48,10 @@ pub struct IngestionJob {
 pub enum IngestionSourceSpec {
     PubMed,
     EuropePmc,
+    BioRxiv,
+    MedRxiv,
+    ClinicalTrials,
+    CrossRef,
 }
 
 impl Default for IngestionJob {
@@ -154,6 +161,22 @@ pub async fn run_ingestion(
             }
             IngestionSourceSpec::EuropePmc => {
                 let client = EuropePmcClient::new();
+                client.search(&query, job.max_results).await
+            }
+            IngestionSourceSpec::BioRxiv => {
+                let client = BioRxivClient::new_biorxiv();
+                client.search(&query, job.max_results).await
+            }
+            IngestionSourceSpec::MedRxiv => {
+                let client = BioRxivClient::new_medrxiv();
+                client.search(&query, job.max_results).await
+            }
+            IngestionSourceSpec::ClinicalTrials => {
+                let client = ClinicalTrialsClient::new();
+                client.search(&query, job.max_results).await
+            }
+            IngestionSourceSpec::CrossRef => {
+                let client = CrossRefClient::new();
                 client.search(&query, job.max_results).await
             }
         };

@@ -131,9 +131,13 @@ async fn load_stats(state: &SharedState) -> PageStats {
 fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
     let v: Vec<IngestionSourceSpec> = s.split(',')
         .filter_map(|x| match x.trim() {
-            "pubmed"    => Some(IngestionSourceSpec::PubMed),
-            "europepmc" => Some(IngestionSourceSpec::EuropePmc),
-            _           => None,
+            "pubmed"         => Some(IngestionSourceSpec::PubMed),
+            "europepmc"      => Some(IngestionSourceSpec::EuropePmc),
+            "biorxiv"        => Some(IngestionSourceSpec::BioRxiv),
+            "medrxiv"        => Some(IngestionSourceSpec::MedRxiv),
+            "clinicaltrials" => Some(IngestionSourceSpec::ClinicalTrials),
+            "crossref"       => Some(IngestionSourceSpec::CrossRef),
+            _                => None,
         })
         .collect();
     if v.is_empty() { vec![IngestionSourceSpec::PubMed] } else { v }
@@ -229,9 +233,29 @@ fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) ->
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Sources</label>
-                    <input type="text" name="sources" class="form-control" value="pubmed,europepmc"
-                        placeholder="pubmed,europepmc">
-                    <div class="form-text">Comma-separated</div>
+                    <div class="d-flex flex-column gap-1 mt-1">
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" name="src_pubmed" id="src_pubmed" checked>
+                            <label class="form-check-label small" for="src_pubmed">PubMed</label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" name="src_europepmc" id="src_europepmc" checked>
+                            <label class="form-check-label small" for="src_europepmc">Europe PMC</label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" name="src_biorxiv" id="src_biorxiv">
+                            <label class="form-check-label small" for="src_biorxiv">bioRxiv</label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" name="src_clinicaltrials" id="src_clinicaltrials">
+                            <label class="form-check-label small" for="src_clinicaltrials">ClinicalTrials</label>
+                        </div>
+                        <div class="form-check form-check-sm">
+                            <input class="form-check-input" type="checkbox" name="src_crossref" id="src_crossref">
+                            <label class="form-check-label small" for="src_crossref">CrossRef</label>
+                        </div>
+                    </div>
+                    <input type="hidden" name="sources" id="sources_hidden" value="pubmed,europepmc">
                 </div>
                 <div class="col-12">
                     <button type="submit" class="btn btn-success">▶ Start Ingestion</button>

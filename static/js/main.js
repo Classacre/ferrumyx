@@ -74,6 +74,33 @@ document.querySelectorAll('td.font-monospace').forEach(cell => {
     });
 });
 
+// ── Ingestion source checkboxes → hidden field ──
+(function() {
+    const checkboxMap = {
+        'src_pubmed':         'pubmed',
+        'src_europepmc':      'europepmc',
+        'src_biorxiv':        'biorxiv',
+        'src_medrxiv':        'medrxiv',
+        'src_clinicaltrials': 'clinicaltrials',
+        'src_crossref':       'crossref',
+    };
+    const hidden = document.getElementById('sources_hidden');
+    if (!hidden) return;
+
+    function updateSources() {
+        const selected = Object.entries(checkboxMap)
+            .filter(([id]) => document.getElementById(id)?.checked)
+            .map(([, val]) => val);
+        hidden.value = selected.join(',') || 'pubmed';
+    }
+
+    Object.keys(checkboxMap).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateSources);
+    });
+    updateSources();
+})();
+
 // ── Query form: extract entities from NL query ──
 const queryTextarea = document.querySelector('textarea[name="query_text"]');
 if (queryTextarea) {
