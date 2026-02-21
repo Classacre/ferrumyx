@@ -1,0 +1,23 @@
+[package]
+name = "ferrumyx-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ferrumyx"
+path = "src/main.rs"
+
+[dependencies]
+ferrumyx-common     = { path = "../ferrumyx-common" }
+ferrumyx-ingestion  = { path = "../ferrumyx-ingestion" }
+ferrumyx-kg         = { path = "../ferrumyx-kg" }
+ferrumyx-ranker     = { path = "../ferrumyx-ranker" }
+ferrumyx-llm        = { path = "../ferrumyx-llm" }
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
