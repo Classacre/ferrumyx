@@ -126,3 +126,33 @@ impl KgFact {
         self.valid_until.is_none()
     }
 }
+
+impl EvidenceType {
+    /// Serialize to the string stored in the DB.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EvidenceType::ExperimentalInVivo         => "experimental_in_vivo",
+            EvidenceType::ExperimentalInVitro        => "experimental_in_vitro",
+            EvidenceType::ClinicalTrialPhase3Plus    => "clinical_trial_phase3_plus",
+            EvidenceType::ClinicalTrialPhase12       => "clinical_trial_phase1_2",
+            EvidenceType::ComputationalMl            => "computational_ml",
+            EvidenceType::ComputationalRuleBased     => "computational_rule_based",
+            EvidenceType::TextMined                  => "text_mined",
+            EvidenceType::DatabaseAssertion          => "database_assertion",
+        }
+    }
+
+    /// Parse from the string stored in the DB.
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "experimental_in_vivo"        => EvidenceType::ExperimentalInVivo,
+            "experimental_in_vitro"       => EvidenceType::ExperimentalInVitro,
+            "clinical_trial_phase3_plus"  => EvidenceType::ClinicalTrialPhase3Plus,
+            "clinical_trial_phase1_2"     => EvidenceType::ClinicalTrialPhase12,
+            "computational_ml"            => EvidenceType::ComputationalMl,
+            "computational_rule_based"    => EvidenceType::ComputationalRuleBased,
+            "text_mined"                  => EvidenceType::TextMined,
+            _                             => EvidenceType::DatabaseAssertion,
+        }
+    }
+}

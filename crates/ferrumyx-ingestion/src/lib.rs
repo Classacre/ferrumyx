@@ -13,3 +13,4 @@ pub mod chunker;
 pub mod dedup;
 pub mod models;
 pub mod normalise;
+pub mod pg_repository;

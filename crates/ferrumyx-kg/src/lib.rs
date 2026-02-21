@@ -4,3 +4,4 @@
 pub mod repository;
 pub mod conflict;
 pub mod update;
+pub mod pg_repository;
