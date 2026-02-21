@@ -1,6 +1,8 @@
 //! Ferrumyx — Autonomous Oncology Drug Discovery Engine
 //! Entry point for the agent binary.
 
+mod config;
+
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -17,12 +19,42 @@ async fn main() -> anyhow::Result<()> {
     info!("🔬 Ferrumyx starting up...");
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
 
-    // TODO Phase 1 Month 1:
-    //   1. Load configuration (ferrumyx.toml)
-    //   2. Connect to PostgreSQL + pgvector
-    //   3. Register IronClaw tools
-    //   4. Start agent loop / REPL
+    // Load configuration
+    let config = match config::Config::load() {
+        Ok(c) => {
+            info!("Configuration loaded. LLM mode: {}, Focus: {} {}",
+                c.llm.mode, c.scoring.focus_cancer, c.scoring.focus_mutation);
+            c
+        }
+        Err(e) => {
+            tracing::warn!("Could not load ferrumyx.toml: {e}");
+            tracing::warn!("Running with defaults. Copy ferrumyx.example.toml to ferrumyx.toml to configure.");
+            // Continue with placeholder — DB connection etc. will fail later
+            return Ok(());
+        }
+    };
 
-    info!("Ferrumyx agent placeholder — implementation begins Phase 1 Month 1.");
+    // Connect to PostgreSQL
+    info!("Connecting to PostgreSQL...");
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(config.database.max_connections)
+        .min_connections(config.database.min_connections)
+        .connect(&config.database.url)
+        .await
+        .map_err(|e| anyhow::anyhow!("DB connection failed: {e}\nIs PostgreSQL running? Try: docker compose up -d (in ./docker/)"))?;
+
+    info!("✅ PostgreSQL connected.");
+
+    // Run pending migrations
+    // Path is relative to workspace root (where Cargo.toml is), not the crate
+    info!("Running schema migrations...");
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
+
+    info!("✅ Migrations complete.");
+    info!("🔬 Ferrumyx ready. IronClaw tool registration coming in next phase.");
+
     Ok(())
 }

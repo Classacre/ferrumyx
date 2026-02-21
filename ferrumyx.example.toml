@@ -1,0 +1,100 @@
+# ferrumyx.toml — Ferrumyx configuration
+# Copy this to ferrumyx.toml and edit for your environment.
+# ferrumyx.toml is gitignored; never commit secrets.
+
+[database]
+url = "postgresql://ferrumyx:ferrumyx_dev@localhost:5432/ferrumyx"
+max_connections = 10
+min_connections = 2
+
+[llm]
+# Mode: "local_only" | "prefer_local" | "any"
+mode = "local_only"
+local_backend = "ollama"
+local_model = "llama3:8b"
+
+# Uncomment to enable remote backends (requires data classification gate)
+# [llm.openai]
+# api_key_secret = "openai_api_key"   # key name in ferrumyx keychain
+# model = "gpt-4o"
+# base_url = "https://api.openai.com/v1"
+
+# [llm.anthropic]
+# api_key_secret = "anthropic_api_key"
+# model = "claude-sonnet-4-6"
+# base_url = "https://api.anthropic.com/v1"
+
+[llm.limits]
+max_tokens_per_day_openai = 500000
+max_tokens_per_day_anthropic = 500000
+max_cost_per_day_usd = 20.0
+alert_cost_threshold_usd = 15.0
+
+[llm.rate_limits]
+openai_rpm = 60
+anthropic_rpm = 40
+ollama_rpm = 120
+
+[ingestion]
+# Sources to enable
+sources = ["pubmed", "europepmc"]
+# sources = ["pubmed", "europepmc", "biorxiv", "clinicaltrials", "semanticscholar"]
+
+[ingestion.pubmed]
+# Register at https://www.ncbi.nlm.nih.gov/account/ for API key (free)
+# api_key_secret = "pubmed_api_key"
+requests_per_second = 3   # 10 with API key
+
+[ingestion.europepmc]
+requests_per_second = 5
+
+[ingestion.semanticscholar]
+# Register at https://api.semanticscholar.org/
+# api_key_secret = "s2_api_key"
+requests_per_second = 1   # 100 with key
+
+[embedding]
+# Model used for chunk embeddings
+# Options: "pubmedbert-base" | "pubmedbert-large" | "biobert-base"
+model = "pubmedbert-base"
+# "standard" | "high_precision" (uses large model, requires GPU)
+mode = "standard"
+batch_size = 32
+docker_image = "ferrumyx/embed-service:latest"
+
+[ner]
+# "scispacy" (MVP, CPU-only) | "bern2" (high-recall, GPU recommended)
+primary = "scispacy"
+# Activate BERN2 for papers with citation count above this threshold
+bern2_citation_threshold = 50
+scispacy_docker_image = "ferrumyx/scispacy-ner:latest"
+bern2_docker_image = "ferrumyx/bern2-ner:latest"
+
+[scoring]
+# Cancer domain to focus on (MVP)
+focus_cancer = "PAAD"   # OncoTree code: Pancreatic Adenocarcinoma
+focus_mutation = "KRAS_G12D"
+
+# Target score shortlist thresholds (see ARCHITECTURE.md §4.5)
+primary_shortlist_threshold = 0.60
+secondary_shortlist_threshold = 0.45
+
+[structural]
+pdb_requests_per_second = 5
+alphafold_requests_per_second = 5
+fpocket_docker_image = "ferrumyx/fpocket:latest"
+vina_docker_image = "ferrumyx/autodock-vina:latest"
+rdkit_docker_image = "ferrumyx/rdkit-service:latest"
+admet_docker_image = "ferrumyx/admet-ai:latest"
+
+[security]
+# Audit all LLM calls
+audit_llm_calls = true
+# Block any remote LLM call with INTERNAL or CONFIDENTIAL data
+enforce_data_classification = true
+# Retain audit logs for N days before compression
+audit_log_retention_days = 90
+
+[workspace]
+# Path for intermediate files (structures, docking results, reports)
+path = "./workspace"

@@ -32,3 +32,4 @@ sqlx        = { version = "0.8", features = ["postgres", "runtime-tokio-rustls",
 pgvector    = { version = "0.4", features = ["sqlx"] }
 quick-xml   = { version = "0.37", features = ["serialize"] }
 sha2        = "0.10"
+toml        = "0.8"
