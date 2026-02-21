@@ -16,7 +16,7 @@ use crate::handlers::{
     dashboard::dashboard,
     query::{query_page, query_submit},
     targets::targets_page,
-    ingestion::ingestion_page,
+    ingestion::{ingestion_page, ingestion_run},
     molecules::molecules_page,
     kg::kg_page,
     metrics::metrics_page,
@@ -34,6 +34,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/query",      get(query_page).post(query_submit))
         .route("/targets",    get(targets_page))
         .route("/ingestion",  get(ingestion_page))
+        .route("/ingestion/run", post(ingestion_run))
         .route("/molecules",  get(molecules_page))
         .route("/kg",         get(kg_page))
         .route("/metrics",    get(metrics_page))
@@ -44,7 +45,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/events", get(sse_handler))
 
         // API stubs (will be expanded in later phases)
-        .route("/api/ingestion/run", post(api_stub))
         .route("/api/targets",       get(api_stub))
         .route("/api/kg/facts",      get(api_stub))
 

@@ -131,6 +131,7 @@ pub fn build_default_registry(db: sqlx::PgPool) -> ToolRegistry {
     let mut reg = ToolRegistry::new();
     reg.register(ingestion_tool::IngestPubmedTool::new(db.clone()));
     reg.register(ingestion_tool::IngestEuropePmcTool::new(db.clone()));
+    reg.register(ingestion_tool::IngestAllSourcesTool::new(db.clone()));
     reg.register(ner_tool::NerExtractTool::new());
     reg.register(ranker_tool::ScoreTargetsTool::new(db.clone()));
     reg.register(kg_tool::KgQueryTool::new(db.clone()));

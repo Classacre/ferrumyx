@@ -6,9 +6,10 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-ferrumyx-common  = { path = "../ferrumyx-common" }
-ferrumyx-ranker  = { path = "../ferrumyx-ranker" }
-ferrumyx-kg      = { path = "../ferrumyx-kg" }
+ferrumyx-common    = { path = "../ferrumyx-common" }
+ferrumyx-ranker    = { path = "../ferrumyx-ranker" }
+ferrumyx-kg        = { path = "../ferrumyx-kg" }
+ferrumyx-ingestion = { path = "../ferrumyx-ingestion" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true

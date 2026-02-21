@@ -1,21 +1,31 @@
 //! IronClaw tools: PubMed and Europe PMC ingestion triggers.
+//! Wired to the real `ferrumyx_ingestion::pipeline` orchestrator.
 
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::PgPool;
+use std::sync::Arc;
+
+use ferrumyx_ingestion::pipeline::{
+    IngestionJob, IngestionSourceSpec, run_ingestion,
+};
+use ferrumyx_ingestion::pg_repository::PgIngestionRepository;
+
 use super::FerrumyxTool;
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  PubMed ingestion tool
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 pub struct IngestPubmedTool {
-    db: PgPool,
+    repo: Arc<PgIngestionRepository>,
 }
 
 impl IngestPubmedTool {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: PgPool) -> Self {
+        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    }
 }
 
 #[async_trait]
@@ -25,7 +35,7 @@ impl FerrumyxTool for IngestPubmedTool {
     fn description(&self) -> &str {
         "Search PubMed for papers matching a gene, mutation, and cancer type. \
          Downloads abstracts and full-text (OA), parses sections, deduplicates, \
-         stores papers and chunks in the database."
+         stores papers and chunks in the database. Returns a summary of what was ingested."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -33,40 +43,45 @@ impl FerrumyxTool for IngestPubmedTool {
             "type": "object",
             "properties": {
                 "gene":        { "type": "string", "description": "Gene symbol, e.g. KRAS" },
-                "mutation":    { "type": "string", "description": "Mutation notation, e.g. G12D" },
+                "mutation":    { "type": "string", "description": "Mutation notation, e.g. G12D (optional)" },
                 "cancer_type": { "type": "string", "description": "Cancer free-text, e.g. pancreatic cancer" },
                 "max_results": { "type": "integer", "default": 100, "minimum": 1, "maximum": 1000 },
-                "date_from":   { "type": "string", "description": "YYYY/MM/DD filter (optional)" }
+                "api_key":     { "type": "string", "description": "NCBI API key for higher rate limits (optional)" }
             },
-            "required": ["gene"]
+            "required": ["gene", "cancer_type"]
         })
     }
 
     async fn invoke(&self, params: Value) -> Result<Value> {
-        let gene   = params["gene"].as_str().unwrap_or("KRAS");
-        let mutation = params["mutation"].as_str().unwrap_or("");
-        let cancer = params["cancer_type"].as_str().unwrap_or("cancer");
-        let max    = params["max_results"].as_u64().unwrap_or(100) as usize;
+        let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
+        let mutation    = params["mutation"].as_str().map(String::from);
+        let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
+        let max_results = params["max_results"].as_u64().unwrap_or(100) as usize;
+        let api_key     = params["api_key"].as_str().map(String::from);
 
-        // Build the E-utilities query
-        let query = if mutation.is_empty() {
-            format!("{gene}[tiab] AND {cancer}[tiab]")
-        } else {
-            format!("{gene}[tiab] AND {mutation}[tiab] AND {cancer}[tiab]")
+        let job = IngestionJob {
+            gene,
+            mutation,
+            cancer_type,
+            max_results,
+            sources: vec![IngestionSourceSpec::PubMed],
+            pubmed_api_key: api_key,
         };
 
-        tracing::info!(tool = "ingest_pubmed", query = %query, max, "Starting ingestion");
+        tracing::info!(tool = "ingest_pubmed", query = %ferrumyx_ingestion::pipeline::build_query(&job), "Running ingestion");
 
-        // --- Real implementation will call ferrumyx_ingestion::pubmed::PubmedClient ---
-        // Placeholder for MVP scaffold: just log and return metadata.
-        // TODO(phase1-m2): wire in PubmedClient::search_and_fetch(&query, max, &self.db)
-        let _ = &self.db; // db will be used for INSERT in full impl
+        let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 
         Ok(serde_json::json!({
-            "status": "queued",
-            "query": query,
-            "max_results": max,
-            "message": "Ingestion job queued. Papers will appear in the DB as they are parsed."
+            "status": "complete",
+            "job_id": result.job_id,
+            "query": result.query,
+            "papers_found": result.papers_found,
+            "papers_inserted": result.papers_inserted,
+            "papers_duplicate": result.papers_duplicate,
+            "chunks_inserted": result.chunks_inserted,
+            "errors": result.errors,
+            "duration_ms": result.duration_ms
         }))
     }
 
@@ -74,16 +89,18 @@ impl FerrumyxTool for IngestPubmedTool {
     fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Europe PMC ingestion tool
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 pub struct IngestEuropePmcTool {
-    db: PgPool,
+    repo: Arc<PgIngestionRepository>,
 }
 
 impl IngestEuropePmcTool {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: PgPool) -> Self {
+        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    }
 }
 
 #[async_trait]
@@ -93,75 +110,151 @@ impl FerrumyxTool for IngestEuropePmcTool {
     fn description(&self) -> &str {
         "Search Europe PMC for literature including preprints. \
          Retrieves full-text XML for Open Access papers. \
-         Complements PubMed with broader coverage and MeSH annotations."
+         Complements PubMed with broader coverage. Returns ingestion summary."
     }
 
     fn parameters_schema(&self) -> Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "query":       { "type": "string", "description": "Free-text query for Europe PMC" },
+                "gene":        { "type": "string" },
+                "mutation":    { "type": "string" },
+                "cancer_type": { "type": "string" },
                 "max_results": { "type": "integer", "default": 100 },
                 "include_preprints": { "type": "boolean", "default": false }
             },
-            "required": ["query"]
+            "required": ["gene", "cancer_type"]
         })
     }
 
     async fn invoke(&self, params: Value) -> Result<Value> {
-        let query = params["query"].as_str().unwrap_or("");
-        let max   = params["max_results"].as_u64().unwrap_or(100) as usize;
-        let preprints = params["include_preprints"].as_bool().unwrap_or(false);
+        let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
+        let mutation    = params["mutation"].as_str().map(String::from);
+        let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
+        let max_results = params["max_results"].as_u64().unwrap_or(100) as usize;
 
-        tracing::info!(tool = "ingest_europepmc", query = %query, max, preprints, "Starting ingestion");
+        let job = IngestionJob {
+            gene,
+            mutation,
+            cancer_type,
+            max_results,
+            sources: vec![IngestionSourceSpec::EuropePmc],
+            pubmed_api_key: None,
+        };
 
-        let _ = &self.db;
-        // TODO(phase1-m2): wire in EuropePmcClient
+        let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 
         Ok(serde_json::json!({
-            "status": "queued",
-            "query": query,
-            "max_results": max,
-            "include_preprints": preprints,
-            "message": "Europe PMC ingestion job queued."
+            "status": "complete",
+            "job_id": result.job_id,
+            "query": result.query,
+            "papers_found": result.papers_found,
+            "papers_inserted": result.papers_inserted,
+            "papers_duplicate": result.papers_duplicate,
+            "chunks_inserted": result.chunks_inserted,
+            "errors": result.errors,
+            "duration_ms": result.duration_ms
         }))
     }
 
     fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ─────────────────────────────────────────────────────────────────────────────
+//  Combined ingestion tool (PubMed + Europe PMC in one call)
+// ─────────────────────────────────────────────────────────────────────────────
 
-    /// Schema is a pure `Value` construction — test without any DB.
-    #[test]
-    fn test_pubmed_schema_has_required_gene() {
-        let schema = serde_json::json!({
+pub struct IngestAllSourcesTool {
+    repo: Arc<PgIngestionRepository>,
+}
+
+impl IngestAllSourcesTool {
+    pub fn new(db: PgPool) -> Self {
+        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    }
+}
+
+#[async_trait]
+impl FerrumyxTool for IngestAllSourcesTool {
+    fn name(&self) -> &str { "ingest_all" }
+
+    fn description(&self) -> &str {
+        "Run ingestion from ALL enabled sources (PubMed + Europe PMC) in one call. \
+         Best choice for comprehensive literature coverage. Returns combined summary."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        serde_json::json!({
             "type": "object",
             "properties": {
                 "gene":        { "type": "string" },
                 "mutation":    { "type": "string" },
                 "cancer_type": { "type": "string" },
-                "max_results": { "type": "integer" }
+                "max_results": { "type": "integer", "default": 200 },
+                "pubmed_api_key": { "type": "string" }
             },
-            "required": ["gene"]
+            "required": ["gene", "cancer_type"]
+        })
+    }
+
+    async fn invoke(&self, params: Value) -> Result<Value> {
+        let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
+        let mutation    = params["mutation"].as_str().map(String::from);
+        let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
+        let max_results = params["max_results"].as_u64().unwrap_or(200) as usize;
+        let api_key     = params["pubmed_api_key"].as_str().map(String::from);
+
+        let job = IngestionJob {
+            gene,
+            mutation,
+            cancer_type,
+            max_results,
+            sources: vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc],
+            pubmed_api_key: api_key,
+        };
+
+        let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
+
+        Ok(serde_json::json!({
+            "status": "complete",
+            "job_id": result.job_id,
+            "query": result.query,
+            "papers_found": result.papers_found,
+            "papers_inserted": result.papers_inserted,
+            "papers_duplicate": result.papers_duplicate,
+            "chunks_inserted": result.chunks_inserted,
+            "errors": result.errors,
+            "duration_ms": result.duration_ms
+        }))
+    }
+
+    fn output_data_class(&self) -> &str { "PUBLIC" }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pubmed_schema_has_required_gene() {
+        let schema = serde_json::json!({
+            "required": ["gene", "cancer_type"]
         });
         let required = schema["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "gene"));
+        assert!(required.iter().any(|v| v == "cancer_type"));
     }
 
     #[test]
     fn test_europepmc_schema_has_required_query() {
         let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query":       { "type": "string" },
-                "max_results": { "type": "integer" }
-            },
-            "required": ["query"]
+            "required": ["gene", "cancer_type"]
         });
         let required = schema["required"].as_array().unwrap();
-        assert!(required.iter().any(|v| v == "query"));
+        assert!(required.iter().any(|v| v == "gene"));
     }
 }

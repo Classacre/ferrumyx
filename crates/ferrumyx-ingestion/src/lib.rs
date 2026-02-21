@@ -14,3 +14,4 @@ pub mod dedup;
 pub mod models;
 pub mod normalise;
 pub mod pg_repository;
+pub mod pipeline;
