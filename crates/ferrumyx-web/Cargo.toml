@@ -1,0 +1,33 @@
+[package]
+name = "ferrumyx-web"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrumyx-common  = { path = "../ferrumyx-common" }
+ferrumyx-ranker  = { path = "../ferrumyx-ranker" }
+ferrumyx-kg      = { path = "../ferrumyx-kg" }
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+
+# Web framework
+axum            = { version = "0.8", features = ["ws", "macros"] }
+axum-extra      = { version = "0.10", features = ["typed-header"] }
+tower           = { version = "0.5", features = ["full"] }
+tower-http      = { version = "0.6", features = ["fs", "cors", "compression-gzip", "trace"] }
+
+# SSE for streaming
+tokio-stream    = { version = "0.1", features = ["sync"] }
+futures-core    = "0.3"
+
+# Template rendering
+minijinja       = { version = "2", features = ["loader"] }

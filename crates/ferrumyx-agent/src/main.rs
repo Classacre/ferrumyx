@@ -28,8 +28,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             tracing::warn!("Could not load ferrumyx.toml: {e}");
-            tracing::warn!("Running with defaults. Copy ferrumyx.example.toml to ferrumyx.toml to configure.");
-            // Continue with placeholder — DB connection etc. will fail later
+            tracing::warn!("Copy ferrumyx.example.toml to ferrumyx.toml and edit it.");
             return Ok(());
         }
     };
@@ -41,20 +40,40 @@ async fn main() -> anyhow::Result<()> {
         .min_connections(config.database.min_connections)
         .connect(&config.database.url)
         .await
-        .map_err(|e| anyhow::anyhow!("DB connection failed: {e}\nIs PostgreSQL running? Try: docker compose up -d (in ./docker/)"))?;
+        .map_err(|e| anyhow::anyhow!(
+            "DB connection failed: {e}\nIs PostgreSQL running?\nTry: cd docker && docker compose up -d"
+        ))?;
 
     info!("✅ PostgreSQL connected.");
 
     // Run pending migrations
-    // Path is relative to workspace root (where Cargo.toml is), not the crate
     info!("Running schema migrations...");
     sqlx::migrate!("../../migrations")
         .run(&pool)
         .await
         .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
-
     info!("✅ Migrations complete.");
-    info!("🔬 Ferrumyx ready. IronClaw tool registration coming in next phase.");
+
+    // Build app state and router
+    let state = ferrumyx_web::state::AppState::new(pool);
+    let router = ferrumyx_web::router::build_router(state);
+
+    // Start web server
+    let bind_addr = std::env::var("FERRUMYX_BIND")
+        .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+    info!("🌐 Web GUI listening on http://{}", bind_addr);
+    info!("   Dashboard:    http://localhost:3000/");
+    info!("   Target Query: http://localhost:3000/query");
+    info!("   KG Explorer:  http://localhost:3000/kg");
+    info!("   Ingestion:    http://localhost:3000/ingestion");
+    info!("   Metrics:      http://localhost:3000/metrics");
+    info!("   System:       http://localhost:3000/system");
+    info!("");
+    info!("🔬 Ferrumyx ready. Press Ctrl+C to stop.");
+
+    axum::serve(listener, router).await?;
 
     Ok(())
 }
