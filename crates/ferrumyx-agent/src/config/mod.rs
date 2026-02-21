@@ -31,30 +31,66 @@ fn default_min_connections() -> u32 { 2 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
+    /// "local_only" | "prefer_local" | "any"
     #[serde(default = "default_llm_mode")]
     pub mode: String,
+    /// Backend name for PUBLIC data (e.g. "openai", "anthropic", "gemini")
+    #[serde(default = "default_default_backend")]
+    pub default_backend: String,
+    /// Backend for CONFIDENTIAL/INTERNAL data (must be local)
     #[serde(default = "default_local_backend")]
     pub local_backend: String,
-    #[serde(default = "default_local_model")]
-    pub local_model: String,
-    pub openai: Option<LlmBackendConfig>,
-    pub anthropic: Option<LlmBackendConfig>,
+    pub ollama:            Option<OllamaBackendConfig>,
+    pub openai:            Option<ApiBackendConfig>,
+    pub anthropic:         Option<ApiBackendConfig>,
+    pub gemini:            Option<ApiBackendConfig>,
+    pub openai_compatible: Option<OpenAiCompatibleConfig>,
     #[serde(default)]
     pub limits: LlmLimits,
     #[serde(default)]
     pub rate_limits: LlmRateLimits,
 }
 
-fn default_llm_mode()      -> String { "local_only".to_string() }
-fn default_local_backend() -> String { "ollama".to_string() }
-fn default_local_model()   -> String { "llama3:8b".to_string() }
+fn default_llm_mode()       -> String { "any".to_string() }
+fn default_default_backend()-> String { "openai".to_string() }
+fn default_local_backend()  -> String { "ollama".to_string() }
 
+/// Config for Ollama (local endpoint).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmBackendConfig {
-    pub api_key_secret: Option<String>,
-    pub model: String,
+pub struct OllamaBackendConfig {
+    #[serde(default = "default_ollama_url")]
     pub base_url: String,
+    #[serde(default = "default_ollama_model")]
+    pub model: String,
 }
+
+fn default_ollama_url()   -> String { "http://localhost:11434".to_string() }
+fn default_ollama_model() -> String { "llama3.1:8b".to_string() }
+
+/// Config for API-based providers (OpenAI, Anthropic, Gemini).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiBackendConfig {
+    /// API key (plain text — use env var override in production)
+    #[serde(default)]
+    pub api_key: String,
+    pub model: String,
+    #[serde(default)]
+    pub embedding_model: Option<String>,
+}
+
+/// Config for OpenAI-compatible providers (Groq, TogetherAI, LMStudio, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAiCompatibleConfig {
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    pub model: String,
+    #[serde(default)]
+    pub embedding_model: Option<String>,
+}
+
+/// Legacy alias kept for backwards compat.
+pub type LlmBackendConfig = ApiBackendConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LlmLimits {
@@ -62,11 +98,15 @@ pub struct LlmLimits {
     pub max_tokens_per_day_openai: u64,
     #[serde(default = "default_500k")]
     pub max_tokens_per_day_anthropic: u64,
+    #[serde(default = "default_1m")]
+    pub max_tokens_per_day_gemini: u64,
     #[serde(default = "default_cost_limit")]
     pub max_cost_per_day_usd: f64,
     #[serde(default = "default_alert_threshold")]
     pub alert_cost_threshold_usd: f64,
 }
+
+fn default_1m() -> u64 { 1_000_000 }
 
 fn default_500k()          -> u64 { 500_000 }
 fn default_cost_limit()    -> f64 { 20.0 }
@@ -78,12 +118,18 @@ pub struct LlmRateLimits {
     pub openai_rpm: u32,
     #[serde(default = "default_anthropic_rpm")]
     pub anthropic_rpm: u32,
+    #[serde(default = "default_gemini_rpm")]
+    pub gemini_rpm: u32,
+    #[serde(default = "default_compat_rpm")]
+    pub compat_rpm: u32,
     #[serde(default = "default_ollama_rpm")]
     pub ollama_rpm: u32,
 }
 
 fn default_openai_rpm()    -> u32 { 60 }
 fn default_anthropic_rpm() -> u32 { 40 }
+fn default_gemini_rpm()    -> u32 { 60 }
+fn default_compat_rpm()    -> u32 { 60 }
 fn default_ollama_rpm()    -> u32 { 120 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,20 +156,30 @@ fn default_rps() -> u32 { 3 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingConfig {
+    /// "openai" | "gemini" | "openai_compatible" | "biomedbert" | "ollama"
+    #[serde(default = "default_embed_backend")]
+    pub backend: String,
+    /// Optional API key (blank = inherit from provider config)
+    #[serde(default)]
+    pub api_key: String,
+    /// Model name used for embeddings
     #[serde(default = "default_embed_model")]
-    pub model: String,
-    #[serde(default = "default_embed_mode")]
-    pub mode: String,
+    pub embedding_model: String,
+    /// Vector dimension (must match the model)
+    #[serde(default = "default_embed_dim")]
+    pub embedding_dim: usize,
     #[serde(default = "default_batch_size")]
     pub batch_size: usize,
-    #[serde(default = "default_embed_image")]
-    pub docker_image: String,
+    /// Local BiomedBERT service URL
+    #[serde(default = "default_biomedbert_url")]
+    pub biomedbert_url: String,
 }
 
-fn default_embed_model() -> String { "pubmedbert-base".to_string() }
-fn default_embed_mode()  -> String { "standard".to_string() }
-fn default_batch_size()  -> usize  { 32 }
-fn default_embed_image() -> String { "ferrumyx/embed-service:latest".to_string() }
+fn default_embed_backend()  -> String { "openai".to_string() }
+fn default_embed_model()    -> String { "text-embedding-3-small".to_string() }
+fn default_embed_dim()      -> usize  { 1536 }
+fn default_batch_size()     -> usize  { 32 }
+fn default_biomedbert_url() -> String { "http://localhost:8002".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NerConfig {
@@ -135,12 +191,15 @@ pub struct NerConfig {
     pub scispacy_docker_image: String,
     #[serde(default = "default_bern2_image")]
     pub bern2_docker_image: String,
+    #[serde(default = "default_ner_url")]
+    pub service_url: String,
 }
 
-fn default_ner_primary()      -> String { "scispacy".to_string() }
-fn default_bern2_threshold()  -> u32    { 50 }
-fn default_scispacy_image()   -> String { "ferrumyx/scispacy-ner:latest".to_string() }
-fn default_bern2_image()      -> String { "ferrumyx/bern2-ner:latest".to_string() }
+fn default_ner_primary()    -> String { "scispacy".to_string() }
+fn default_bern2_threshold()-> u32    { 50 }
+fn default_scispacy_image() -> String { "ferrumyx/scispacy-ner:latest".to_string() }
+fn default_bern2_image()    -> String { "ferrumyx/bern2-ner:latest".to_string() }
+fn default_ner_url()        -> String { "http://localhost:8001".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringConfig {

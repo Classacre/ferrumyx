@@ -348,6 +348,17 @@ body {
   color: var(--text-primary);
 }
 
+/* ── Backend Cards ── */
+.backend-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  height: 100%;
+  transition: border-color 0.2s;
+}
+.backend-card:hover { border-color: var(--accent-blue); }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }

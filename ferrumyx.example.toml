@@ -1,100 +1,156 @@
 # ferrumyx.toml — Ferrumyx configuration
 # Copy this to ferrumyx.toml and edit for your environment.
-# ferrumyx.toml is gitignored; never commit secrets.
+# ferrumyx.toml is gitignored; never commit API keys.
+#
+# Quick start (API-only, no GPU needed):
+#   1. Copy to ferrumyx.toml
+#   2. Set llm.default_backend = "openai" (or "anthropic" / "gemini")
+#   3. Set the api_key for your chosen provider
+#   4. Set embedding.backend = "openai" and embedding.api_key
 
 [database]
-url = "postgresql://ferrumyx:ferrumyx_dev@localhost:5432/ferrumyx"
+url            = "postgresql://ferrumyx:ferrumyx_dev@localhost:5432/ferrumyx"
 max_connections = 10
 min_connections = 2
 
+# ── LLM ──────────────────────────────────────────────────────────────────────
 [llm]
 # Mode: "local_only" | "prefer_local" | "any"
-mode = "local_only"
+# "local_only"   — only Ollama / local endpoints (no API keys needed)
+# "prefer_local" — use local when available, fall back to remote for PUBLIC data
+# "any"          — use the default_backend for all PUBLIC data (recommended for API-only)
+mode = "any"
+
+# Which backend to use for PUBLIC data (scientific literature, not patient data)
+# Options: "openai" | "anthropic" | "gemini" | "openai_compatible" | "ollama"
+default_backend = "openai"
+
+# Backend used for CONFIDENTIAL / INTERNAL data (must be local)
+# Leave as "ollama" even if you don't have Ollama running — it simply won't be
+# called unless you ingest data classified as INTERNAL or CONFIDENTIAL.
 local_backend = "ollama"
-local_model = "llama3:8b"
 
-# Uncomment to enable remote backends (requires data classification gate)
-# [llm.openai]
-# api_key_secret = "openai_api_key"   # key name in ferrumyx keychain
-# model = "gpt-4o"
-# base_url = "https://api.openai.com/v1"
+# Allow INTERNAL-classified data to be sent to remote backends (with audit log)
+# Default: false (safer). Set true only if you understand the privacy implications.
+allow_internal_remote = false
 
-# [llm.anthropic]
-# api_key_secret = "anthropic_api_key"
-# model = "claude-sonnet-4-6"
-# base_url = "https://api.anthropic.com/v1"
+# ── Provider: OpenAI ─────────────────────────────────────────────────────────
+[llm.openai]
+# Get your key at https://platform.openai.com/api-keys
+api_key  = ""                         # or set env var FERRUMYX_OPENAI_API_KEY
+model    = "gpt-4o-mini"              # cheap + fast; use "gpt-4o" for higher quality
+# Options: gpt-4o | gpt-4o-mini | gpt-4-turbo | o1 | o1-mini | o3-mini
 
+# ── Provider: Anthropic ───────────────────────────────────────────────────────
+[llm.anthropic]
+# Get your key at https://console.anthropic.com/
+api_key  = ""                         # or set env var FERRUMYX_ANTHROPIC_API_KEY
+model    = "claude-haiku-4-5"         # fastest + cheapest; use claude-sonnet for quality
+# Options: claude-opus-4 | claude-sonnet-4-6 | claude-haiku-4-5
+
+# ── Provider: Google Gemini ───────────────────────────────────────────────────
+[llm.gemini]
+# Get your key at https://aistudio.google.com/app/apikey
+api_key  = ""                         # or set env var FERRUMYX_GEMINI_API_KEY
+model    = "gemini-1.5-flash"         # free tier available; 1M context
+# Options: gemini-1.5-pro | gemini-1.5-flash | gemini-2.0-flash | gemini-2.5-pro
+
+# ── Provider: OpenAI-Compatible ──────────────────────────────────────────────
+# Use for: Groq, TogetherAI, OpenRouter, LMStudio, vLLM, Mistral, etc.
+[llm.openai_compatible]
+base_url = "https://api.groq.com/openai"  # example: Groq
+api_key  = ""                              # or env var FERRUMYX_COMPAT_API_KEY
+model    = "llama-3.3-70b-versatile"      # change to match your provider's model
+# Other examples:
+#   Groq:       base_url = "https://api.groq.com/openai"
+#   OpenRouter: base_url = "https://openrouter.ai/api"
+#   TogetherAI: base_url = "https://api.together.xyz"
+#   LMStudio:   base_url = "http://localhost:1234"       api_key = ""
+#   vLLM:       base_url = "http://localhost:8000"       api_key = ""
+#   Mistral:    base_url = "https://api.mistral.ai"
+
+# ── Provider: Ollama (local) ─────────────────────────────────────────────────
+[llm.ollama]
+base_url = "http://localhost:11434"
+model    = "llama3.1:8b"
+# GPU not required — quantised models run on CPU (slower but free)
+# Recommended if compute is available: mistral-nemo, llama3.1:70b, biomistral
+
+# ── Spending limits ───────────────────────────────────────────────────────────
 [llm.limits]
-max_tokens_per_day_openai = 500000
-max_tokens_per_day_anthropic = 500000
-max_cost_per_day_usd = 20.0
-alert_cost_threshold_usd = 15.0
+max_tokens_per_day_openai    = 500_000
+max_tokens_per_day_anthropic = 500_000
+max_tokens_per_day_gemini    = 1_000_000
+max_cost_per_day_usd         = 20.0
+alert_cost_threshold_usd     = 15.0
 
 [llm.rate_limits]
-openai_rpm = 60
-anthropic_rpm = 40
-ollama_rpm = 120
+openai_rpm     = 60
+anthropic_rpm  = 40
+gemini_rpm     = 60
+compat_rpm     = 60
+ollama_rpm     = 120
 
+# ── Embedding ─────────────────────────────────────────────────────────────────
+[embedding]
+# Which backend to use for text embeddings (written to paper_chunks.embedding)
+# "openai"           — text-embedding-3-small (1536-dim, fast, cheap, no GPU)
+# "gemini"           — text-embedding-004 (768-dim, good quality, free tier)
+# "openai_compatible"— any /v1/embeddings endpoint
+# "biomedbert"       — local Docker service (768-dim, requires docker/biomedbert)
+# "ollama"           — local Ollama embedding model
+backend         = "openai"
+api_key         = ""         # leave blank to inherit from [llm.openai] if same provider
+embedding_model = "text-embedding-3-small"
+# Alternatives:
+#   OpenAI large:  embedding_model = "text-embedding-3-large"   (3072-dim, better)
+#   Gemini:        embedding_model = "text-embedding-004"        (768-dim)
+#   BiomedBERT:    backend = "biomedbert" (start with: docker compose --profile embed up)
+#   Ollama:        embedding_model = "nomic-embed-text"          (768-dim, local)
+embedding_dim   = 1536       # must match your chosen model's output dimension
+
+# ── Ingestion ─────────────────────────────────────────────────────────────────
 [ingestion]
-# Sources to enable
+# Default sources enabled for all ingestion jobs
 sources = ["pubmed", "europepmc"]
-# sources = ["pubmed", "europepmc", "biorxiv", "clinicaltrials", "semanticscholar"]
+# Full list: ["pubmed", "europepmc", "biorxiv", "medrxiv", "clinicaltrials", "crossref"]
 
 [ingestion.pubmed]
-# Register at https://www.ncbi.nlm.nih.gov/account/ for API key (free)
-# api_key_secret = "pubmed_api_key"
-requests_per_second = 3   # 10 with API key
+# Optional NCBI API key for 10 req/s (vs 3 req/s without)
+# Register free at https://www.ncbi.nlm.nih.gov/account/
+api_key             = ""    # or env var FERRUMYX_PUBMED_API_KEY
+requests_per_second = 3     # 10 with API key
 
 [ingestion.europepmc]
 requests_per_second = 5
 
-[ingestion.semanticscholar]
-# Register at https://api.semanticscholar.org/
-# api_key_secret = "s2_api_key"
-requests_per_second = 1   # 100 with key
+[ingestion.crossref]
+# CrossRef "polite pool" — set a valid email for higher rate limits
+mailto              = "your@email.com"
+requests_per_second = 5
 
-[embedding]
-# Model used for chunk embeddings
-# Options: "pubmedbert-base" | "pubmedbert-large" | "biobert-base"
-model = "pubmedbert-base"
-# "standard" | "high_precision" (uses large model, requires GPU)
-mode = "standard"
-batch_size = 32
-docker_image = "ferrumyx/embed-service:latest"
-
-[ner]
-# "scispacy" (MVP, CPU-only) | "bern2" (high-recall, GPU recommended)
-primary = "scispacy"
-# Activate BERN2 for papers with citation count above this threshold
-bern2_citation_threshold = 50
-scispacy_docker_image = "ferrumyx/scispacy-ner:latest"
-bern2_docker_image = "ferrumyx/bern2-ner:latest"
-
+# ── Scoring ───────────────────────────────────────────────────────────────────
 [scoring]
-# Cancer domain to focus on (MVP)
-focus_cancer = "PAAD"   # OncoTree code: Pancreatic Adenocarcinoma
-focus_mutation = "KRAS_G12D"
+focus_cancer    = "PAAD"
+focus_mutation  = "G12D"
+primary_threshold   = 0.65
+secondary_threshold = 0.45
 
-# Target score shortlist thresholds (see ARCHITECTURE.md §4.5)
-primary_shortlist_threshold = 0.60
-secondary_shortlist_threshold = 0.45
+# ── NER service ───────────────────────────────────────────────────────────────
+[ner]
+service_url = "http://localhost:8001"
+# Start NER service: cd docker && docker compose --profile ner up -d
+# Runs without GPU; first start downloads ~1GB of models.
 
+# ── Structural analysis ───────────────────────────────────────────────────────
 [structural]
-pdb_requests_per_second = 5
-alphafold_requests_per_second = 5
-fpocket_docker_image = "ferrumyx/fpocket:latest"
-vina_docker_image = "ferrumyx/autodock-vina:latest"
-rdkit_docker_image = "ferrumyx/rdkit-service:latest"
-admet_docker_image = "ferrumyx/admet-ai:latest"
+alphafold_cache_dir = "./data/alphafold"
+pdb_cache_dir       = "./data/pdb"
+fpocket_binary      = "fpocket"   # must be on PATH
 
-[security]
-# Audit all LLM calls
-audit_llm_calls = true
-# Block any remote LLM call with INTERNAL or CONFIDENTIAL data
-enforce_data_classification = true
-# Retain audit logs for N days before compression
-audit_log_retention_days = 90
-
-[workspace]
-# Path for intermediate files (structures, docking results, reports)
-path = "./workspace"
+# ── Audit ─────────────────────────────────────────────────────────────────────
+[audit]
+log_llm_calls    = true
+log_ingestion    = true
+log_kg_changes   = true
+retain_days      = 365
