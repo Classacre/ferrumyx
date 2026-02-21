@@ -20,3 +20,4 @@ chrono.workspace = true
 quick-xml.workspace = true
 sqlx.workspace = true
 pgvector.workspace = true
+regex       = "1"

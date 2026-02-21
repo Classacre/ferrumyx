@@ -12,3 +12,4 @@ pub mod sources;
 pub mod chunker;
 pub mod dedup;
 pub mod models;
+pub mod normalise;

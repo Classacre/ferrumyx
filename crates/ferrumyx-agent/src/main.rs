@@ -2,6 +2,7 @@
 //! Entry point for the agent binary.
 
 mod config;
+mod tools;
 
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -53,6 +54,11 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
     info!("✅ Migrations complete.");
+
+    // Register Ferrumyx tools
+    let tool_registry = tools::build_default_registry(pool.clone());
+    info!("✅ Tool registry ready: {} tools registered.", tool_registry.len());
+    let _ = tool_registry; // Will be stored in AppState in a later phase
 
     // Build app state and router
     let state = ferrumyx_web::state::AppState::new(pool);
