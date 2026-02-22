@@ -1,4 +1,4 @@
-# Ferrumyx Architecture
+﻿# Ferrumyx Architecture
 
 **Autonomous Oncology Drug Discovery Engine**  
 **Built on IronClaw (Rust AI Agent Framework)**  
@@ -32,76 +32,76 @@
 
 ## 1.1 High-Level System Architecture Diagram
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                            FERRUMYX SYSTEM                                   │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                        CHANNEL LAYER                                   │  │
-│  │   REPL │ Web Gateway │ HTTP Webhook │ Telegram/Slack (WASM channel)    │  │
-│  └───────────────────────────┬────────────────────────────────────────────┘  │
-│                                │                                             │
-│  ┌───────────────────────────▼────────────────────────────────────────────┐  │
-│  │                     IRONCLAW AGENT CORE                                │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────────┐    │  │
-│  │  │  Intent Router  │  │  Agent Loop     │  │  Routines Engine     │    │  │
-│  │  │  (query parsing)│  │  (plan/act/obs) │  │  (cron/event/        │    │  │
-│  │  └─────────────────┘  └────────┬────────┘  │   webhook)           │    │  │
-│  │                                 │          └──────────────────────┘    │  │
-│  │  ┌──────────────────────────────▼────────────────────────────────────┐ │  │
-│  │  │                    TOOL REGISTRY                                  │ │  │
-│  │  │  Built-in │ MCP Tools │ WASM Tools │ Docker-backed Tools          │ │  │
-│  │  └───────────────────────────────────────────────────────────────────┘ │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                    FERRUMYX EXTENSION LAYER                            │  │
-│  │                                                                        │  │
-│  │  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────────┐    │  │
-│  │  │  Ingestion      │  │  KG Builder      │  │  Target Ranker      │    │  │
-│  │  │  Orchestrator   │  │  (PostgreSQL)    │  │  (Scoring Engine)   │    │  │
-│  │  └────────┬────────┘  └────────┬─────────┘  └─────────┬───────────┘    │  │
-│  │           │                    │                      │                │  │
-│  │  ┌────────▼────────┐  ┌────────▼─────────┐  ┌─────────▼───────────┐    │  │
-│  │  │  Molecule       │  │  Query Handler   │  │  Feedback Loop      │    │  │
-│  │  │  Design Pipeline│  │  (NL → Struct)   │  │  (Self-Improve)     │    │  │
-│  │  └─────────────────┘  └──────────────────┘  └─────────────────────┘    │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                      SANDBOX LAYER                                     │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────────┐       ┌──────────────────────────────┐       │  │
-│  │  │    WASM Sandbox      │       │      Docker Sandbox          │       │  │
-│  │  │  (NER tools, light   │       │  (RDKit, docking, ADMET,     │       │  │
-│  │  │   processing)        │       │   Docling, DeepPurpose)      │       │  │
-│  │  │  Cap-based perms     │       │  Orchestrator-worker pattern │       │  │
-│  │  │  Endpoint allowlist  │       │  Resource limits enforced    │       │  │
-│  │  │  Credential injection│       └──────────────────────────────┘       │  │
-│  │  └──────────────────────┘                                              │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                       STORAGE LAYER                                    │  │
-│  │                                                                        │  │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │  │
-│  │  │                    PostgreSQL + pgvector                        │   │  │
-│  │  │  papers │ chunks │ embeddings │ entities │ kg_facts │ scores    │   │  │
-│  │  │  molecules │ docking_results │ feedback │ audit_log             │   │  │
-│  │  └─────────────────────────────────────────────────────────────────┘   │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────┐   ┌─────────────────────┐                        │  │
-│  │  │  Workspace FS    │   │  Secrets Store      │                        │  │
-│  │  │  (IronClaw mem.) │   │  (AES-256-GCM)      │                        │  │
-│  │  └──────────────────┘   └─────────────────────┘                        │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                      LLM ABSTRACTION LAYER                             │  │
-│  │  Ollama (local) │ OpenAI │ Anthropic │ Custom HTTP endpoint            │  │
-│  │  Data classification gate → redaction → routing decision               │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
+```
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚                            FERRUMYX SYSTEM                                  â”‚
+â”‚                                                                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                        CHANNEL LAYER                                 â”‚   â”‚
+â”‚  â”‚   REPL â”‚ Web Gateway â”‚ HTTP Webhook â”‚ Telegram/Slack (WASM channel)  â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                                â”‚                                            â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                     IRONCLAW AGENT CORE                              â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”‚   â”‚
+â”‚  â”‚  â”‚  Intent Router   â”‚  â”‚  Agent Loop     â”‚  â”‚  Routines Engine â”‚    â”‚   â”‚
+â”‚  â”‚  â”‚  (query parsing) â”‚  â”‚  (plan/act/obs) â”‚  â”‚  (cron/event/    â”‚    â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚   webhook)       â”‚    â”‚   â”‚
+â”‚  â”‚                                 â”‚           â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â” â”‚   â”‚
+â”‚  â”‚  â”‚                    TOOL REGISTRY                               â”‚ â”‚   â”‚
+â”‚  â”‚  â”‚  Built-in â”‚ MCP Tools â”‚ WASM Tools â”‚ Docker-backed Tools       â”‚ â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€-â”€â”˜ â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                                                                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                    FERRUMYX EXTENSION LAYER                          â”‚   â”‚
+â”‚  â”‚                                                                      â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚   â”‚
+â”‚  â”‚  â”‚  Ingestion      â”‚  â”‚  KG Builder      â”‚  â”‚  Target Ranker     â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  Orchestrator   â”‚  â”‚  (PostgreSQL)    â”‚  â”‚  (Scoring Engine)  â”‚  â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚   â”‚
+â”‚  â”‚           â”‚                    â”‚                       â”‚             â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚   â”‚
+â”‚  â”‚  â”‚  Molecule       â”‚  â”‚  Query Handler   â”‚  â”‚  Feedback Loop     â”‚  â”‚   â”‚
+â”‚  â”‚  â”‚  Design Pipelineâ”‚  â”‚  (NL â†’ Struct)   â”‚  â”‚  (Self-Improve)    â”‚  â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                                                                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                      SANDBOX LAYER                                   â”‚   â”‚
+â”‚  â”‚                                                                      â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚   â”‚
+â”‚  â”‚  â”‚    WASM Sandbox       â”‚       â”‚      Docker Sandbox          â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  (NER tools, light    â”‚       â”‚  (RDKit, docking, ADMET,     â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚   processing)         â”‚       â”‚   Docling, DeepPurpose)      â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  Cap-based perms      â”‚       â”‚  Orchestrator-worker pattern â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  Endpoint allowlist   â”‚       â”‚  Resource limits enforced    â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  Credential injection â”‚       â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                                           â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                                                                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                       STORAGE LAYER                                  â”‚   â”‚
+â”‚  â”‚                                                                      â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚   â”‚
+â”‚  â”‚  â”‚                    PostgreSQL + pgvector                      â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  papers â”‚ chunks â”‚ embeddings â”‚ entities â”‚ kg_facts â”‚ scores  â”‚   â”‚   â”‚
+â”‚  â”‚  â”‚  molecules â”‚ docking_results â”‚ feedback â”‚ audit_log           â”‚   â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚   â”‚
+â”‚  â”‚                                                                      â”‚   â”‚
+â”‚  â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”                      â”‚   â”‚
+â”‚  â”‚  â”‚  Workspace FS    â”‚   â”‚  Secrets Store     â”‚                      â”‚   â”‚
+â”‚  â”‚  â”‚  (IronClaw mem.) â”‚   â”‚  (AES-256-GCM)     â”‚                      â”‚   â”‚
+â”‚  â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                      â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â”‚                                                                             â”‚
+â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”‚
+â”‚  â”‚                      LLM ABSTRACTION LAYER                           â”‚   â”‚
+â”‚  â”‚  Ollama (local) â”‚ OpenAI â”‚ Anthropic â”‚ Custom HTTP endpoint          â”‚   â”‚
+â”‚  â”‚  Data classification gate â†’ redaction â†’ routing decision             â”‚   â”‚
+â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 1.2 Modular Breakdown
@@ -110,11 +110,11 @@
 
 | Module | Responsibility | Extends IronClaw |
 |---|---|---|
-| `ferrumyx-agent` | Top-level agent loop, intent routing | Yes — registers custom intents |
+| `ferrumyx-agent` | Top-level agent loop, intent routing | Yes â€” registers custom intents |
 | `ferrumyx-ingestion` | Paper discovery, download, parse orchestration | Tool implementations |
 | `ferrumyx-kg` | Knowledge graph build/query/update | Storage abstraction |
 | `ferrumyx-ranker` | Target scoring, normalization, shortlisting | Pure Rust scoring logic |
-| `ferrumyx-query` | NL query → structured plan → execution | Intent handler |
+| `ferrumyx-query` | NL query â†’ structured plan â†’ execution | Intent handler |
 | `ferrumyx-feedback` | Metric collection, weight update proposals | Routine/event handler |
 | `ferrumyx-routines` | Scheduled ingestion, re-scoring, validation | IronClaw routines |
 
@@ -141,64 +141,64 @@
 
 ## 1.3 Data Flow
 
-```text
+```
 [External APIs / PDFs]
-        │
-        ▼
-┌──────────────────────────────┐
-│     INGESTION PIPELINE       │
-│  1. Paper discovery (API)    │
-│  2. Deduplication check      │
-│  3. Full-text retrieval      │
-│  4. Docling parse (Docker)   │
-│  5. Section-aware chunking   │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     EMBEDDING PIPELINE       │
-│  6. BiomedBERT embed batch   │
-│  7. pgvector store           │
-│  8. Full-text index          │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     NER + KG CONSTRUCTION    │
-│  9. SciSpacy / BERN2 NER     │
-│  10. Entity normalization    │
-│  11. Fact triple extraction  │
-│  12. Confidence scoring      │
-│  13. Append to kg_facts      │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     TARGET PRIORITIZATION    │
-│  14. Join KG + external DBs  │
-│  15. Compute composite score │
-│  16. Store versioned scores  │
-│  17. Shortlist candidates    │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     STRUCTURAL ANALYSIS      │
-│  18. Fetch PDB / AlphaFold   │
-│  19. fpocket detection       │
-│  20. Ligand generation       │
-│  21. AutoDock Vina docking   │
-│  22. ADMET prediction        │
-│  23. Score and rank molecules│
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     QUERY RESPONSE / REPORT  │
-│  24. Assemble evidence bundle│
-│  25. LLM-assisted narrative  │
-│  26. Return ranked JSON      │
-└──────────────────────────────┘
+        â”‚
+        â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     INGESTION PIPELINE          â”‚
+â”‚  1. Paper discovery (API query) â”‚
+â”‚  2. Deduplication check         â”‚
+â”‚  3. Full-text retrieval         â”‚
+â”‚  4. Docling parse (Docker)      â”‚
+â”‚  5. Section-aware chunking      â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     EMBEDDING PIPELINE          â”‚
+â”‚  6. BiomedBERT embedding batch  â”‚
+â”‚  7. pgvector store              â”‚
+â”‚  8. Full-text index (tsvector)  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     NER + KG CONSTRUCTION       â”‚
+â”‚  9. SciSpacy / BERN2 NER        â”‚
+â”‚  10. Entity normalization       â”‚
+â”‚  11. Fact triple extraction     â”‚
+â”‚  12. Confidence scoring         â”‚
+â”‚  13. Append to kg_facts table   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     TARGET PRIORITIZATION       â”‚
+â”‚  14. Join KG with external DBs  â”‚
+â”‚  15. Compute composite score    â”‚
+â”‚  16. Store versioned scores     â”‚
+â”‚  17. Shortlist candidates       â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     STRUCTURAL ANALYSIS         â”‚
+â”‚  18. Fetch PDB / AlphaFold      â”‚
+â”‚  19. fpocket pocket detection   â”‚
+â”‚  20. Generate / retrieve ligandsâ”‚
+â”‚  21. AutoDock Vina docking      â”‚
+â”‚  22. ADMET prediction           â”‚
+â”‚  23. Score and rank molecules   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚     QUERY RESPONSE / REPORT     â”‚
+â”‚  24. Assemble evidence bundle   â”‚
+â”‚  25. LLM-assisted narrative     â”‚
+â”‚  26. Return ranked JSON output  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 1.4 Memory Design: PostgreSQL Schema Overview
@@ -372,7 +372,7 @@ CREATE TABLE ingestion_audit (
 
 ### pgvector Usage
 
-- **Embedding dimension:** 768 (BiomedBERT-base) or 1024 (PubMedBERT-large). Choose at project start — changing dimension requires full re-embedding.
+- **Embedding dimension:** 768 (BiomedBERT-base) or 1024 (PubMedBERT-large). Choose at project start â€” changing dimension requires full re-embedding.
 - **Index type:** IVFFlat for MVP (good enough up to ~1M vectors); migrate to HNSW for production scale.
 - **Hybrid search:** Reciprocal Rank Fusion (RRF) combining cosine similarity from pgvector and BM25-style tsvector ranking.
 - **pgvector version:** 0.7+ required for HNSW index support.
@@ -408,25 +408,25 @@ SELECT * FROM rrf ORDER BY rrf_score DESC LIMIT 20;
 
 ## 1.5 LLM Backend Abstraction Layer
 
-```text
-                    ┌──────────────────────────────┐
-                    │   ferrumyx_llm::LlmBackend   │
-                    │   (Rust trait)               │
-                    └──────────────┬───────────────┘
-                                   │
-          ┌────────────────────────┼────────────────────────┐
-          │                        │                        │
-          ▼                        ▼                        ▼
- ┌─────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
- │  OllamaBackend  │    │  OpenAIBackend  │    │  AnthropicBackend    │
- │  (local HTTP)   │    │  (REST API)     │    │  (REST API)          │
- └─────────────────┘    └─────────────────┘    └──────────────────────┘
-          │                        │
-          ▼                        ▼
- ┌─────────────────┐    ┌────────────────────────┐
- │  CustomHttp     │    │  Data Classification   │
- │  Backend        │    │  Gate (pre-call)       │
- └─────────────────┘    └────────────────────────┘
+```
+                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                    â”‚   ferrumyx_llm::LlmBackend   â”‚
+                    â”‚   (Rust trait)               â”‚
+                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                   â”‚
+          â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+          â”‚                        â”‚                        â”‚
+          â–¼                        â–¼                        â–¼
+ â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ â”‚  OllamaBackend  â”‚    â”‚  OpenAIBackend  â”‚    â”‚  AnthropicBackend    â”‚
+ â”‚  (local HTTP)   â”‚    â”‚  (REST API)     â”‚    â”‚  (REST API)          â”‚
+ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+          â”‚                        â”‚
+          â–¼                        â–¼
+ â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ â”‚  CustomHttp     â”‚    â”‚  Data Classification â”‚
+ â”‚  Backend        â”‚    â”‚  Gate (pre-call)     â”‚
+ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 **Trait definition (conceptual Rust):**
@@ -450,66 +450,66 @@ pub struct LlmRouter {
 ```
 
 **Routing policy:**
-- `DataClass::Public` → any backend (prefer local if available)
-- `DataClass::Internal` → local only OR explicit override with audit log
-- `DataClass::Confidential` → local only; remote call = hard block + alert
+- `DataClass::Public` â†’ any backend (prefer local if available)
+- `DataClass::Internal` â†’ local only OR explicit override with audit log
+- `DataClass::Confidential` â†’ local only; remote call = hard block + alert
 
 ## 1.6 Self-Improvement Feedback Loop Architecture
 
-```text
-┌────────────────────────────────────────────────────────┐
-│           FEEDBACK COLLECTION LAYER                    │
-│  (scheduled routines: daily/weekly)                    │
-│  - ChEMBL activity data pull                           │
-│  - ClinicalTrials.gov outcome updates                  │
-│  - DrugBank approved drug list diff                    │
-│  - Target ranking stability measurement                │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│           METRIC COMPUTATION                           │
-│  - Retrospective recall@N                              │
-│  - Docking-IC50 Pearson correlation                    │
-│  - Ranking Kendall-tau stability                       │
-│  - False positive accumulation rate                    │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│        THRESHOLD EVALUATION (automated)                │
-│  If metric_delta > threshold:                          │
-│    → Generate weight update PROPOSAL                   │
-│  Else:                                                 │
-│    → Log metric, no action                             │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│         HUMAN-IN-THE-LOOP CHECKPOINT                   │
-│  Proposal presented to operator via:                   │
-│  - REPL / Web Gateway notification                     │
-│  - Detailed diff of old vs new weights                 │
-│  - Projected impact on current shortlist               │
-│  REQUIRED APPROVAL before weights applied              │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│          WEIGHT APPLICATION + AUDIT                    │
-│  - Atomic write to weight_update_log                   │
-│  - Re-score all targets with new weights               │
-│  - Mark old target_scores as is_current=FALSE          │
-└────────────────────────────────────────────────────────┘
+```
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚           FEEDBACK COLLECTION LAYER              â”‚
+â”‚  (scheduled routines: daily/weekly)              â”‚
+â”‚  - ChEMBL activity data pull                     â”‚
+â”‚  - ClinicalTrials.gov outcome updates            â”‚
+â”‚  - DrugBank approved drug list diff              â”‚
+â”‚  - Target ranking stability measurement          â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                       â”‚
+                       â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚           METRIC COMPUTATION                     â”‚
+â”‚  - Retrospective recall@N                        â”‚
+â”‚  - Docking-IC50 Pearson correlation              â”‚
+â”‚  - Ranking Kendall-tau stability                 â”‚
+â”‚  - False positive accumulation rate             â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                       â”‚
+                       â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚        THRESHOLD EVALUATION (automated)          â”‚
+â”‚  If metric_delta > threshold:                    â”‚
+â”‚    â†’ Generate weight update PROPOSAL             â”‚
+â”‚  Else:                                           â”‚
+â”‚    â†’ Log metric, no action                       â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                       â”‚
+                       â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚         HUMAN-IN-THE-LOOP CHECKPOINT             â”‚
+â”‚  Proposal presented to operator via:            â”‚
+â”‚  - REPL / Web Gateway notification               â”‚
+â”‚  - Detailed diff of old vs new weights          â”‚
+â”‚  - Projected impact on current shortlist        â”‚
+â”‚  REQUIRED APPROVAL before weights applied       â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                       â”‚
+                       â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚          WEIGHT APPLICATION + AUDIT              â”‚
+â”‚  - Atomic write to weight_update_log             â”‚
+â”‚  - Re-score all targets with new weights         â”‚
+â”‚  - Mark old target_scores as is_current=FALSE    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 1.7 Security Boundary Definitions
 
 | Boundary | Description | Enforcement |
 |---|---|---|
-| Host ↔ WASM | WASM tools cannot access filesystem, network, or secrets directly | WASM capability model (IronClaw) |
-| Host ↔ Docker | Docker containers network-isolated; no direct DB access | Docker network policy + IronClaw orchestrator |
-| Ferrumyx ↔ Remote LLM | Data classification gate blocks INTERNAL/CONFIDENTIAL | Rust middleware in LlmRouter |
+| Host â†” WASM | WASM tools cannot access filesystem, network, or secrets directly | WASM capability model (IronClaw) |
+| Host â†” Docker | Docker containers network-isolated; no direct DB access | Docker network policy + IronClaw orchestrator |
+| Ferrumyx â†” Remote LLM | Data classification gate blocks INTERNAL/CONFIDENTIAL | Rust middleware in LlmRouter |
 | DB credentials | Never passed to tool layer; only accessed by host process | IronClaw AES-256-GCM keychain |
 | API keys | Injected at host boundary; WASM tools receive only scoped tokens | IronClaw credential injection |
 | Public API calls | All outbound calls logged with endpoint + response hash | Ingestion audit log |
@@ -518,7 +518,7 @@ pub struct LlmRouter {
 
 **Decision: Extension, not fork.**
 
-Rationale: Forking IronClaw means carrying the maintenance burden of diverging from upstream improvements to the agent loop, WASM sandbox, and security layer — areas where Ferrumyx has no domain-specific requirements. The extension model preserves upgradability.
+Rationale: Forking IronClaw means carrying the maintenance burden of diverging from upstream improvements to the agent loop, WASM sandbox, and security layer â€” areas where Ferrumyx has no domain-specific requirements. The extension model preserves upgradability.
 
 **Extension mechanisms used:**
 
@@ -551,7 +551,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 | Rate limits | 3 req/sec unauthenticated; 10 req/sec with API key |
 | Authentication | Optional API key (NCBI account, free) |
 | Data formats | XML (PubMed, PubMed Central), JSON (efetch supports both) |
-| Full-text access | PMC Open Access subset (PMCID required) — structured XML preferred |
+| Full-text access | PMC Open Access subset (PMCID required) â€” structured XML preferred |
 | Ferrumyx approach | WASM tool wrapping HTTP calls; prefer PMC XML when available |
 | Key endpoints | `esearch`, `efetch`, `elink`, `esummary` |
 | Notes | Most reliable source for curated biomedical abstracts; XML includes MeSH terms |
@@ -578,7 +578,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 | Data formats | JSON |
 | Full-text access | PDF only (no structured XML); Docling required |
 | Ferrumyx approach | WASM tool for metadata; Docker Docling for full text |
-| Notes | High signal for cutting-edge methods; NOT peer-reviewed — confidence weight lower |
+| Notes | High signal for cutting-edge methods; NOT peer-reviewed â€” confidence weight lower |
 
 ### arXiv API
 
@@ -589,7 +589,8 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 | Authentication | None |
 | Data formats | Atom XML |
 | Full-text access | PDF + source LaTeX (when available) |
-| Ferrumyx approach | WASM tool; relevant for ML/computational biology / ML-for-drug-discovery papers; lower priority than PubMed for clinical oncology |
+| Ferrumyx approach | WASM tool; relevant for ML/
+computational biology / ML-for-drug-discovery papers; lower priority than PubMed for clinical oncology |
 | Notes | Parse Atom XML with quick-xml crate; harvest LaTeX source for formula extraction where available; filter by primary category: q-bio.GN, q-bio.BM, cs.LG with cancer MeSH-equivalent keyword intersection |
 
 ---
@@ -618,7 +619,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 | Data formats | JSON |
 | Full-text access | DOI metadata only; links to publisher full-text (often paywalled) |
 | Ferrumyx approach | WASM tool; DOI resolution, citation graph retrieval, journal/publisher metadata, open-access flag via `license` field |
-| Notes | Essential for DOI resolution pipeline (§2.3); check `link[].content-type` for `application/pdf` links; `is-referenced-by-count` provides citation count signal for evidence weighting; use `mailto` param to avoid rate throttle |
+| Notes | Essential for DOI resolution pipeline (Â§2.3); check `link[].content-type` for `application/pdf` links; `is-referenced-by-count` provides citation count signal for evidence weighting; use `mailto` param to avoid rate throttle |
 
 ---
 
@@ -642,14 +643,14 @@ The paper discovery tool is an IronClaw WASM tool that translates a structured `
 
 ### Query Construction Logic
 
-```json
+```
 DiscoveryRequest {
-  "gene":        "KRAS",
-  "mutation":    "G12D",
-  "cancer_type": "pancreatic ductal adenocarcinoma",
-  "aliases":     ["PDAC", "pancreatic cancer"],
-  "date_from":   "2018-01-01",
-  "max_results": 200
+  gene:        "KRAS",
+  mutation:    "G12D",
+  cancer_type: "pancreatic ductal adenocarcinoma",
+  aliases:     ["PDAC", "pancreatic cancer"],
+  date_from:   "2018-01-01",
+  max_results: 200,
 }
 ```
 
@@ -697,53 +698,53 @@ GET /graph/v1/paper/search
 
 ### Query Expansion Rules
 
-1. Gene aliases resolved from HGNC (e.g., KRAS → {KRAS, RASK2, c-Ki-ras})
-2. Mutation notation variants: G12D → {G12D, Gly12Asp, p.G12D, c.35G>A, rs121913529}
-3. Cancer synonyms from OncoTree: PDAC → {pancreatic adenocarcinoma, exocrine pancreatic cancer, pancreatic ductal carcinoma}
+1. Gene aliases resolved from HGNC (e.g., KRAS â†’ {KRAS, RASK2, c-Ki-ras})
+2. Mutation notation variants: G12D â†’ {G12D, Gly12Asp, p.G12D, c.35G>A, rs121913529}
+3. Cancer synonyms from OncoTree: PDAC â†’ {pancreatic adenocarcinoma, exocrine pancreatic cancer, pancreatic ductal carcinoma}
 4. Boolean logic: (gene OR alias1 OR alias2) AND (mutation OR notation2 OR notation3) AND (cancer OR synonym1 OR synonym2)
 
 ### Deduplication on Ingestion
 
-Results from all sources are immediately deduplicated by DOI (§2.10) before downstream processing. A paper returned by both PubMed and Europe PMC counts as one record; the PubMed record is preferred (richer MeSH/structured metadata).
+Results from all sources are immediately deduplicated by DOI (Â§2.10) before downstream processing. A paper returned by both PubMed and Europe PMC counts as one record; the PubMed record is preferred (richer MeSH/structured metadata).
 
 ---
 
 ## 2.3 DOI Resolution Workflow
 
-```text
+```
 Input: raw paper metadata (title, authors, journal, year)
          OR known DOI string
 
         [DOI present?]
-             │
-      Yes ───┤
-             │                    No
-             │               [CrossRef search by
-             │                title + first author]
-             │                      │
-             │               [DOI found? confidence > 0.92?]
-             │                /              \
-             │           Yes                  No
-             │                                │
-             │                         [Flag: unresolved DOI]
-             │                         [Store metadata-only]
-             ▼
+             |
+      Yes â”€â”€â”€â”¤
+             â”‚                    No
+             â”‚               [CrossRef search by
+             â”‚                title + first author]
+             â”‚                      â”‚
+             â”‚               [DOI found? confidence > 0.92?]
+             â”‚                /              \
+             â”‚           Yes                  No
+             â”‚                                â”‚
+             â”‚                         [Flag: unresolved DOI]
+             â”‚                         [Store metadata-only]
+             â†“
      [CrossRef /works/{DOI} lookup]
-             │
+             â”‚
      [Extract: journal, ISSN, publisher,
       license[], link[], open-access flag,
       citation count, reference list]
-             │
+             â”‚
      [Unpaywall API lookup]
      (https://api.unpaywall.org/v2/{DOI}
       ?email=ferrumyx@local)
-             │
+             â”‚
      [OA status: gold/green/hybrid/closed]
-             │
+             â”‚
      [Store in papers.doi,
       papers.oa_status,
       papers.full_text_url]
-             ▼
+             â†“
      [DOI Resolution Complete]
 ```
 
@@ -763,40 +764,40 @@ Threshold: score >= 0.92 to accept
 
 Ferrumyx operates a tiered retrieval strategy. The goal is to maximise the fraction of papers where full structured text (not just abstract) is available, without violating terms of service.
 
-```text
+```
 Tier 1 (preferred): PubMed Central XML
-  └── Check pmc_id != null in PubMed efetch response
-  └── Fetch: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/
+  â””â”€ Check pmc_id != null in PubMed efetch response
+  â””â”€ Fetch: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/
              efetch.fcgi?db=pmc&id={PMC_ID}&rettype=xml
-  └── Full structured XML with <sec>, <table-wrap>,
-      <fig>, <formula> tags
+  â””â”€ Full structured XML with <sec>, <table-wrap>,
+     <fig>, <formula> tags
 
 Tier 2: Unpaywall PDF (gold/green OA)
-  └── oa_status IN ('gold', 'green', 'hybrid')
-  └── url_for_pdf != null
-  └── Fetch PDF → Docling parse pipeline
+  â””â”€ oa_status IN ('gold', 'green', 'hybrid')
+  â””â”€ url_for_pdf != null
+  â””â”€ Fetch PDF â†’ Docling parse pipeline
 
 Tier 3: Europe PMC full-text XML
-  └── https://www.ebi.ac.uk/europepmc/webservices/rest/
-      {PMCID}/fullTextXML
-  └── Structured, similar to PMC XML
+  â””â”€ https://www.ebi.ac.uk/europepmc/webservices/rest/
+     {PMCID}/fullTextXML
+  â””â”€ Structured, similar to PMC XML
 
 Tier 4: bioRxiv/medRxiv PDF
-  └── doi matches 10.1101/* pattern
-  └── https://www.biorxiv.org/content/{doi}v{version}.full.pdf
-  └── Fetch PDF → Docling
+  â””â”€ doi matches 10.1101/* pattern
+  â””â”€ https://www.biorxiv.org/content/{doi}v{version}.full.pdf
+  â””â”€ Fetch PDF â†’ Docling
 
 Tier 5: Semantic Scholar OA PDF
-  └── openAccessPdf.url != null
-  └── Fetch PDF → Docling
+  â””â”€ openAccessPdf.url != null
+  â””â”€ Fetch PDF â†’ Docling
 
 Tier 6 (fallback): Abstract only
-  └── No full-text available or accessible
-  └── Store abstract as single chunk
-  └── Flag papers.full_text_available = false
+  â””â”€ No full-text available or accessible
+  â””â”€ Store abstract as single chunk
+  â””â”€ Flag papers.full_text_available = false
 ```
 
-**Decision stored in DB:** `papers.retrieval_tier` (1–6) enables retrospective analysis of corpus coverage. Typical expectation for recent oncology literature: ~60% Tier 1–3, ~20% Tier 4–5, ~20% abstract-only.
+**Decision stored in DB:** `papers.retrieval_tier` (1â€“6) enables retrospective analysis of corpus coverage. Typical expectation for recent oncology literature: ~60% Tier 1â€“3, ~20% Tier 4â€“5, ~20% abstract-only.
 
 ---
 
@@ -842,10 +843,10 @@ When PubMed Central XML is available, it is **strongly preferred** over PDF pars
 ```
 
 **Ferrumyx XML parser** (built in Rust using `quick-xml`) extracts:
-- Section type from `sec-type` attribute → maps to `section_type` enum: {Abstract, Introduction, Methods, Results, Discussion, Conclusion, SupplementaryMethods, Other}
-- `<table-wrap>` contents → serialized to TSV for structured extraction
-- `<formula>` (MathML or TeX) → preserved as-is for optional downstream parsing
-- `<xref ref-type="bibr">` → inline citation IDs → resolved to DOIs via ref-list
+- Section type from `sec-type` attribute â†’ maps to `section_type` enum: {Abstract, Introduction, Methods, Results, Discussion, Conclusion, SupplementaryMethods, Other}
+- `<table-wrap>` contents â†’ serialized to TSV for structured extraction
+- `<formula>` (MathML or TeX) â†’ preserved as-is for optional downstream parsing
+- `<xref ref-type="bibr">` â†’ inline citation IDs â†’ resolved to DOIs via ref-list
 
 ### XML vs PDF Decision Matrix
 
@@ -870,12 +871,12 @@ Docling (IBM Research, Apache 2.0) is the selected PDF parser for Ferrumyx. It i
 
 | Strength | Detail |
 |---|---|
-| Complex PDF table extraction | Heron layout model accurately identifies multi-column tables with merged cells; outputs structured table objects in JSON (rows × columns) |
+| Complex PDF table extraction | Heron layout model accurately identifies multi-column tables with merged cells; outputs structured table objects in JSON (rows Ã— columns) |
 | Local execution | No external API calls; data never leaves the machine; critical for CONFIDENTIAL data classification |
 | MCP server mode | `docling-serve` exposes an MCP-compatible HTTP endpoint; IronClaw can register it as an MCP tool |
 | Formula detection | Detects display-math regions; extracts as LaTeX strings when possible |
 | Figure captioning | Associates figure bounding boxes with their captions |
-| Multi-format input | PDF, DOCX, HTML, LaTeX, images — one unified interface |
+| Multi-format input | PDF, DOCX, HTML, LaTeX, images â€” one unified interface |
 | Markdown + JSON export | JSON export preserves document structure (headings, tables, paragraphs with bounding boxes) |
 | Page-number metadata | Every text element tagged with source page number |
 
@@ -883,9 +884,9 @@ Docling (IBM Research, Apache 2.0) is the selected PDF parser for Ferrumyx. It i
 
 | Limitation | Severity | Detail |
 |---|---|---|
-| No scientific section inference | Medium | Does not infer "Methods" vs "Results" from content; relies on explicit heading text → requires Ferrumyx post-processing to map headings to section_type enum |
+| No scientific section inference | Medium | Does not infer "Methods" vs "Results" from content; relies on explicit heading text â†’ requires Ferrumyx post-processing to map headings to section_type enum |
 | OCR accuracy on chemical structures | High | SMILES / Markush structures in figures are not extracted; only bounding box coordinates. Requires separate dedicated chemistry OCR (e.g., OSRA, MolScribe) if chemical structure images are needed |
-| Compute requirements | Medium | Heron layout model requires ~2–4 GB VRAM (GPU accelerated) or ~8–12s per page on CPU; batch processing needed for large corpora |
+| Compute requirements | Medium | Heron layout model requires ~2â€“4 GB VRAM (GPU accelerated) or ~8â€“12s per page on CPU; batch processing needed for large corpora |
 | Scanned PDFs (bitmap) | Medium | OCR quality degrades on low-DPI scans; pre-2000 literature is often poorly scanned |
 | No citation link extraction | Low | Citation cross-references (e.g., "[12]") extracted as plain text; resolution requires separate pass |
 | Non-deterministic table borders | Low | Edge cases with borderless tables occasionally misidentify column count |
@@ -894,26 +895,26 @@ Docling (IBM Research, Apache 2.0) is the selected PDF parser for Ferrumyx. It i
 
 **Option A: Docker binary tool (recommended for MVP)**
 
-```text
+```
 IronClaw orchestrator
-  │
-  ├─ DockerTool "docling-parse"
-  │    image: quay.io/docling/docling-serve:latest
-  │    command: ["docling", "--from", "pdf", "--to", "json",
-  │              "--output", "/output/", "/input/paper.pdf"]
-  │    volumes:
-  │      - {tmp_dir}/input:/input:ro
-  │      - {tmp_dir}/output:/output:rw
-  │    gpu: optional (cuda device if available)
-  │    timeout: 120s per document
-  │
-  └─ Output: /output/paper.json
+  â”‚
+  â”œâ”€ DockerTool "docling-parse"
+  â”‚    image: quay.io/docling/docling-serve:latest
+  â”‚    command: ["docling", "--from", "pdf", "--to", "json",
+  â”‚              "--output", "/output/", "/input/paper.pdf"]
+  â”‚    volumes:
+  â”‚      - {tmp_dir}/input:/input:ro
+  â”‚      - {tmp_dir}/output:/output:rw
+  â”‚    gpu: optional (cuda device if available)
+  â”‚    timeout: 120s per document
+  â”‚
+  â””â”€ Output: /output/paper.json
        parsed by Rust struct DoclingDocument
 ```
 
 **Option B: MCP server mode (for interactive/streaming use)**
 
-```bash
+```
 # Start once, persist for session
 docker run -d --name docling-mcp \
   -p 5001:5001 \
@@ -994,12 +995,12 @@ Chunking converts full-text documents into retrieval-optimised units stored in `
 | Methods | 512-token window, 64-token overlap | Step-by-step detail; overlap preserves procedural continuity |
 | Results | 512-token window, 64-token overlap | Data-dense; tables treated separately (see below) |
 | Discussion | 512-token window, 64-token overlap | Interpretive; overlap preserves logical flow |
-| Conclusion | Single chunk (if ≤ 512 tokens) or 512+64 | Usually short |
-| Table | One chunk per table row-group (≤512 tokens) | Tables serialised as "col1: val1 \| col2: val2" |
+| Conclusion | Single chunk (if â‰¤ 512 tokens) or 512+64 | Usually short |
+| Table | One chunk per table row-group (â‰¤512 tokens) | Tables serialised as "col1: val1 | col2: val2" |
 | Figure caption | Single chunk per figure | Captions are self-contained |
 | Supplementary | 512-token window, 64-token overlap | Treated same as methods |
 
-**Token counting:** `tiktoken` Python library (cl100k_base encoding) via a lightweight Docker tool; for Rust-native, `tiktoken-rs` crate. Token count is based on the **embedding model's tokenizer**, not the LLM tokenizer — BiomedBERT uses WordPiece with a 512 subword token limit.
+**Token counting:** `tiktoken` Python library (cl100k_base encoding) via a lightweight Docker tool; for Rust-native, `tiktoken-rs` crate. Token count is based on the **embedding model's tokenizer**, not the LLM tokenizer â€” BiomedBERT uses WordPiece with a 512 subword token limit.
 
 **Important:** BiomedBERT has a hard 512-token limit per input. The 512-token chunk size with 64-token overlap is calibrated to fit within this limit including special tokens ([CLS], [SEP]). Effective content window = 510 tokens.
 
@@ -1025,7 +1026,7 @@ created_at      TIMESTAMPTZ
 
 ### Overlap Implementation
 
-```text
+```
 Section text (tokenized):
 [t0 t1 t2 ... t511 | t448 t449 ... t959 | t896 t897 ... ]
                    ^--- 64-token overlap between chunk 0 and chunk 1
@@ -1046,13 +1047,13 @@ Overlap is computed at the token level, not character level, to ensure consisten
 | `NationalLibraryOfMedicine/BiomedBERT-large-uncased-abstract-fulltext` | 1024 | 512 | High-precision mode | Docker Python (GPU recommended) |
 | SPECTER2 (from Semantic Scholar) | 768 | 512 | Citation-aware embeddings, optional | Docker Python |
 
-**Default selection:** `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` — trained on 14M+ PubMed abstracts + full-text articles; strong performance on biomedical STS benchmarks; freely available via HuggingFace.
+**Default selection:** `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` â€” trained on 14M+ PubMed abstracts + full-text articles; strong performance on biomedical STS benchmarks; freely available via HuggingFace.
 
 **High-precision mode** activates when `embedding_mode = "high_precision"` in Ferrumyx config; uses BiomedBERT-large (1024-dim); embeddings stored in a separate pgvector column `embedding_large VECTOR(1024)`.
 
 ### Embedding Service
 
-```yaml
+```
 [IronClaw DockerTool "embed_chunks"]
   image: ferrumyx/embed-service:latest
   # Dockerfile:
@@ -1071,8 +1072,8 @@ Output (stdout JSON):
 **Batch size:** 32 chunks per inference call. Larger batches risk OOM on CPU-only environments. On GPU (CUDA), batch size 128 is feasible.
 
 **Throughput estimate:**
-- CPU (8-core): ~50 chunks/sec → 1,000-chunk paper ≈ 20s
-- GPU (RTX 3080): ~800 chunks/sec → 1,000-chunk paper ≈ 1.25s
+- CPU (8-core): ~50 chunks/sec â†’ 1,000-chunk paper â‰ˆ 20s
+- GPU (RTX 3080): ~800 chunks/sec â†’ 1,000-chunk paper â‰ˆ 1.25s
 
 ### pgvector Storage
 
@@ -1139,7 +1140,7 @@ LIMIT 20;
 |---|---|---|---|
 | `en_core_sci_lg` | General biomedical: disease, chemical, gene, protein, cell line, species, DNA, RNA | ~85% | Docker Python |
 | `en_ner_bc5cdr_md` | Chemical + Disease (BC5CDR corpus) | ~88% chem, ~85% dis | Docker Python |
-| Combined pipeline | Run both; merge overlapping spans preferring higher-confidence model | — | Docker Python |
+| Combined pipeline | Run both; merge overlapping spans preferring higher-confidence model | â€” | Docker Python |
 
 **Why SciSpacy for MVP:**
 - Lightweight (en_core_sci_lg ~580MB vs BERN2 ~4GB+)
@@ -1193,7 +1194,7 @@ BERN2 (Biomedical Entity Recognition and Normalisation 2) is a neural NER+linkin
 | SciSpacy NER | **Wrap** (Docker Python IronClaw tool) | Mature library; no benefit to re-implementing |
 | BERN2 NER | **Integrate** (REST client in Rust WASM tool) | Deploy as Docker service; call via HTTP |
 | Entity normalisation (genes) | **Build** | Map SciSpacy gene mentions to HGNC IDs using custom lookup table seeded from HGNC REST API |
-| Entity normalisation (mutations) | **Build** | HGVS notation normalisation using Rust hgvs crate + custom regex for informal notations (G12D → p.Gly12Asp) |
+| Entity normalisation (mutations) | **Build** | HGVS notation normalisation using Rust hgvs crate + custom regex for informal notations (G12D â†’ p.Gly12Asp) |
 | Entity normalisation (diseases) | **Integrate** | OLS (Ontology Lookup Service) REST API for MeSH/OMIM lookups |
 | Custom oncology gazetteer | **Build** | Curated list of KRAS/RAS pathway members, common oncology abbreviations; used as pre-filter |
 | NER result storage | **Build** | Custom `entity_mentions` table in PostgreSQL |
@@ -1286,7 +1287,7 @@ in both PubMed and Europe PMC). Deduplication runs at ingestion time, before any
 ### Deduplication Algorithm (Ordered by Priority)
 
 **Stage 1 — DOI exact match (primary key)**
-```text
+```
 IF incoming.doi IS NOT NULL:
     IF EXISTS (SELECT 1 FROM papers WHERE doi = incoming.doi):
         → DUPLICATE: skip ingestion, log to ingestion_audit as 'deduplicated'
@@ -1481,7 +1482,7 @@ CREATE TABLE ent_synthetic_lethality (
 
 Every `kg_facts` row has a `confidence` value in [0, 1] computed as:
 
-```text
+```
 confidence = base_weight × Π(applicable_modifiers)  [capped at 1.0]
 ```
 
@@ -1517,7 +1518,7 @@ confidence = base_weight × Π(applicable_modifiers)  [capped at 1.0]
 
 When multiple independent facts support the same (subject, predicate, object) triple:
 
-```text
+```
 aggregate_confidence = 1 - Π(1 - confidence_i)
 ```
 
@@ -1525,7 +1526,7 @@ This is the noisy-OR model — each independent piece of evidence adds to aggreg
 
 **Contradictory evidence** (e.g., two facts with opposite directionality on the same predicate):
 
-```text
+```
 net_confidence = |Σ(signed_confidence_i)|
 where: signed_confidence_i = +confidence_i (supporting) or -confidence_i (contradicting)
 ```
@@ -1552,7 +1553,7 @@ CREATE TABLE kg_conflicts (
 
 Update pipeline is **event-driven**, not batch-scheduled:
 
-```text
+```
 [New paper ingested]
         │
         ▼
@@ -1605,7 +1606,7 @@ Re-scoring is asynchronous: queued jobs processed by the routines engine during 
 
 ## 3.6 Conflict Resolution Logic
 
-```text
+```
 Algorithm ConflictResolution(fact_a, fact_b):
 
 1. DETECT: same (subject_id, predicate, object_id), opposite directionality
@@ -1719,7 +1720,7 @@ Rationale: For the MVP cancer domain (KRAS G12D PDAC), the knowledge graph will 
 
 The composite target priority score for gene *g* in cancer context *c* is:
 
-```text
+```
 S(g, c) = [ Σᵢ wᵢ × nᵢ(g, c) ] − P(g, c)
 
 constrained to: S(g, c) ∈ [0, 1]
@@ -1747,7 +1748,7 @@ where C(g, c) = mean confidence of all KG facts
 
 ### Initial Weight Vector W
 
-```python
+```
 W = {
   w1: 0.20,   # mutation_freq         — highest weight; biological relevance anchor
   w2: 0.18,   # crispr_dependency     — strong functional evidence
@@ -1764,7 +1765,7 @@ W = {
 
 ### Penalty Term P(g, c)
 
-```text
+```
 P(g, c) = Σ penalty_k
 
 where:
@@ -1779,7 +1780,7 @@ P(g, c) = inhibitor_saturation_penalty
 
 ### structural_tractability Sub-Formula
 
-```text
+```
 structural_tractability(g) =
     0.40 × pdb_coverage_score
   + 0.35 × (af_plddt_mean / 100)     [if no PDB]
@@ -1794,7 +1795,7 @@ where:
 
 **Default: Rank-based normalization** (chosen for outlier robustness)
 
-```text
+```
 For component i, across all N candidate (gene, cancer) pairs:
   rank_i(g, c) = rank of (g, c) among all candidates by raw component value
   n_i(g, c) = rank_i(g, c) / N
@@ -1804,7 +1805,7 @@ So the top-ranked candidate gets n_i = 1.0, last-ranked gets n_i ≈ 0.
 
 **Exception — CRISPR dependency (component 2):**
 CERES scores have biological meaning at specific thresholds (< -1.0 = strongly essential). Apply min-max within [-2.0, 0.0] range before ranking:
-```text
+```
 ceres_normalised = (ceres_score - (-2.0)) / (0.0 - (-2.0))
                  = (ceres_score + 2.0) / 2.0
 # More negative (more essential) → lower raw → inverted for scoring:
@@ -1852,7 +1853,7 @@ LIMIT 20;
 
 ## 4.5 Threshold Logic for Shortlisting
 
-```text
+```
 PRIMARY SHORTLIST (high confidence):
   S_adj > 0.60
   AND mutation_freq_raw > 0.05      (present in ≥5% of tumours)
@@ -1902,103 +1903,102 @@ OUTPUT FIELDS (per candidate):
 
 ## 5.2 IronClaw Tool Orchestration Sequence
 
-```text
+```
 [Target shortlist: (gene_id, cancer_id, composite_score)]
-        │
-        ▼
-┌──────────────────────────────┐
-│  STEP 1: Structure Retrieval │
-│  Tool: pdb_fetch (WASM)      │
-│  Input: UniProt / HGNC ID    │
-│  Output: PDB IDs + .pdb files│
-│  Fallback: alphafold_fetch   │
-│  (WASM) if no PDB available  │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 2: Structure Validation│
-│  PDB: resolution < 3.0 Å?    │
-│  AlphaFold: pLDDT > 70?      │
-│  Fail: FLAG + continue with  │
-│  caveat; do not abort        │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 3: Pocket Detection    │
-│  Tool: fpocket_run (Docker)  │
-│  Input: .pdb file            │
-│  Output: pocket files +      │
-│          druggability scores │
-│  Select: best pocket by score│
-│  Fallback: DoGSiteScorer API │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 4: Ligand Preparation  │
-│  Tool: rdkit_ops (Docker)    │
-│  a) Retrieve known binders   │
-│     from ChEMBL (seeds)      │
-│  b) Generate scaffold variant│
-│     via RDKit fragment grow  │
-│  c) Compute MW, LogP, HBD,   │
-│     HBA, TPSA, SA score      │
-│  d) Filter: Lipinski Ro5 pass│
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 5: Molecular Docking   │
-│  Tool: vina_dock (Docker)    │
-│  Input: protein .pdbqt +     │
-│         ligand .sdf batch    │
-│  Output: docking poses +     │
-│          scores              │
-│  Alt: gnina_dock for CNN     │
-│       rescoring of top poses │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 6: ADMET Prediction    │
-│  Tool: admet_predict (Docker)│
-│  Input: SMILES of top docked │
-│         molecules            │
-│  Output: absorption, tox,    │
-│          hERG, hepatotox flag│
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 7: Multi-Objective     │
-│  Combine: vina_score + gnina │
-│  + admet_pass + sa_score +   │
-│  novelty vs ChEMBL           │
-│  Rank and select candidates  │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  STEP 8: Store Results       │
-│  → molecules + docking_result│
-│  tables (Phase 1 schema)     │
-│  → Trigger report generation │
-└──────────────────────────────┘
+        â”‚
+        â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 1: Structure Retrieval    â”‚
+â”‚  Tool: pdb_fetch (WASM)         â”‚
+â”‚  Input: UniProt / HGNC ID       â”‚
+â”‚  Output: PDB IDs + .pdb files   â”‚
+â”‚  Fallback: alphafold_fetch      â”‚
+â”‚  (WASM) if no PDB available     â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 2: Structure Validation   â”‚
+â”‚  PDB: resolution < 3.0 Ã…?       â”‚
+â”‚  AlphaFold: pLDDT > 70?         â”‚
+â”‚  Fail: FLAG + continue with     â”‚
+â”‚  caveat; do not abort           â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 3: Pocket Detection       â”‚
+â”‚  Tool: fpocket_run (Docker)     â”‚
+â”‚  Input: .pdb file               â”‚
+â”‚  Output: pocket files +         â”‚
+â”‚          druggability scores    â”‚
+â”‚  Select: best pocket by score   â”‚
+â”‚  Fallback: DoGSiteScorer API    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 4: Ligand Preparation     â”‚
+â”‚  Tool: rdkit_ops (Docker)       â”‚
+â”‚  a) Retrieve known binders from â”‚
+â”‚     ChEMBL (seed ligands)       â”‚
+â”‚  b) Generate scaffold variants  â”‚
+â”‚     via RDKit fragment growing  â”‚
+â”‚  c) Compute MW, LogP, HBD, HBA, â”‚
+â”‚     TPSA, SA score              â”‚
+â”‚  d) Filter: Lipinski Ro5 pass   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 5: Molecular Docking      â”‚
+â”‚  Tool: vina_dock (Docker)       â”‚
+â”‚  Input: protein .pdbqt +        â”‚
+â”‚         ligand .sdf batch       â”‚
+â”‚  Output: docking poses + scores â”‚
+â”‚  Alt: gnina_dock for CNN        â”‚
+â”‚       rescoring of top poses    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 6: ADMET Prediction       â”‚
+â”‚  Tool: admet_predict (Docker)   â”‚
+â”‚  Input: SMILES of top docked    â”‚
+â”‚         molecules               â”‚
+â”‚  Output: absorption, tox,       â”‚
+â”‚          hERG, hepatotox flags  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 7: Multi-Objective Score  â”‚
+â”‚  Combine: vina_score + gnina +  â”‚
+â”‚  admet_pass + sa_score +        â”‚
+â”‚  novelty vs ChEMBL              â”‚
+â”‚  Rank and select candidates     â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+               â”‚
+               â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  STEP 8: Store Results          â”‚
+â”‚  â†’ molecules + docking_results  â”‚
+â”‚  tables (Phase 1 schema)        â”‚
+â”‚  â†’ Trigger report generation    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 5.3 Iterative Molecule Optimisation Loop
 
-```text
+```
 REPEAT (max 5 iterations OR convergence):
 
   1. Score current batch:
-     multi_obj = 0.40 × norm(vina_score)
-               + 0.20 × norm(gnina_score)
-               + 0.20 × admet_pass_ratio
-               + 0.10 × norm(1 / sa_score)
-               + 0.10 × novelty_vs_chembl
+     multi_obj = 0.40 Ã— norm(vina_score)
+               + 0.20 Ã— norm(gnina_score)
+               + 0.20 Ã— admet_pass_ratio
+               + 0.10 Ã— norm(1 / sa_score)
+               + 0.10 Ã— novelty_vs_chembl
 
   2. Select top 20% by multi_obj_score
 
@@ -2009,12 +2009,12 @@ REPEAT (max 5 iterations OR convergence):
         conditioned on pocket pharmacophore
 
   4. Filter new batch:
-     - Lipinski Ro5: MW < 500, LogP < 5, HBD ≤ 5, HBA ≤ 10
+     - Lipinski Ro5: MW < 500, LogP < 5, HBD â‰¤ 5, HBA â‰¤ 10
      - SA score < 6
      - No PAINS alerts (RDKit)
      - Not exact ChEMBL match (InChI key check)
 
-  5. Dock filtered batch → repeat from step 1
+  5. Dock filtered batch â†’ repeat from step 1
 
 CONVERGENCE: mean(multi_obj) improvement < 0.02
              OR top score unchanged for 2 iterations
@@ -2024,13 +2024,13 @@ CONVERGENCE: mean(multi_obj) improvement < 0.02
 
 | Objective | Target | Hard Constraint? |
 |---|---|---|
-| Vina docking score | < −7.0 kcal/mol | No (soft) |
+| Vina docking score | < âˆ’7.0 kcal/mol | No (soft) |
 | Gnina CNN score | > 0.5 | No (soft) |
-| Molecular weight | 300–500 Da | Yes |
-| LogP | 1–5 | Yes |
-| HBD | ≤ 5 | Yes |
-| HBA | ≤ 10 | Yes |
-| TPSA | < 140 Å² | Yes |
+| Molecular weight | 300â€“500 Da | Yes |
+| LogP | 1â€“5 | Yes |
+| HBD | â‰¤ 5 | Yes |
+| HBA | â‰¤ 10 | Yes |
+| TPSA | < 140 Ã…Â² | Yes |
 | Synthetic accessibility (SA) | < 6 | Yes |
 | hERG toxicity | Not flagged | Soft (warning) |
 | Hepatotoxicity | Not flagged | Soft (warning) |
@@ -2039,14 +2039,14 @@ CONVERGENCE: mean(multi_obj) improvement < 0.02
 ## 5.5 Intermediate Result Storage
 
 All intermediate files in IronClaw workspace:
-```text
+```
 /workspace/structural/{gene_symbol}/{job_id}/
-  ├── structures/     # .pdb, .pdbqt
-  ├── pockets/        # fpocket output
-  ├── ligands/        # .sdf, .mol2
-  ├── docking/        # Vina/Gnina poses
-  ├── admet/          # prediction CSVs
-  └── report.json     # job summary
+  â”œâ”€â”€ structures/     # .pdb, .pdbqt
+  â”œâ”€â”€ pockets/        # fpocket output
+  â”œâ”€â”€ ligands/        # .sdf, .mol2
+  â”œâ”€â”€ docking/        # Vina/Gnina poses
+  â”œâ”€â”€ admet/          # prediction CSVs
+  â””â”€â”€ report.json     # job summary
 ```
 
 Database: `molecules` and `docking_results` (Phase 1 schema). Each job UUID links workspace files to DB rows. Re-runs create new records; old preserved.
@@ -2098,13 +2098,13 @@ The NL query is parsed into a structured `ScientificQuery` object:
 ```
 
 **Entity extraction pipeline:**
-1. Run NER on query text → gene (KRAS), mutation (G12D), cancer (pancreatic cancer), relationship (synthetic lethal)
-2. Normalise: KRAS → HGNC:6407; G12D → p.Gly12Asp / rs121913529; pancreatic cancer → PAAD
-3. Map filter intent: "structural druggability" → structural_tractability > 0.4; "low prior inhibitor" → ChEMBL count < 20
+1. Run NER on query text â†’ gene (KRAS), mutation (G12D), cancer (pancreatic cancer), relationship (synthetic lethal)
+2. Normalise: KRAS â†’ HGNC:6407; G12D â†’ p.Gly12Asp / rs121913529; pancreatic cancer â†’ PAAD
+3. Map filter intent: "structural druggability" â†’ structural_tractability > 0.4; "low prior inhibitor" â†’ ChEMBL count < 20
 
 ## 6.3 Query Plan Generation
 
-```text
+```
 PLAN: synthetic lethal targets in KRAS G12D PAAD
 
 Step 1: Validate KRAS G12D entity in ent_mutations
@@ -2116,27 +2116,27 @@ Step 3: For each SL partner:
         c. Filter: ChEMBL count < 20
 Step 4: Retrieve structural data (ent_structures + ent_druggability)
 Step 5: Retrieve supporting evidence (kg_facts + papers)
-Step 6: Rank by composite_score × SL evidence confidence
+Step 6: Rank by composite_score Ã— SL evidence confidence
 Step 7: Format output JSON with full citations
 ```
 
 ## 6.4 Tool Invocation Sequence
 
-```text
+```
 ferrumyx_query_handler.execute(query):
 
-1. ner_extract(query_text)                  → entities JSON
-2. entity_normalise(entities)               → canonical IDs
-3. kg_query.synthetic_lethality(            → SL partner list
+1. ner_extract(query_text)                  â†’ entities JSON
+2. entity_normalise(entities)               â†’ canonical IDs
+3. kg_query.synthetic_lethality(            â†’ SL partner list
        gene=KRAS, cancer=PAAD, conf>0.5)
 4. FOR each SL partner:
-   a. target_scores.get_current(gene, PAAD) → score object
-   b. structural_data.get(gene)             → structure + druggability
-   c. chembl.inhibitor_count(gene)          → count
-5. filter_and_rank(candidates, filters)     → ranked list
-6. evidence_bundle.assemble(top_N=10)       → citations + KG facts
-7. llm_backend.narrate(ranked, evidence)    → human-readable summary
-8. format_output(ranked, narrative)         → final JSON
+   a. target_scores.get_current(gene, PAAD) â†’ score object
+   b. structural_data.get(gene)             â†’ structure + druggability
+   c. chembl.inhibitor_count(gene)          â†’ count
+5. filter_and_rank(candidates, filters)     â†’ ranked list
+6. evidence_bundle.assemble(top_N=10)       â†’ citations + KG facts
+7. llm_backend.narrate(ranked, evidence)    â†’ human-readable summary
+8. format_output(ranked, narrative)         â†’ final JSON
 ```
 
 ## 6.5 Output JSON Schema
@@ -2213,9 +2213,9 @@ ferrumyx_query_handler.execute(query):
 
 ## 6.7 Citation Traceability Rule
 
-Every factual claim must link to ≥1 of: PMID, DOI, or database record ID (DepMap, ChEMBL, COSMIC, etc.).
+Every factual claim must link to â‰¥1 of: PMID, DOI, or database record ID (DepMap, ChEMBL, COSMIC, etc.).
 
-Claims without traceable source → labelled `"source": "INFERRED"`, confidence ≤ 0.3.
+Claims without traceable source â†’ labelled `"source": "INFERRED"`, confidence â‰¤ 0.3.
 
 The LLM narration layer is **explicitly prohibited** from generating factual claims not grounded in KG evidence. The prompt template enforces this with a hard instruction: "Only assert facts that appear in the provided evidence bundle. Do not add information from training data."
 
@@ -2240,10 +2240,10 @@ No vague "learning." All improvement mechanisms are explicit, measurable, and hu
 - **Target baseline:** r > 0.45 (docking is noisy; >0.45 is informative)
 - **Frequency:** Quarterly (tied to ChEMBL releases)
 
-### Metric 3: Ranking Stability (Kendall-τ)
-- **Definition:** Kendall-τ between target ranking at T and T−30 days
-- **τ > 0.80:** stable signal; weights are reliable
-- **τ < 0.50:** noisy; investigate which component is fluctuating
+### Metric 3: Ranking Stability (Kendall-Ï„)
+- **Definition:** Kendall-Ï„ between target ranking at T and Tâˆ’30 days
+- **Ï„ > 0.80:** stable signal; weights are reliable
+- **Ï„ < 0.50:** noisy; investigate which component is fluctuating
 - **Frequency:** Weekly
 
 ### Metric 4: Literature Recall
@@ -2259,33 +2259,33 @@ No vague "learning." All improvement mechanisms are explicit, measurable, and hu
 
 ## 7.2 Feedback Data Collection
 
-```text
+```
 IronClaw Routine: "feedback_collection"
 Schedule: Weekly (Sunday 02:00 local)
 
-1. Pull DrugBank approved target list → compute Recall@N
-2. Pull ChEMBL activities for top-20 genes → compute docking-IC50 Pearson r
-3. Compute Kendall-τ vs previous week's target_scores snapshot
-4. Query CIViC API → compute literature recall
+1. Pull DrugBank approved target list â†’ compute Recall@N
+2. Pull ChEMBL activities for top-20 genes â†’ compute docking-IC50 Pearson r
+3. Compute Kendall-Ï„ vs previous week's target_scores snapshot
+4. Query CIViC API â†’ compute literature recall
 5. Scan ClinicalTrials.gov for prior shortlisted target outcomes
 6. INSERT all metrics into feedback_events table
-7. Evaluate thresholds → generate weight update PROPOSAL if triggered
+7. Evaluate thresholds â†’ generate weight update PROPOSAL if triggered
 ```
 
 ## 7.3 Parameter Re-Weighting Algorithm
 
 **Algorithm: Bayesian bounded update with expert prior**
 
-W (initial expert weights from §4.1) is the prior. After each feedback cycle:
+W (initial expert weights from Â§4.1) is the prior. After each feedback cycle:
 
-```text
+```
 For each component i:
   compute corr_i = Pearson_r(component_i_scores, Recall@20_signal)
 
   if corr_i > 0.30:
-    w_i_new = w_i × (1 + 0.05 × corr_i)   # reward predictive components
+    w_i_new = w_i Ã— (1 + 0.05 Ã— corr_i)   # reward predictive components
   elif corr_i < 0.10:
-    w_i_new = w_i × 0.95                    # penalise non-predictive components
+    w_i_new = w_i Ã— 0.95                    # penalise non-predictive components
   else:
     w_i_new = w_i                            # no change
 
@@ -2296,7 +2296,7 @@ Constraints:
   - No weight drops below 0.01 or rises above 0.40
 ```
 
-This is intentionally conservative. No gradient descent — insufficient data at MVP scale for reliable gradients.
+This is intentionally conservative. No gradient descent â€” insufficient data at MVP scale for reliable gradients.
 
 ## 7.4 Feedback Loop Triggers
 
@@ -2305,17 +2305,17 @@ This is intentionally conservative. No gradient descent — insufficient data at
 | Scheduled | Weekly Sunday 02:00 | Full feedback collection run |
 | Event: DrugBank release | Quarterly version diff detected | Immediate Recall@N run |
 | Event: DepMap release | Quarterly | Re-pull CERES; re-score all targets |
-| Event: Ranking volatility | Kendall-τ < 0.50 for 2 consecutive weeks | Alert operator; pause weight proposals |
+| Event: Ranking volatility | Kendall-Ï„ < 0.50 for 2 consecutive weeks | Alert operator; pause weight proposals |
 | Manual | Operator command via REPL | Force feedback run |
 
 ## 7.5 Human-in-the-Loop Checkpoints
 
 **No weight update is ever applied automatically.**
 
-```text
+```
 PROPOSAL STAGE:
   - Old W vs new W diff table
-  - Projected ranking changes (which targets move ±5 positions)
+  - Projected ranking changes (which targets move Â±5 positions)
   - Metric values that triggered proposal
   - Sample size of feedback data (confidence in proposal)
 
@@ -2324,8 +2324,8 @@ NOTIFICATION:
   - Includes: summary, projected impact, approve/reject action
 
 APPROVAL:
-  - Approved → weights applied atomically; all target_scores re-queued
-  - Rejected → log reason; weights unchanged; threshold raised for next cycle
+  - Approved â†’ weights applied atomically; all target_scores re-queued
+  - Rejected â†’ log reason; weights unchanged; threshold raised for next cycle
 
 POST-APPLICATION:
   - weight_update_log INSERT (full diff + approver ID)
@@ -2336,12 +2336,12 @@ POST-APPLICATION:
 ## 7.6 Audit Trail
 
 All weight changes in `weight_update_log` table (Phase 1 schema):
-- `previous_weights JSONB` — full W before
-- `new_weights JSONB` — full W after
-- `trigger_event TEXT` — what triggered it
-- `algorithm TEXT` — `bayesian_bounded`
-- `approved_by TEXT` — operator ID; never `auto`
-- `delta_summary JSONB` — per-component changes
+- `previous_weights JSONB` â€” full W before
+- `new_weights JSONB` â€” full W after
+- `trigger_event TEXT` â€” what triggered it
+- `algorithm TEXT` â€” `bayesian_bounded`
+- `approved_by TEXT` â€” operator ID; never `auto`
+- `delta_summary JSONB` â€” per-component changes
 
 
 ---
@@ -2380,10 +2380,10 @@ impl LlmRouter {
 ```
 
 **Concrete backends:**
-- `OllamaBackend` → `http://localhost:11434`; `is_local() = true`
-- `OpenAIBackend` → `api.openai.com`; `is_local() = false`
-- `AnthropicBackend` → `api.anthropic.com`; `is_local() = false`
-- `CustomHttpBackend` → configurable endpoint; `is_local()` = configurable
+- `OllamaBackend` â†’ `http://localhost:11434`; `is_local() = true`
+- `OpenAIBackend` â†’ `api.openai.com`; `is_local() = false`
+- `AnthropicBackend` â†’ `api.anthropic.com`; `is_local() = false`
+- `CustomHttpBackend` â†’ configurable endpoint; `is_local()` = configurable
 
 ## 8.2 Data Classification
 
@@ -2397,23 +2397,23 @@ Classification applied at **prompt construction** stage, before any LLM call. `D
 
 ## 8.3 Redaction Layer
 
-```text
+```
 Before any remote LLM API call:
 
-classify(prompt) →
-  CONFIDENTIAL → HARD BLOCK + alert operator; throw error
-  INTERNAL     → IF allow_internal_remote == false:
+classify(prompt) â†’
+  CONFIDENTIAL â†’ HARD BLOCK + alert operator; throw error
+  INTERNAL     â†’ IF allow_internal_remote == false:
                      route to local Ollama
                  ELSE (explicit override):
                      LOG WARNING in llm_audit_log
                      proceed with remote call
-  PUBLIC       → route per policy (prefer local if available)
+  PUBLIC       â†’ route per policy (prefer local if available)
 ```
 
 **Redaction patterns (regex, configurable):**
-- SMILES strings → tagged INTERNAL by default
-- Composite S_adj values → tagged INTERNAL
-- Internal job UUIDs → stripped from prompts before sending
+- SMILES strings â†’ tagged INTERNAL by default
+- Composite S_adj values â†’ tagged INTERNAL
+- Internal job UUIDs â†’ stripped from prompts before sending
 
 ## 8.4 Local-Only Mode
 
@@ -2431,13 +2431,13 @@ In `local_only` mode:
 
 ## 8.5 Audit Logging
 
-Cross-reference: `llm_audit_log` table (Phase 1 §1.4). Fields:
-- `session_id` — IronClaw job/session ID
-- `model` — model string
-- `backend` — `ollama|openai|anthropic|custom`
+Cross-reference: `llm_audit_log` table (Phase 1 Â§1.4). Fields:
+- `session_id` â€” IronClaw job/session ID
+- `model` â€” model string
+- `backend` â€” `ollama|openai|anthropic|custom`
 - `prompt_tokens` / `completion_tokens`
-- `data_class` — `PUBLIC|INTERNAL|CONFIDENTIAL`
-- `output_hash` — SHA-256 of response (reproducibility)
+- `data_class` â€” `PUBLIC|INTERNAL|CONFIDENTIAL`
+- `output_hash` â€” SHA-256 of response (reproducibility)
 - `latency_ms`
 - `called_at`
 
@@ -2484,7 +2484,7 @@ On daily limit hit: pause remote calls, route to Ollama, notify operator.
 
 # Phase 9: Roadmap
 
-## 9.1 Three-Month MVP (Months 1–3)
+## 9.1 Three-Month MVP (Months 1â€“3)
 
 **Focus:** KRAS G12D Pancreatic Ductal Adenocarcinoma (PDAC)
 
@@ -2518,15 +2518,15 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - [ ] PDB fetch + AlphaFold WASM tools
 - [ ] fpocket Docker tool
 - [ ] AutoDock Vina Docker tool
-- [ ] RDKit Docker tool (SMILES → properties + Lipinski filter)
+- [ ] RDKit Docker tool (SMILES â†’ properties + Lipinski filter)
 - [ ] ADMET-AI Docker tool
 - [ ] Molecule pipeline orchestration
-- [ ] NL query handler (intent parsing → structured plan → tool calls)
-- [ ] Output JSON schema (§6.5)
+- [ ] NL query handler (intent parsing â†’ structured plan â†’ tool calls)
+- [ ] Output JSON schema (Â§6.5)
 - [ ] LLM router with Ollama + OpenAI backends
 - [ ] Audit logging populated
 
-**Deliverable:** Full pipeline operational for KRAS G12D PAAD. Literature → KG → target scores → structural analysis → ranked output with citations. Retrospective validation: top-10 vs DrugBank known PDAC targets.
+**Deliverable:** Full pipeline operational for KRAS G12D PAAD. Literature â†’ KG â†’ target scores â†’ structural analysis â†’ ranked output with citations. Retrospective validation: top-10 vs DrugBank known PDAC targets.
 
 ### MVP Explicit Limitations
 - Single cancer subtype only (KRAS G12D PAAD)
@@ -2538,43 +2538,43 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 ---
 
-## 9.2 Six-Month Expansion (Months 4–6)
+## 9.2 Six-Month Expansion (Months 4â€“6)
 
 **Expansion criteria:** MVP retrospective Recall@20 > 0.55 for PDAC domain.
 
 **New capabilities:**
 - [ ] bioRxiv/medRxiv ingestion tools
-- [ ] ClinicalTrials.gov structured ingestion (trial outcomes → KG)
+- [ ] ClinicalTrials.gov structured ingestion (trial outcomes â†’ KG)
 - [ ] Semantic Scholar integration (citation graph + SPECTER2 embeddings)
 - [ ] Expand to 3 cancer subtypes: KRAS G12D PDAC + EGFR-mutant NSCLC + BRCA1/2 ovarian
 - [ ] BERN2 high-recall NER for high-citation papers
 - [ ] Basic generative design (RDKit fragment growing)
 - [ ] DeepPurpose binding affinity prediction
 - [ ] Feedback metrics collection activated (weights NOT yet auto-updated)
-- [ ] Deduplication pipeline hardened (preprint→published pairing)
+- [ ] Deduplication pipeline hardened (preprintâ†’published pairing)
 - [ ] Web Gateway basic query interface
 
 **Validation strategy:** For each new cancer subtype, run retrospective Recall@20 vs DrugBank before declaring that domain operational.
 
 ---
 
-## 9.3 Twelve-Month Autonomous Optimisation (Months 7–12)
+## 9.3 Twelve-Month Autonomous Optimisation (Months 7â€“12)
 
 **Self-improvement activation criteria:**
-- ≥3 complete feedback cycles collected
-- Docking-IC50 Pearson r > 0.40 on ≥2 target genes
-- Recall@20 stable (±0.05) for 2 consecutive months
-- Human operator approved ≥1 weight update proposal
+- â‰¥3 complete feedback cycles collected
+- Docking-IC50 Pearson r > 0.40 on â‰¥2 target genes
+- Recall@20 stable (Â±0.05) for 2 consecutive months
+- Human operator approved â‰¥1 weight update proposal
 
 **New capabilities:**
 - [ ] Self-improvement loop fully active (weight proposals + human approval)
 - [ ] Reinvent4 generative molecule design (CUDA GPU required)
 - [ ] Expand to 10+ cancer subtypes; pan-cancer analysis
-- [ ] Retrospective validation against all FDA oncology approvals (1990–present)
+- [ ] Retrospective validation against all FDA oncology approvals (1990â€“present)
 - [ ] Synthetic lethality network analysis (multi-hop Reactome traversal)
 - [ ] External validation pipeline: submit top candidates to wet-lab partners
 - [ ] Neo4j evaluation: benchmark if fact count > 2M and traversal latency > 500ms P95
-- [ ] Full audit report generation (Markdown → PDF)
+- [ ] Full audit report generation (Markdown â†’ PDF)
 
 ---
 
@@ -2593,13 +2593,13 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | Semantic Scholar client | Build | Rust | WASM | Open | SPECTER2 embeddings |
 | Unpaywall client | Build | Rust | WASM | Open | OA detection |
 | PMC XML parser | Build | Rust | Native | Open | quick-xml; section-aware |
-| Docling | Integrate | Python | Docker | Apache 2.0 | IBM Research; PDF → structured JSON |
+| Docling | Integrate | Python | Docker | Apache 2.0 | IBM Research; PDF â†’ structured JSON |
 | BiomedBERT / PubMedBERT | Integrate | Python | Docker | Apache 2.0 | HuggingFace; 768-dim embeddings |
 | SciSpacy en_core_sci_lg | Integrate | Python | Docker | MIT | General biomedical NER |
 | SciSpacy en_ner_bc5cdr_md | Integrate | Python | Docker | MIT | Chemical + disease NER |
 | BERN2 | Integrate | Python | Docker | MIT | Neural NER + entity linking |
-| Gene entity normaliser | Build | Rust | Native | — | HGNC REST + hgvs crate |
-| Mutation normaliser | Build | Rust | Native | — | HGVS regex; notation variants |
+| Gene entity normaliser | Build | Rust | Native | â€” | HGNC REST + hgvs crate |
+| Mutation normaliser | Build | Rust | Native | â€” | HGVS regex; notation variants |
 | Disease normaliser | Integrate | REST | WASM | Open | EBI OLS API |
 | fpocket | Integrate | C | Docker | BSD | Pocket detection |
 | AutoDock Vina | Integrate | C++ | Docker | Apache 2.0 | Molecular docking |
@@ -2617,10 +2617,10 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 | Risk | Severity | Likelihood | Mitigation |
 |---|---|---|---|
-| Docking score ≠ binding affinity | H | H | Gnina CNN rescoring; validate against ChEMBL IC50; treat as hypothesis generator only |
+| Docking score â‰  binding affinity | H | H | Gnina CNN rescoring; validate against ChEMBL IC50; treat as hypothesis generator only |
 | AlphaFold low confidence for disordered regions | H | M | Check pLDDT at active site; prefer PDB; flag structurally unresolved targets |
 | NER accuracy on novel nomenclature | M | M | Gazetteer supplement; BERN2 for high-citation papers; manual curation queue |
-| PostgreSQL scaling > 10M chunks | M | L (MVP) | IVFFlat → HNSW migration path; pg_partman partitioning; read replicas |
+| PostgreSQL scaling > 10M chunks | M | L (MVP) | IVFFlat â†’ HNSW migration path; pg_partman partitioning; read replicas |
 | LLM hallucination in query narration | H | M | Strict grounding: narration only from KG-verified evidence bundle; no training-data facts allowed |
 | WASM performance overhead on hot-path tools | L | M | Profile at Month 2; migrate to native Rust if >100ms overhead |
 | Data licensing violation | M | L | COSMIC needs registration; ChEMBL CC BY-SA; full audit before any commercial use |
@@ -2632,15 +2632,15 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 ## Technical Bottlenecks
 
-1. **Docking throughput at scale.** Vina: ~100 poses/min per CPU core. At 100 molecules × 10 targets × 3 pockets = 3,000 runs → ~30 min on 8 cores. GPU-accelerated Gnina reduces to ~3 min but requires CUDA. A docking job queue (Docker batch) is necessary at Month 6+ scale.
+1. **Docking throughput at scale.** Vina: ~100 poses/min per CPU core. At 100 molecules Ã— 10 targets Ã— 3 pockets = 3,000 runs â†’ ~30 min on 8 cores. GPU-accelerated Gnina reduces to ~3 min but requires CUDA. A docking job queue (Docker batch) is necessary at Month 6+ scale.
 
-2. **Embedding throughput.** BiomedBERT on CPU: ~50 chunks/sec. 100K papers × 50 chunks avg = 5M chunks → ~28 hours CPU. GPU (RTX 3080): ~800 chunks/sec → ~1.7 hours. GPU is mandatory for production ingestion speed.
+2. **Embedding throughput.** BiomedBERT on CPU: ~50 chunks/sec. 100K papers Ã— 50 chunks avg = 5M chunks â†’ ~28 hours CPU. GPU (RTX 3080): ~800 chunks/sec â†’ ~1.7 hours. GPU is mandatory for production ingestion speed.
 
 3. **KG aggregation correctness.** The noisy-OR aggregation and contradiction detection must be rigorously tested. Bugs propagate silently into target scores. Requires extensive unit tests with synthetic fact sets before production.
 
 4. **NER precision on ambiguous gene symbols.** Symbols like "CAT", "SET", "MAX" are real English words. SciSpacy context window is limited. False positives create spurious KG edges. Requires precision-recall tuning and a periodic manual audit.
 
-5. **Feedback loop data sparsity at MVP.** Underexplored targets (the most interesting ones) have sparse ChEMBL data — the exact targets Ferrumyx is designed to find. Docking-IC50 correlation is hardest to compute for novel targets. The self-improvement loop matures most at 12+ months with more coverage.
+5. **Feedback loop data sparsity at MVP.** Underexplored targets (the most interesting ones) have sparse ChEMBL data â€” the exact targets Ferrumyx is designed to find. Docking-IC50 correlation is hardest to compute for novel targets. The self-improvement loop matures most at 12+ months with more coverage.
 
 6. **LLM context window for complex queries.** Assembling a 10-target evidence bundle with full citations can exceed 32K tokens. Evidence prioritisation logic is needed to trim context without dropping key citations.
 
@@ -2650,13 +2650,13 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 ## Scientific Validity Risks
 
-1. **Docking is not binding.** AutoDock Vina scores correlate weakly with experimental IC50 (r ≈ 0.4–0.6). A good docking score is a necessary but not sufficient condition for a real binder. All docking outputs are labelled "computational hypotheses."
+1. **Docking is not binding.** AutoDock Vina scores correlate weakly with experimental IC50 (r â‰ˆ 0.4â€“0.6). A good docking score is a necessary but not sufficient condition for a real binder. All docking outputs are labelled "computational hypotheses."
 
-2. **In silico ≠ in vivo.** DepMap CRISPR data is from cancer cell lines. Cell line models have altered metabolism, absent microenvironment, and unlimited passage artefacts. Essential targets in cell lines frequently fail in vivo.
+2. **In silico â‰  in vivo.** DepMap CRISPR data is from cancer cell lines. Cell line models have altered metabolism, absent microenvironment, and unlimited passage artefacts. Essential targets in cell lines frequently fail in vivo.
 
 3. **Publication bias.** Negative results are systematically underreported. Ferrumyx learns from published literature, which skews toward positive findings. Targets with known failures may appear more promising if failure papers are absent from the corpus.
 
-4. **KRAS G12D cancer-type specificity.** G12D biology varies by tissue context. A synthetic lethal target identified in pancreatic CRISPR screens may not be lethal in KRAS G12D lung cancer. Cancer subtype context must be preserved in all KG queries — this is enforced by the (gene, cancer) pairing in target_scores but requires ongoing attention.
+4. **KRAS G12D cancer-type specificity.** G12D biology varies by tissue context. A synthetic lethal target identified in pancreatic CRISPR screens may not be lethal in KRAS G12D lung cancer. Cancer subtype context must be preserved in all KG queries â€” this is enforced by the (gene, cancer) pairing in target_scores but requires ongoing attention.
 
 5. **AlphaFold disordered region inaccuracy.** Many oncology targets (c-Myc, p53 transactivation domain) are intrinsically disordered. AlphaFold pLDDT < 70 indicates low confidence. Docking against disordered regions is unreliable regardless of pocket detection scores.
 
@@ -2671,15 +2671,15 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | Insilico Medicine | Proprietary AI + wet-lab pipeline; clinical-stage assets | Different market; Ferrumyx is open research tooling, not a drug company |
 | Recursion Pharmaceuticals | Image-based phenotypic screening + massive experimental data | Ferrumyx is literature/database-driven; complementary for hypothesis generation |
 | BenchSci | AI for experimental design and reagent selection | Different problem; Ferrumyx targets target prioritisation, not experimental planning |
-| Schrödinger (FEP+) | High-accuracy physics-based simulations; expensive | Ferrumyx is high-throughput first-pass; Schrödinger is downstream validation |
+| SchrÃ¶dinger (FEP+) | High-accuracy physics-based simulations; expensive | Ferrumyx is high-throughput first-pass; SchrÃ¶dinger is downstream validation |
 | Atomwise | Large-scale docking virtual screening; proprietary service | Ferrumyx is open-source, privacy-preserving, KG-grounded; not a screening service |
 
-**Honest positioning:** At MVP, Ferrumyx is a research system — not a funded company with wet-lab infrastructure. It cannot compete on experimental validation throughput. The genuine differentiators are:
+**Honest positioning:** At MVP, Ferrumyx is a research system â€” not a funded company with wet-lab infrastructure. It cannot compete on experimental validation throughput. The genuine differentiators are:
 
 - **Full auditability:** every hypothesis traces to a specific PMID, DOI, or DB record. No black box decisions.
 - **Privacy-preserving by default:** local LLM mode; no data leaves the machine unless explicitly configured.
 - **Researcher-controlled:** scoring weights are transparent, inspectable, and modifiable. No vendor lock-in.
-- **IronClaw-native:** inherits a production-grade agent loop, WASM sandbox, routines engine, and hybrid search — infrastructure that would take months to build from scratch.
+- **IronClaw-native:** inherits a production-grade agent loop, WASM sandbox, routines engine, and hybrid search â€” infrastructure that would take months to build from scratch.
 - **Integrated hypothesis-to-molecule pipeline:** single autonomous system from literature ingestion to ranked docking candidates.
 
 Target user: a computational biology research group wanting an auditable, privacy-respecting, continuously-learning literature mining and target prioritisation system.
@@ -2693,11 +2693,10 @@ Target user: a computational biology research group wanting an auditable, privac
 | 1 | Initialise Cargo workspace: ferrumyx-agent, ferrumyx-ingestion, ferrumyx-kg, ferrumyx-ranker | S | Standard Rust workspace; IronClaw as dependency |
 | 2 | Deploy PostgreSQL 16 + pgvector; run Phase 1 schema migrations via sqlx | S | Docker Compose for local dev |
 | 3 | Implement PubMed E-utilities WASM tool (esearch + efetch XML) | M | quick-xml + reqwest; test with 100 KRAS PDAC papers |
-| 4 | Implement PMC XML section-aware parser | M | Map sec-type → SectionType enum; extract tables separately |
+| 4 | Implement PMC XML section-aware parser | M | Map sec-type â†’ SectionType enum; extract tables separately |
 | 5 | Implement Docling Docker tool wrapper | M | IronClaw DockerTool API; test with 10 PDF papers |
 | 6 | Implement BiomedBERT embedding Docker service | M | Python FastAPI + HuggingFace; batch endpoint; pgvector INSERT |
 | 7 | Implement SciSpacy NER Docker tool | M | en_core_sci_lg + en_ner_bc5cdr_md pipeline |
 | 8 | Build entity normalisation (HGNC + HGVS) | L | HGNC REST bulk download; HGVS regex; edge cases numerous |
 | 9 | Populate kg_facts from NER + external DB pulls (COSMIC, DepMap, ChEMBL) | L | Most complex ingestion step; each source needs separate parser |
 | 10 | Implement target_scores computation (9 components + composite formula + versioning) | L | Rank normalisation; penalties; confidence adjustment; atomic versioning |
-```

@@ -66,6 +66,7 @@ impl FerrumyxTool for IngestPubmedTool {
             max_results,
             sources: vec![IngestionSourceSpec::PubMed],
             pubmed_api_key: api_key,
+            embedding_cfg: None,
         };
 
         tracing::info!(tool = "ingest_pubmed", query = %build_query(&job), "Running ingestion");
@@ -140,6 +141,7 @@ impl FerrumyxTool for IngestEuropePmcTool {
             max_results,
             sources: vec![IngestionSourceSpec::EuropePmc],
             pubmed_api_key: None,
+            embedding_cfg: None,
         };
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
@@ -211,6 +213,7 @@ impl FerrumyxTool for IngestAllSourcesTool {
             max_results,
             sources: vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc],
             pubmed_api_key: api_key,
+            embedding_cfg: None,
         };
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;

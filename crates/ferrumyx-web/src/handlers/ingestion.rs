@@ -11,6 +11,7 @@ use std::sync::Arc;
 use ferrumyx_ingestion::pipeline::{
     IngestionJob, IngestionSourceSpec, run_ingestion,
 };
+use ferrumyx_ingestion::embedding::{EmbeddingConfig, EmbeddingBackend};
 use ferrumyx_ingestion::pg_repository::PgIngestionRepository;
 
 use crate::state::{SharedState, AppEvent};
@@ -26,6 +27,10 @@ pub struct IngestionForm {
     pub max_results: Option<usize>,
     /// Comma-separated source list: "pubmed,europepmc"
     pub sources: Option<String>,
+    /// Optional embedding backend: "openai" | "gemini" | "biomedbert" | "" (skip)
+    pub embed_backend: Option<String>,
+    pub embed_api_key: Option<String>,
+    pub embed_model: Option<String>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -49,6 +54,7 @@ pub async fn ingestion_run(
         max_results:    form.max_results.unwrap_or(100),
         sources,
         pubmed_api_key: None,
+        embedding_cfg:  None,
     };
 
     // Run the pipeline (blocking in this handler for MVP; use spawn_blocking in prod)

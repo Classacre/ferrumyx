@@ -15,7 +15,7 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
-use tracing::{info, warn, instrument};
+use tracing::{debug, info, warn, instrument};
 use uuid::Uuid;
 
 use crate::models::{IngestionSource, SectionType};
@@ -27,6 +27,7 @@ use crate::sources::crossref::CrossRefClient;
 use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::pg_repository::PgIngestionRepository;
+use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,9 @@ pub struct IngestionJob {
     pub sources: Vec<IngestionSourceSpec>,
     /// Optional NCBI API key for higher rate limits.
     pub pubmed_api_key: Option<String>,
+    /// If provided, chunks are embedded immediately after insert.
+    /// If None, a separate embed pass is needed (e.g. scheduled background job).
+    pub embedding_cfg: Option<EmbeddingConfig>,
 }
 
 /// Which literature sources to search.
@@ -63,6 +67,7 @@ impl Default for IngestionJob {
             max_results: 100,
             sources: vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc],
             pubmed_api_key: None,
+            embedding_cfg: None,
         }
     }
 }
@@ -105,6 +110,7 @@ pub struct IngestionResult {
     pub papers_inserted: usize,
     pub papers_duplicate: usize,
     pub chunks_inserted: usize,
+    pub chunks_embedded: usize,
     pub errors: Vec<String>,
     pub duration_ms: u64,
 }
@@ -136,6 +142,12 @@ pub async fn run_ingestion(
         }
     };
 
+    // Build embedding client once if configured
+    let embed_client = job.embedding_cfg.as_ref().map(|cfg| {
+        info!("Embedding enabled: {:?} / {}", cfg.backend, cfg.model);
+        Arc::new(EmbeddingClient::new(cfg.clone()))
+    });
+
     let mut result = IngestionResult {
         job_id,
         query: query.clone(),
@@ -143,6 +155,7 @@ pub async fn run_ingestion(
         papers_inserted: 0,
         papers_duplicate: 0,
         chunks_inserted: 0,
+        chunks_embedded: 0,
         errors: Vec::new(),
         duration_ms: 0,
     };
@@ -253,6 +266,22 @@ pub async fn run_ingestion(
 
         // Mark parsed
         let _ = repo.set_parse_status(upsert.paper_id, "parsed").await;
+
+        // Embed chunks immediately if embedding is configured
+        if let Some(ref ec) = embed_client {
+            match embed_pending_chunks(ec.as_ref(), repo.pool(), upsert.paper_id).await {
+                Ok(n) => {
+                    result.chunks_embedded += n;
+                    debug!(paper_id = %upsert.paper_id, n, "Chunks embedded");
+                }
+                Err(e) => {
+                    let msg = format!("embed failed for {:?}: {e}", upsert.paper_id);
+                    warn!("{}", &msg);
+                    result.errors.push(msg);
+                    // Non-fatal: paper is still ingested, just without vectors
+                }
+            }
+        }
     }
 
     result.duration_ms = t0.elapsed().as_millis() as u64;
@@ -269,8 +298,8 @@ pub async fn run_ingestion(
     );
 
     emit("complete", &format!(
-        "Done. {} new papers, {} chunks, {} duplicates skipped.",
-        result.papers_inserted, result.chunks_inserted, result.papers_duplicate
+        "Done. {} new papers, {} chunks ({} embedded), {} duplicates skipped.",
+        result.papers_inserted, result.chunks_inserted, result.chunks_embedded, result.papers_duplicate
     ), {
         let mut p = prog_base.clone();
         p.papers_found    = result.papers_found;

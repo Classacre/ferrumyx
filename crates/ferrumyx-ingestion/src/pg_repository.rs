@@ -29,6 +29,9 @@ pub struct PgIngestionRepository {
 impl PgIngestionRepository {
     pub fn new(pool: PgPool) -> Self { Self { pool } }
 
+    /// Expose underlying pool for pipeline embedding step.
+    pub fn pool(&self) -> &PgPool { &self.pool }
+
     // ── Paper operations ─────────────────────────────────────────────────────
 
     /// Insert a paper, skipping if DOI or PMID already exists.
