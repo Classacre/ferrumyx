@@ -110,7 +110,7 @@ mod tests {
         let embeddings = Tensor::from_vec(
             vec![
                 // Seq 1
-                1.0, 2.0, 3.0, 4.0,  // token 0
+                1.0f32, 2.0, 3.0, 4.0,  // token 0
                 2.0, 3.0, 4.0, 5.0,  // token 1
                 3.0, 4.0, 5.0, 6.0,  // token 2
                 // Seq 2
@@ -123,7 +123,7 @@ mod tests {
         ).unwrap();
         
         let attention_mask = Tensor::from_vec(
-            vec![1.0, 1.0, 1.0,  // Seq 1: all real
+            vec![1.0f32, 1.0, 1.0,  // Seq 1: all real
                  1.0, 1.0, 0.0], // Seq 2: last token padding
             (2, 3),
             &device,
@@ -145,7 +145,7 @@ mod tests {
         let device = Device::Cpu;
         
         let embeddings = Tensor::from_vec(
-            vec![3.0, 4.0, 0.0, 0.0,  // norm = 5
+            vec![3.0f32, 4.0, 0.0, 0.0,  // norm = 5
                  1.0, 1.0, 1.0, 1.0], // norm = 2
             (2, 4),
             &device,
