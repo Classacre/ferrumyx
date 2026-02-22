@@ -23,6 +23,8 @@ sqlx.workspace = true
 pgvector.workspace = true
 regex       = "1"
 lazy_static = "1"
+# PDF parsing with Ferrules (fast Rust-native)
+ferrules    = { git = "https://github.com/aminediro/ferrules", branch = "main" }
 
 [features]
 default = ["rust-embed"]

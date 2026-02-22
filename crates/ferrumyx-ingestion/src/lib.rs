@@ -3,7 +3,7 @@
 //! - Paper discovery (PubMed, Europe PMC, bioRxiv, etc.)
 //! - DOI resolution
 //! - Full-text retrieval
-//! - Docling PDF parsing integration
+//! - PDF parsing (Ferrules - fast Rust-native)
 //! - Section-aware chunking
 //! - Embedding pipeline
 //! - Deduplication
@@ -11,7 +11,7 @@
 pub mod sources;
 pub mod chunker;
 pub mod dedup;
-pub mod docling;
+pub mod pdf_parser;
 pub mod models;
 pub mod normalise;
 pub mod pg_repository;
