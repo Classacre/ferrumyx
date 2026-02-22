@@ -57,7 +57,7 @@ impl PgIngestionRepository {
                      journal, pub_date, source, open_access, full_text_url,
                      parse_status, abstract_simhash)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12)
-                ON CONFLICT (doi) WHERE doi IS NOT NULL
+                ON CONFLICT (pmid) WHERE pmid IS NOT NULL
                     DO NOTHING
                 RETURNING id, TRUE AS is_new
             )
