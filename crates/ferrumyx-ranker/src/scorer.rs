@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::weights::WeightVector;
+use crate::depmap_provider::DepMapProvider;
+use crate::normalise::normalise_ceres;
 
 /// Raw component scores for a (gene, cancer) pair.
 /// All values should be in their natural units before normalisation.
@@ -165,9 +167,62 @@ pub fn determine_shortlist_tier(
     ShortlistTier::Excluded
 }
 
+/// Compute CRISPR dependency component score from DepMap data.
+///
+/// This function:
+/// 1. Queries DepMap for CERES scores
+/// 2. Normalizes the score using `normalise_ceres()`
+/// 3. Returns the normalized component score (0.0–1.0)
+///
+/// Returns None if no DepMap data is available for this gene-cancer pair.
+pub fn compute_crispr_component(
+    gene: &str,
+    cancer_type: &str,
+    depmap: &dyn DepMapProvider,
+) -> Option<f64> {
+    // Try mean CERES first
+    let ceres = depmap.get_mean_ceres(gene, cancer_type)?;
+    
+    // Normalize: more essential (more negative) → higher score
+    Some(normalise_ceres(ceres))
+}
+
+/// Compute component scores with DepMap integration.
+///
+/// This is a convenience function that wires in the DepMap provider
+/// for the CRISPR dependency component.
+pub fn compute_component_scores_with_depmap(
+    gene: &str,
+    cancer_type: &str,
+    depmap: &dyn DepMapProvider,
+    mutation_freq: Option<f64>,
+    survival_correlation: Option<f64>,
+    expression_specificity: Option<f64>,
+    structural_tractability: Option<f64>,
+    pocket_detectability: Option<f64>,
+    novelty_score: Option<f64>,
+    pathway_independence: Option<f64>,
+    literature_novelty: Option<f64>,
+) -> ComponentScoresRaw {
+    let crispr_dependency = depmap.get_mean_ceres(gene, cancer_type);
+    
+    ComponentScoresRaw {
+        mutation_freq,
+        crispr_dependency,
+        survival_correlation,
+        expression_specificity,
+        structural_tractability,
+        pocket_detectability,
+        novelty_score,
+        pathway_independence,
+        literature_novelty,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::depmap_provider::MockDepMapProvider;
 
     #[test]
     fn test_composite_score_range() {
@@ -204,5 +259,36 @@ mod tests {
         let (no_pen, _)   = compute_composite_score(&normed, &weights, 0.0,  1.0);
         let (with_pen, _) = compute_composite_score(&normed, &weights, 0.15, 1.0);
         assert!(no_pen >= with_pen);
+    }
+
+    #[test]
+    fn test_crispr_component_normalized() {
+        let provider = MockDepMapProvider::new()
+            .with("KRAS", "PAAD", -1.2);  // Strongly essential
+        
+        let score = compute_crispr_component("KRAS", "PAAD", &provider);
+        
+        // -1.2 should normalize to ~0.6 (moderate-high)
+        assert!(score.is_some());
+        let s = score.unwrap();
+        assert!(s > 0.5 && s < 0.7, "Expected ~0.6, got {}", s);
+    }
+
+    #[test]
+    fn test_crispr_component_missing_gene() {
+        let provider = MockDepMapProvider::new()
+            .with("KRAS", "PAAD", -1.0);
+        
+        let score = compute_crispr_component("TP53", "PAAD", &provider);
+        assert!(score.is_none());
+    }
+
+    #[test]
+    fn test_crispr_component_missing_cancer() {
+        let provider = MockDepMapProvider::new()
+            .with("KRAS", "PAAD", -1.0);
+        
+        let score = compute_crispr_component("KRAS", "LUAD", &provider);
+        assert!(score.is_none());
     }
 }

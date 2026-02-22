@@ -4,3 +4,4 @@
 pub mod scorer;
 pub mod normalise;
 pub mod weights;
+pub mod depmap_provider;

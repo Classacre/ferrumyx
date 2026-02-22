@@ -8,6 +8,7 @@ members = [
     "crates/ferrumyx-llm",
     "crates/ferrumyx-common",
     "crates/ferrumyx-web",
+    "crates/ferrumyx-embed",
 ]
 
 [workspace.package]

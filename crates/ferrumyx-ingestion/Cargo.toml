@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 ferrumyx-common = { path = "../ferrumyx-common" }
+ferrumyx-embed = { path = "../ferrumyx-embed", optional = true }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -21,3 +22,9 @@ quick-xml.workspace = true
 sqlx.workspace = true
 pgvector.workspace = true
 regex       = "1"
+lazy_static = "1"
+
+[features]
+default = ["rust-embed"]
+rust-embed = ["dep:ferrumyx-embed"]
+python-embed = []  # Fallback to Docker BiomedBERT service

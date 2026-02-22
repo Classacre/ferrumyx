@@ -1,12 +1,13 @@
 //! Embedding client — calls the configured embedding backend to produce
 //! vectors for paper chunks, then writes them to paper_chunks.embedding.
 //!
-//! Supports the same backends as ferrumyx-llm:
+//! Supports multiple backends:
 //!   - OpenAI         (text-embedding-3-small / text-embedding-3-large)
 //!   - Gemini         (text-embedding-004)
 //!   - OpenAI-compat  (any /v1/embeddings endpoint — Groq, Together, etc.)
-//!   - BiomedBERT     (local Docker service on :8002)
+//!   - BiomedBERT     (local Docker service on :8002) [deprecated - use RustNative]
 //!   - Ollama         (nomic-embed-text or any ollama embedding model)
+//!   - RustNative     (pure Rust Candle BiomedBERT - no Python!) [recommended]
 //!
 //! The embed pipeline step runs after bulk_insert_chunks and writes back
 //! to paper_chunks.embedding (pgvector float4[]).
@@ -20,6 +21,9 @@ use reqwest::Client;
 use sqlx::PgPool;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
+
+#[cfg(feature = "rust-embed")]
+use ferrumyx_embed::{EmbeddingConfig as RustEmbedConfig};
 
 // ── Backend config ────────────────────────────────────────────────────────────
 
@@ -38,17 +42,18 @@ pub enum EmbeddingBackend {
     OpenAi,
     Gemini,
     OpenAiCompatible,
-    BiomedBert,
+    BiomedBert,      // Docker Python service (deprecated)
     Ollama,
+    RustNative,      // Pure Rust Candle BiomedBERT (recommended)
 }
 
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            backend:    EmbeddingBackend::OpenAi,
+            backend:    EmbeddingBackend::RustNative,  // Default to pure Rust
             api_key:    None,
-            model:      "text-embedding-3-small".to_string(),
-            dim:        1536,
+            model:      "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract".to_string(),
+            dim:        768,
             batch_size: 32,
             base_url:   None,
         }
@@ -77,6 +82,7 @@ impl EmbeddingClient {
             EmbeddingBackend::OpenAiCompatible => self.embed_compat(texts).await,
             EmbeddingBackend::BiomedBert       => self.embed_biomedbert(texts).await,
             EmbeddingBackend::Ollama           => self.embed_ollama(texts).await,
+            EmbeddingBackend::RustNative       => self.embed_rust_native(texts).await,
         }
     }
 
@@ -182,6 +188,55 @@ impl EmbeddingClient {
             out.push(vec);
         }
         Ok(out)
+    }
+
+    // ── Rust Native (Candle BiomedBERT) ─────────────────────────────────────
+    // Pure Rust inference - no Python, no Docker service needed!
+
+    #[cfg(feature = "rust-embed")]
+    async fn embed_rust_native(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+        use ferrumyx_embed::{BiomedBertEmbedder, EmbeddingConfig as RustEmbedConfig};
+        
+        // Get or initialize the embedder (lazy static for reuse)
+        static EMBEDDER: std::sync::OnceLock<Arc<Mutex<BiomedBertEmbedder>>> = std::sync::OnceLock::new();
+        
+        let embedder = EMBEDDER.get_or_init(|| {
+            // Create config from our embedding config
+            let config = RustEmbedConfig {
+                model_id: self.cfg.model.clone(),
+                batch_size: self.cfg.batch_size,
+                max_length: 512,
+                normalize: true,
+                pooling: ferrumyx_embed::PoolingStrategy::Mean,
+                use_gpu: false, // CPU for now, can be configured
+                cache_size: 1000,
+                cache_dir: None,
+            };
+            
+            // We need to block on initialization since OnceLock is sync
+            let embedder = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    BiomedBertEmbedder::new(config).await
+                        .expect("Failed to initialize Rust embedder")
+                })
+            });
+            
+            Arc::new(Mutex::new(embedder))
+        });
+        
+        let embedder_guard = embedder.lock().await;
+        embedder_guard.embed(texts).await
+            .map_err(|e| anyhow::anyhow!("Rust embedding failed: {}", e))
+    }
+
+    #[cfg(not(feature = "rust-embed"))]
+    async fn embed_rust_native(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Err(anyhow::anyhow!(
+            "RustNative backend requires 'rust-embed' feature. \
+             Enable it in Cargo.toml or use another backend."
+        ))
     }
 }
 

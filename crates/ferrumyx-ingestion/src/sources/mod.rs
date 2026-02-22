@@ -6,6 +6,7 @@ pub mod biorxiv;
 pub mod clinicaltrials;
 pub mod crossref;
 pub mod depmap;
+pub mod depmap_cache;
 pub mod cosmic;
 pub mod chembl;
 
@@ -14,6 +15,7 @@ use crate::models::PaperMetadata;
 
 // Re-export types for convenience
 pub use depmap::{DepMapClient, GeneDependency};
+pub use depmap_cache::DepMapCache;
 pub use cosmic::{CosmicClient, MutationRecord, MutationType};
 pub use chembl::{ChemblClient, CompoundRecord, TargetRecord, ActivityRecord};
 
