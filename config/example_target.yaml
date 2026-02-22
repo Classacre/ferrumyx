@@ -1,0 +1,48 @@
+# Example Target Configuration
+# This demonstrates the dynamic target system
+
+target:
+  gene: "KRAS"
+  mutation: "G12D"
+  cancer_type: "Pancreatic Adenocarcinoma"
+  cancer_code: "PAAD"
+
+constraints:
+  min_druggability_score: 0.5
+  require_structure: true
+  min_ceres_score: -0.5
+  min_cancer_specificity: 0.3
+  min_papers: 10
+  max_publication_age_years: 5
+  exclude_clinical_stage:
+    - "Phase 3"
+    - "Approved"
+
+data_sources:
+  pubmed: true
+  europe_pmc: true
+  biorxiv: true
+  clinical_trials: false
+  depmap: true
+  cosmic: true
+  chembl: true
+
+scoring:
+  crispr_dependency: 0.25
+  mutation_frequency: 0.15
+  expression_dysregulation: 0.15
+  literature_evidence: 0.15
+  druggability: 0.15
+  pathway_position: 0.10
+  clinical_status: 0.05
+
+output:
+  format: "json"
+  top_n: 50
+  include_evidence: true
+  generate_report: true
+
+execution:
+  mode: "full"
+  max_runtime_minutes: 60
+  parallel_workers: 4
