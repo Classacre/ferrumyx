@@ -11,6 +11,7 @@
 pub mod sources;
 pub mod chunker;
 pub mod dedup;
+pub mod docling;
 pub mod models;
 pub mod normalise;
 pub mod pg_repository;

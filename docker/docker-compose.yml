@@ -65,6 +65,26 @@ services:
     profiles:
       - embed  # docker compose --profile embed up -d
 
+  # Docling document parser — section-aware PDF/XML chunking
+  docling:
+    build:
+      context: ./docling
+      dockerfile: Dockerfile
+    container_name: ferrumyx-docling
+    restart: unless-stopped
+    ports:
+      - "8003:8002"
+    environment:
+      UVICORN_WORKERS: "2"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    profiles:
+      - parse  # docker compose --profile parse up -d
+
   # Optional: pgAdmin for DB inspection during development
   pgadmin:
     image: dpage/pgadmin4:latest
