@@ -52,7 +52,7 @@ impl Default for EmbeddingConfig {
         Self {
             backend:    EmbeddingBackend::RustNative,  // Default to pure Rust
             api_key:    None,
-            model:      "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract".to_string(),
+            model:      "NeuML/pubmedbert-base-embeddings".to_string(),
             dim:        768,
             batch_size: 32,
             base_url:   None,
@@ -502,8 +502,8 @@ mod tests {
     #[test]
     fn test_embedding_config_default() {
         let cfg = EmbeddingConfig::default();
-        assert_eq!(cfg.backend, EmbeddingBackend::OpenAi);
-        assert_eq!(cfg.dim, 1536);
+        assert_eq!(cfg.backend, EmbeddingBackend::RustNative);
+        assert_eq!(cfg.dim, 768);
         assert_eq!(cfg.batch_size, 32);
     }
 }
