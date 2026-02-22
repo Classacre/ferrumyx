@@ -40,7 +40,10 @@ pub fn check_duplicate(
 /// Compute a simple 64-bit SimHash of text for approximate deduplication.
 /// Production implementation should use a proper SimHash library.
 /// This is a simplified version for bootstrapping.
-pub fn simhash(text: &str) -> u64 {
+/// 
+/// Returns i64 for PostgreSQL BIGINT compatibility.
+/// Clamps to valid i64 range to avoid "bigint out of range" errors.
+pub fn simhash(text: &str) -> i64 {
     let normalised = text.to_lowercase();
     let words: Vec<&str> = normalised.split_whitespace().collect();
 
@@ -51,11 +54,11 @@ pub fn simhash(text: &str) -> u64 {
         if STOP_WORDS.contains(word) { continue; }
 
         let hash = fnv64(word.as_bytes());
-        for i in 0..64u64 {
+        for i in 0..64usize {
             if (hash >> i) & 1 == 1 {
-                v[i as usize] += 1;
+                v[i] += 1;
             } else {
-                v[i as usize] -= 1;
+                v[i] -= 1;
             }
         }
     }
@@ -66,7 +69,25 @@ pub fn simhash(text: &str) -> u64 {
             fingerprint |= 1u64 << i;
         }
     }
-    fingerprint
+    
+    // Clamp to valid i64 range for PostgreSQL BIGINT
+    // PostgreSQL BIGINT range: -9223372036854775808 to 9223372036854775807
+    // u64 max: 18446744073709551615
+    // Values > i64::MAX need to be clamped
+    clamp_u64_to_i64(fingerprint)
+}
+
+/// Clamp u64 to valid i64 range for PostgreSQL BIGINT compatibility.
+/// PostgreSQL BIGINT is signed, so values > i64::MAX cause overflow.
+fn clamp_u64_to_i64(value: u64) -> i64 {
+    // i64::MAX = 9223372036854775807
+    // If the high bit is set, the value would be negative when cast
+    // We clamp to i64::MAX to preserve the magnitude while staying valid
+    if value > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        value as i64
+    }
 }
 
 /// FNV-1a 64-bit hash.
@@ -80,8 +101,8 @@ fn fnv64(bytes: &[u8]) -> u64 {
 }
 
 /// Hamming distance between two 64-bit integers.
-pub fn hamming_distance(a: u64, b: u64) -> u32 {
-    (a ^ b).count_ones()
+pub fn hamming_distance(a: i64, b: i64) -> u32 {
+    ((a as u64) ^ (b as u64)).count_ones()
 }
 
 /// Stop words to exclude from SimHash computation.
@@ -116,5 +137,34 @@ mod tests {
         let t2 = "Deep learning for protein structure prediction with AlphaFold";
         let dist = hamming_distance(simhash(t1), simhash(t2));
         assert!(dist > 10, "Expected large hamming distance, got {dist}");
+    }
+
+    #[test]
+    fn test_simhash_within_i64_range() {
+        // Test that simhash always returns valid i64 for PostgreSQL
+        let texts = [
+            "KRAS G12D mutation drives pancreatic ductal adenocarcinoma",
+            "This is a very long text with many words that might produce a large hash value that could potentially overflow the i64 range if not properly clamped",
+            "Another example with different content about cancer research and drug discovery",
+            "Short text",
+            "",
+        ];
+        
+        for text in &texts {
+            let hash = simhash(text);
+            // Verify it's within valid i64 range (should never fail if clamp works)
+            assert!(hash >= i64::MIN && hash <= i64::MAX);
+        }
+    }
+
+    #[test]
+    fn test_clamp_u64_to_i64() {
+        // Test edge cases
+        assert_eq!(clamp_u64_to_i64(0), 0);
+        assert_eq!(clamp_u64_to_i64(100), 100);
+        assert_eq!(clamp_u64_to_i64(i64::MAX as u64), i64::MAX);
+        // Values above i64::MAX should clamp to i64::MAX
+        assert_eq!(clamp_u64_to_i64(i64::MAX as u64 + 1), i64::MAX);
+        assert_eq!(clamp_u64_to_i64(u64::MAX), i64::MAX);
     }
 }

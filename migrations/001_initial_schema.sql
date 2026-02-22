@@ -334,6 +334,7 @@ CREATE TABLE IF NOT EXISTS llm_audit_log (
 
 CREATE TABLE IF NOT EXISTS ingestion_audit (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    paper_id        UUID REFERENCES papers(id),
     paper_doi       TEXT,
     paper_pmid      TEXT,
     action          TEXT NOT NULL,
