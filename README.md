@@ -11,6 +11,24 @@ Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/near
 - Conducts in silico molecular docking and ADMET prediction
 - **Learns from outcomes and improves target prioritisation over time**
 
+## Current Status (Phase 1, Month 2)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **Ingestion** | ✅ Working | 323 papers ingested, 558 chunks, PubMed API |
+| **Embedding** | ✅ Working | Rust-native BiomedBERT (768-dim) |
+| **Deduplication** | ✅ Working | SimHash + PMID conflict resolution |
+| **Web GUI** | ✅ Working | Dashboard, ingestion form, API endpoints |
+| **NER Service** | ⏳ Built, not running | Docker container ready, needs startup |
+| **KG Builder** | ⏳ Phase 2 | Requires NER service to populate entities |
+| **Target Ranker** | ⏳ Phase 2 | Requires KG facts to compute scores |
+| **Molecules** | ⏳ Phase 3 | Structural analysis pipeline |
+
+**To start NER service and populate KG:**
+```bash
+cd docker && docker compose --profile ner up -d scispacy
+```
+
 ## Why Ferrumyx?
 
 | Feature | Ferrumyx | PandaOmics | BenevolentAI | Other Open Source |
