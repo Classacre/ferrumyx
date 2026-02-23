@@ -85,43 +85,54 @@ impl DepMapProvider for MockDepMapProvider {
     }
 }
 
-// ── Adapter for DepMapCache ─────────────────────────────────────────────────
+// ── Adapter for DepMapClient ─────────────────────────────────────────────────
 
-/// Adapter that wraps a DepMapCache to implement DepMapProvider.
+/// Adapter that wraps ferrumyx_depmap::DepMapClient to implement DepMapProvider.
 ///
-/// This allows the ranker to use the ingestion module's cache
-/// without direct dependency on its concrete type.
-pub struct DepMapCacheAdapter {
-    // We use a trait object here to avoid circular dependencies.
-    // The actual implementation is provided at runtime.
-    inner: Arc<dyn DepMapProvider>,
+/// This allows the ranker to use the ferrumyx-depmap crate's client
+/// directly for querying gene dependency scores.
+pub struct DepMapClientAdapter {
+    client: ferrumyx_depmap::DepMapClient,
 }
 
-impl DepMapCacheAdapter {
-    pub fn new(cache: Arc<dyn DepMapProvider>) -> Self {
-        Self { inner: cache }
+impl DepMapClientAdapter {
+    /// Create a new adapter wrapping a DepMapClient.
+    pub fn new(client: ferrumyx_depmap::DepMapClient) -> Self {
+        Self { client }
+    }
+    
+    /// Create a new adapter by initializing a DepMapClient.
+    /// This will download data if not already cached.
+    pub async fn init() -> anyhow::Result<Self> {
+        let client = ferrumyx_depmap::DepMapClient::new().await?;
+        Ok(Self { client })
+    }
+    
+    /// Get the underlying client (for advanced usage).
+    pub fn client(&self) -> &ferrumyx_depmap::DepMapClient {
+        &self.client
     }
 }
 
-impl DepMapProvider for DepMapCacheAdapter {
+impl DepMapProvider for DepMapClientAdapter {
     fn get_mean_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
-        self.inner.get_mean_ceres(gene, cancer_type)
+        self.client.get_mean_ceres(gene, cancer_type)
     }
 
     fn get_median_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
-        self.inner.get_median_ceres(gene, cancer_type)
+        self.client.get_median_ceres(gene, cancer_type)
     }
 
     fn get_top_dependencies(&self, cancer_type: &str, n: usize) -> Vec<(String, f64)> {
-        self.inner.get_top_dependencies(cancer_type, n)
+        self.client.get_top_dependencies(cancer_type, n)
     }
 
     fn has_gene(&self, gene: &str) -> bool {
-        self.inner.has_gene(gene)
+        self.client.has_gene(gene)
     }
 
     fn has_cancer_type(&self, cancer_type: &str) -> bool {
-        self.inner.has_cancer_type(cancer_type)
+        self.client.cancer_types().contains(&cancer_type.to_uppercase())
     }
 }
 
@@ -144,11 +155,4 @@ mod tests {
         assert!(!provider.has_gene("MYC"));
     }
 
-    #[test]
-    fn test_adapter() {
-        let mock = Arc::new(MockDepMapProvider::new().with("KRAS", "PAAD", -1.5));
-        let adapter = DepMapCacheAdapter::new(mock);
-
-        assert_eq!(adapter.get_mean_ceres("KRAS", "PAAD"), Some(-1.5));
-    }
 }

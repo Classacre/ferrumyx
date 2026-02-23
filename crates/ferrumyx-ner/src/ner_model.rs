@@ -12,7 +12,7 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::{bert, debertav2};
 use hf_hub::api::sync::Api;
 use tokenizers::Tokenizer;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{NerError, Result, entity_types::{EntityType, normalize_entity_label}};
 
@@ -154,6 +154,19 @@ impl NerConfig {
     pub fn species() -> Self {
         Self {
             model_id: "OpenMed/OpenMed-NER-SpeciesDetect-PubMed-335M".to_string(),
+            max_length: 512,
+            use_gpu: true,
+        }
+    }
+    
+    // ============================================
+    // MUTATIONS
+    // ============================================
+    
+    /// Mutation NER - Protein changes and variants (F1: 0.892 on tmVar)
+    pub fn mutations() -> Self {
+        Self {
+            model_id: "OpenMed/OpenMed-NER-MutationDetect-SuperClinical-434M".to_string(),
             max_length: 512,
             use_gpu: true,
         }
@@ -408,9 +421,20 @@ impl NerModel {
             cls_dropout: None,
         };
         
+        // DeBERTa models use "deberta" prefix in safetensors
         let vb = vb.set_prefix("deberta");
-        let model = debertav2::DebertaV2NERModel::load(vb, &deberta_config, None)
-            .map_err(|e| NerError::ModelLoad(format!("DebertaV2: {}", e)))?;
+        
+        // Try loading with position_buckets disabled if it fails
+        let model = match debertav2::DebertaV2NERModel::load(vb.clone(), &deberta_config, None) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Standard DeBERTa load failed, trying with position_buckets=0: {}", e);
+                let mut config = deberta_config;
+                config.position_buckets = Some(0);
+                debertav2::DebertaV2NERModel::load(vb, &config, None)
+                    .map_err(|e| NerError::ModelLoad(format!("DebertaV2: {}", e)))?
+            }
+        };
         
         Ok(ModelInner::DebertaV2 { model })
     }

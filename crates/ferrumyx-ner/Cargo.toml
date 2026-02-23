@@ -22,5 +22,9 @@ tokenizers.workspace = true
 ahash = "0.8"
 regex = "1"
 
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
