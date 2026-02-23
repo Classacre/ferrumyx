@@ -679,6 +679,152 @@ impl NerModel {
         Ok(entities)
     }
     
+    /// Extract entities from multiple texts in a batch.
+    ///
+    /// This is significantly more efficient than calling `extract()` multiple times
+    /// because it processes all texts in a single forward pass.
+    ///
+    /// # Arguments
+    ///
+    /// * `texts` - A slice of text strings to process
+    ///
+    /// # Returns
+    ///
+    /// A vector of entity vectors, one per input text.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use ferrumyx_ner::{NerModel, NerConfig};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let model = NerModel::new(NerConfig::diseases()).await?;
+    /// let texts = vec![
+    ///     "Patient has diabetes.",
+    ///     "Patient has hypertension.",
+    /// ];
+    /// let all_entities = model.extract_batch(&texts)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn extract_batch(&self, texts: &[&str]) -> Result<Vec<Vec<NerEntity>>> {
+        let start = Instant::now();
+        
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Tokenize all texts
+        let mut all_input_ids: Vec<Vec<u32>> = Vec::with_capacity(texts.len());
+        let mut all_encodings: Vec<tokenizers::Encoding> = Vec::with_capacity(texts.len());
+        let mut max_len = 0;
+        
+        for text in texts {
+            let encoding = self.tokenizer
+                .encode(*text, false)
+                .map_err(|e| NerError::Tokenization(e.to_string()))?;
+            
+            let mut input_ids: Vec<u32> = encoding.get_ids().to_vec();
+            
+            // Truncate if needed
+            if input_ids.len() > self.config.max_length {
+                input_ids.truncate(self.config.max_length);
+            }
+            
+            max_len = max_len.max(input_ids.len());
+            all_input_ids.push(input_ids);
+            all_encodings.push(encoding);
+        }
+        
+        // Pad all sequences to the same length
+        let batch_size = texts.len();
+        let mut padded_input_ids: Vec<Vec<u32>> = Vec::with_capacity(batch_size);
+        let mut attention_masks: Vec<Vec<f32>> = Vec::with_capacity(batch_size);
+        
+        for input_ids in &all_input_ids {
+            let seq_len = input_ids.len();
+            let pad_len = max_len - seq_len;
+            
+            // Pad with zeros (pad_token_id)
+            let mut padded = input_ids.clone();
+            padded.extend(std::iter::repeat(0).take(pad_len));
+            
+            // Attention mask: 1 for real tokens, 0 for padding
+            let mut mask = vec![1.0f32; seq_len];
+            mask.extend(std::iter::repeat(0.0f32).take(pad_len));
+            
+            padded_input_ids.push(padded);
+            attention_masks.push(mask);
+        }
+        
+        // Flatten for tensor creation
+        let flat_input_ids: Vec<u32> = padded_input_ids.into_iter().flatten().collect();
+        let flat_attention_mask: Vec<f32> = attention_masks.into_iter().flatten().collect();
+        
+        // Create batched tensors [batch_size, max_len]
+        let input_ids_tensor = Tensor::new(&flat_input_ids[..], &self.device)?
+            .reshape((batch_size, max_len))?;
+        
+        let attention_mask_tensor = Tensor::new(&flat_attention_mask[..], &self.device)?
+            .reshape((batch_size, max_len))?;
+        
+        let token_type_ids = Tensor::zeros((batch_size, max_len), DType::I64, &self.device)?;
+        
+        // Run batched forward pass
+        let logits = match &self.model {
+            ModelInner::Bert { model, classifier } => {
+                let hidden_states = model.forward(&input_ids_tensor, &token_type_ids, Some(&attention_mask_tensor))?;
+                classifier.forward(&hidden_states)?
+            }
+            ModelInner::DebertaV2 { model } => {
+                model.forward(
+                    &input_ids_tensor,
+                    Some(token_type_ids),
+                    Some(attention_mask_tensor),
+                ).map_err(|e| NerError::Inference(e.to_string()))?
+            }
+        };
+        
+        // Apply softmax
+        let probs = candle_nn::ops::softmax(&logits, 2)
+            .map_err(|e| NerError::Inference(e.to_string()))?;
+        
+        // Get predictions for each sequence
+        let max_scores = probs.max(2)
+            .map_err(|e| NerError::Inference(e.to_string()))?
+            .to_vec2::<f32>()?;
+        
+        let max_indices = logits.argmax(2)
+            .map_err(|e| NerError::Inference(e.to_string()))?
+            .to_vec2::<u32>()?;
+        
+        // Extract entities for each text
+        let mut all_entities = Vec::with_capacity(batch_size);
+        
+        for (i, text) in texts.iter().enumerate() {
+            let seq_len = all_input_ids[i].len();
+            let scores = &max_scores[i][..seq_len];
+            let indices = &max_indices[i][..seq_len];
+            
+            let entities = self.extract_entities_bio(
+                scores,
+                indices,
+                &all_encodings[i],
+                text,
+            );
+            
+            all_entities.push(entities);
+        }
+        
+        debug!(
+            "Batch processed {} texts in {:?} ({:.1} texts/sec)",
+            batch_size,
+            start.elapsed(),
+            batch_size as f64 / start.elapsed().as_secs_f64()
+        );
+        
+        Ok(all_entities)
+    }
+    
     fn extract_entities_bio(
         &self,
         scores: &[f32],
