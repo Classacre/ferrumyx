@@ -206,6 +206,6 @@ mod tests {
         
         let report = results.report();
         assert!(report.contains("Batch"));
-        assert!(report.contains("100 texts/sec"));
+        assert!(report.contains("100.0 texts/sec"));
     }
 }
