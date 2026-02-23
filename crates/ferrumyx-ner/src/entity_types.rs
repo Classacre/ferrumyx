@@ -14,6 +14,9 @@ pub enum EntityType {
     CellLine,
     Pathway,
     Drug,
+    Person,
+    Organization,
+    Location,
     Other,
 }
 
@@ -29,6 +32,9 @@ impl EntityType {
             EntityType::CellLine => "CELL_LINE",
             EntityType::Pathway => "PATHWAY",
             EntityType::Drug => "DRUG",
+            EntityType::Person => "PERSON",
+            EntityType::Organization => "ORGANIZATION",
+            EntityType::Location => "LOCATION",
             EntityType::Other => "OTHER",
         }
     }
@@ -88,6 +94,15 @@ fn get_label_map() -> &'static HashMap<String, EntityType> {
         m.insert("I-SPECIES".to_string(), EntityType::Species);
         m.insert("B-CELL_LINE".to_string(), EntityType::CellLine);
         m.insert("I-CELL_LINE".to_string(), EntityType::CellLine);
+        
+        // Standard NER labels (CoNLL / OntoNotes)
+        m.insert("PER".to_string(), EntityType::Person);
+        m.insert("PERSON".to_string(), EntityType::Person);
+        m.insert("ORG".to_string(), EntityType::Organization);
+        m.insert("ORGANIZATION".to_string(), EntityType::Organization);
+        m.insert("LOC".to_string(), EntityType::Location);
+        m.insert("LOCATION".to_string(), EntityType::Location);
+        m.insert("MISC".to_string(), EntityType::Other);
         
         m
     })
