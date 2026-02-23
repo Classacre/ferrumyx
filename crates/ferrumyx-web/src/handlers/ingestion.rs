@@ -63,7 +63,7 @@ pub async fn ingestion_run(
     // Emit SSE start event
     let _ = state.event_tx.send(AppEvent::PipelineStatus {
         stage:   "search".to_string(),
-        message: format!("Ingestion started: {} {} in {}", job.gene, job.mutation.as_deref().unwrap_or(""), job.cancer_type),
+        message: format!("Starting ingestion: {} {} in {}", job.gene, job.mutation.as_deref().unwrap_or(""), job.cancer_type),
         count:   0,
     });
 
@@ -208,13 +208,32 @@ fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) ->
 
     <div class="stats-grid">
         <div class="stat-card"><div class="stat-icon">📄</div>
-            <div class="stat-value">{}</div><div class="stat-label">Total Papers</div></div>
+            <div class="stat-value" id="papers-count">{}</div><div class="stat-label">Total Papers</div></div>
         <div class="stat-card border-success"><div class="stat-icon">✅</div>
             <div class="stat-value text-success">{}</div><div class="stat-label">Parsed</div></div>
         <div class="stat-card border-warning"><div class="stat-icon">⏳</div>
             <div class="stat-value text-warning">{}</div><div class="stat-label">Pending</div></div>
         <div class="stat-card border-danger"><div class="stat-icon">❌</div>
             <div class="stat-value text-danger">{}</div><div class="stat-label">Failed</div></div>
+    </div>
+
+    <!-- Pipeline Progress Indicator -->
+    <div class="card mt-3" id="pipeline-progress-card" style="display: none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">🔄 Pipeline Progress</h6>
+            <div>
+                <span id="sse-status" class="badge bg-success">● Live</span>
+                <span id="pipeline-stage" class="badge bg-secondary ms-2">idle</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="progress mb-2" style="height: 25px;">
+                <div id="pipeline-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+            </div>
+            <p id="pipeline-status-text" class="text-muted small mb-0">Ready to start ingestion...</p>
+        </div>
     </div>
 
     <div class="card mt-4">

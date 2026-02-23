@@ -1,9 +1,0 @@
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-torch==2.4.1
-transformers==4.45.2
-sentence-transformers==3.2.1
-psycopg2-binary==2.9.10
-pgvector==0.3.5
-pydantic==2.9.2
-numpy==2.1.3

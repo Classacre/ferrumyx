@@ -118,20 +118,20 @@
 | `ferrumyx-feedback` | Metric collection, weight update proposals | Routine/event handler |
 | `ferrumyx-routines` | Scheduled ingestion, re-scoring, validation | IronClaw routines |
 
-### Tool Layer (mix of Rust + sandboxed Python/binary)
+### Tool Layer (100% Rust-native)
 
-| Tool | Implementation | Sandbox |
+| Tool | Implementation | Notes |
 |---|---|---|
-| `pubmed_search` | Rust HTTP client (WASM-wrappable) | WASM |
-| `europepmc_search` | Rust HTTP client | WASM |
-| `docling_parse` | Python via Docker | Docker |
-| `ner_extract` | Python (SciSpacy/BERN2) via Docker | Docker |
-| `embed_batch` | Python (sentence-transformers) via Docker | Docker |
-| `fpocket_run` | Binary via Docker | Docker |
-| `vina_dock` | Binary via Docker | Docker |
-| `rdkit_ops` | Python via Docker | Docker |
-| `admet_predict` | Python via Docker | Docker |
-| `deepchem_affinity` | Python via Docker | Docker |
+| `pubmed_search` | Rust HTTP client | Native |
+| `europepmc_search` | Rust HTTP client | Native |
+| `docling_parse` | Rust (lopdf/ferrules) | Native |
+| `ner_extract` | Rust (Candle token classification) | Native |
+| `embed_batch` | Rust (Candle + BiomedBERT) | Native |
+| `fpocket_run` | Binary via Docker | Docker (optional) |
+| `vina_dock` | Binary via Docker | Docker (optional) |
+| `rdkit_ops` | Rust (chemrust) or Docker | TBD |
+| `admet_predict` | Rust (ONNX) or Docker | TBD |
+| `deepchem_affinity` | Rust (ONNX) or Docker | TBD |
 
 ### Storage Layer
 
@@ -150,14 +150,14 @@
 │  1. Paper discovery (API)    │
 │  2. Deduplication check      │
 │  3. Full-text retrieval      │
-│  4. Docling parse (Docker)   │
+│  4. PDF parse (Rust/lopdf)   │
 │  5. Section-aware chunking   │
 └──────────────┬───────────────┘
                │
                ▼
 ┌──────────────────────────────┐
 │     EMBEDDING PIPELINE       │
-│  6. BiomedBERT embed batch   │
+│  6. BiomedBERT embed (Candle)│
 │  7. pgvector store           │
 │  8. Full-text index          │
 └──────────────┬───────────────┘
@@ -165,7 +165,7 @@
                ▼
 ┌──────────────────────────────┐
 │     NER + KG CONSTRUCTION    │
-│  9. SciSpacy / BERN2 NER     │
+│  9. Candle NER (biomedical)  │
 │  10. Entity normalization    │
 │  11. Fact triple extraction  │
 │  12. Confidence scoring      │

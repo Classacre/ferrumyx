@@ -24,6 +24,7 @@ pgvector.workspace = true
 regex       = "1"
 lazy_static = "1"
 lopdf.workspace = true
+tempfile    = "3"
 
 [features]
 default = ["rust-embed"]

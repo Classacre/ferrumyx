@@ -1,8 +1,0 @@
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-spacy==3.7.5
-scispacy==0.5.4
-pydantic==2.9.2
-# UMLS entity linker (optional — for normalized IDs)
-# Uncomment to enable UMLS linking (requires ~2GB UMLS dataset)
-# umls-downloader

@@ -16,6 +16,7 @@ ferrumyx-kg         = { path = "../ferrumyx-kg" }
 ferrumyx-ranker     = { path = "../ferrumyx-ranker" }
 ferrumyx-llm        = { path = "../ferrumyx-llm" }
 ferrumyx-web        = { path = "../ferrumyx-web" }
+ferrumyx-ner        = { path = "../ferrumyx-ner" }
 axum                = { version = "0.8", features = ["ws", "macros"] }
 anyhow.workspace = true
 tokio.workspace = true

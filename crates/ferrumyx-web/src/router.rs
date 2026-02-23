@@ -15,12 +15,13 @@ use crate::state::{AppState, SharedState};
 use crate::handlers::{
     dashboard::dashboard,
     query::{query_page, query_submit},
-    targets::targets_page,
+    targets::{targets_page, api_targets, api_target_detail},
     ingestion::{ingestion_page, ingestion_run},
     molecules::molecules_page,
-    kg::kg_page,
+    kg::{kg_page, api_kg_facts, api_kg_stats},
     metrics::metrics_page,
     system::system_page,
+    search::hybrid_search,
 };
 use crate::sse::sse_handler;
 
@@ -44,9 +45,12 @@ pub fn build_router(state: AppState) -> Router {
         // SSE streaming
         .route("/api/events", get(sse_handler))
 
-        // API stubs (will be expanded in later phases)
-        .route("/api/targets",       get(api_stub))
-        .route("/api/kg/facts",      get(api_stub))
+        // API endpoints
+        .route("/api/targets",       get(api_targets))
+        .route("/api/targets/{gene}", get(api_target_detail))
+        .route("/api/kg",            get(api_kg_facts))
+        .route("/api/kg/stats",      get(api_kg_stats))
+        .route("/api/search",        get(hybrid_search))
 
         // Static files
         .nest_service("/static", ServeDir::new("static"))
@@ -56,12 +60,4 @@ pub fn build_router(state: AppState) -> Router {
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(shared)
-}
-
-/// Placeholder for API endpoints not yet implemented.
-async fn api_stub() -> axum::Json<serde_json::Value> {
-    axum::Json(serde_json::json!({
-        "status": "not_implemented",
-        "message": "This API endpoint will be implemented in a future phase."
-    }))
 }

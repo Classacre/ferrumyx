@@ -11,22 +11,37 @@ Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/near
 - Conducts in silico molecular docking and ADMET prediction
 - **Learns from outcomes and improves target prioritisation over time**
 
-## Current Status (Phase 1, Month 2)
+## Current Status (Phase 2)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Ingestion** | ✅ Working | 323 papers ingested, 558 chunks, PubMed API |
-| **Embedding** | ✅ Working | Rust-native BiomedBERT (768-dim) |
+| **Ingestion** | ✅ Working | PubMed API, PDF parsing, chunking |
+| **Embedding** | ✅ Working | Rust-native BiomedBERT (768-dim, Candle) |
+| **NER** | ✅ Working | Rust-native Candle token classification |
+| **KG Building** | ✅ Working | Fact extraction, scoring computation |
 | **Deduplication** | ✅ Working | SimHash + PMID conflict resolution |
 | **Web GUI** | ✅ Working | Dashboard, ingestion form, API endpoints |
-| **NER Service** | ⏳ Built, not running | Docker container ready, needs startup |
-| **KG Builder** | ⏳ Phase 2 | Requires NER service to populate entities |
-| **Target Ranker** | ⏳ Phase 2 | Requires KG facts to compute scores |
+| **Target Ranker** | 🔧 Scaffold | Multi-factor scoring ready |
 | **Molecules** | ⏳ Phase 3 | Structural analysis pipeline |
 
-**To start NER service and populate KG:**
-```bash
-cd docker && docker compose --profile ner up -d scispacy
+**No Python dependencies.** All components are Rust-native.
+
+## Architecture
+
+```
+Ferrumyx (100% Rust)
+├── ferrumyx-ingestion  — PDF parsing, chunking, PubMed API
+├── ferrumyx-embed      — Candle + BiomedBERT embeddings
+├── ferrumyx-ner        — Candle NER (biomedical entities)
+├── ferrumyx-kg         — Knowledge graph building & scoring
+├── ferrumyx-ranker     — Target prioritization
+├── ferrumyx-llm        — LLM abstraction layer
+├── ferrumyx-agent      — IronClaw agent with tools
+└── ferrumyx-web        — Web API & dashboard
+
+Docker (PostgreSQL only)
+├── postgres            — pgvector/pgvector:pg16
+└── pgadmin             — Optional (--profile tools)
 ```
 
 ## Why Ferrumyx?
@@ -39,10 +54,9 @@ cd docker && docker compose --profile ner up -d scispacy
 | **Self-Improving** | ✅ Learns from outcomes | ❌ | ❌ | ❌ |
 | **Knowledge Graph** | ✅ Biological KG | ✅ Biological KG | ✅ Biological KG | ❌ Fragmented |
 | **Literature Mining** | ✅ PubMed, Europe PMC, bioRxiv | ✅ 47M publications | ✅ Limited | ❌ |
-| **Dynamic Targets** | ✅ User-configurable | ❌ Fixed workflow | ❌ Fixed workflow | ❌ |
+| **No Python** | ✅ 100% Rust | ❌ | ❌ | ❌ |
 | **Security-First** | ✅ Rust + IronClaw | ❌ | ❌ | ❌ |
 | **Cost** | **Free** | $199/mo (academic) | Enterprise only | Free |
-| **Clinical Validation** | ⏳ In development | ✅ Phase II drugs | ✅ Phase II drugs | ❌ |
 
 ### What Makes Us Different
 
@@ -50,95 +64,46 @@ cd docker && docker compose --profile ner up -d scispacy
 
 2. **Self-Improving** — The system learns from outcomes (clinical trial results, publication retractions, new evidence) and adjusts its scoring weights automatically.
 
-3. **Dynamic Targets** — Users define targets via YAML config or natural language. No hardcoded assumptions.
+3. **100% Rust** — No Python dependencies, no Docker containers for ML services. Single binary deployment possible.
 
 4. **Security-First Rust** — Built on IronClaw for defense-in-depth against prompt injection, data exfiltration, and malicious tools.
 
 5. **Open Source** — Free forever. Inspect the code, modify algorithms, self-host on your infrastructure.
 
-### Comparison with PandaOmics
-
-[PandaOmics](https://pharma.ai/pandaomics) by Insilico Medicine is the closest commercial platform to Ferrumyx:
-
-| Aspect | PandaOmics | Ferrumyx |
-|--------|------------|----------|
-| **Data Sources** | 1.3M omics samples, 47M publications, 5.5M patents | PubMed, Europe PMC, bioRxiv, DepMap, COSMIC, ChEMBL (extensible) |
-| **Target Scoring** | Multi-modal AI (omics + text) | Multi-factor weighted scoring (user-configurable) |
-| **Knowledge Graph** | LLM-powered biological KG | PostgreSQL + pgvector KG |
-| **Pathway Analysis** | iPanda algorithm | Planned (Phase 3) |
-| **Autonomy** | Manual operation | Autonomous agent |
-| **Learning** | Static models | Self-improving feedback loop |
-| **Pricing** | $199/mo (academic), enterprise for pharma | Free (open source) |
-| **Validation** | TNIK inhibitor (Phase II), aging targets | In development |
-
-**We're building an open-source, autonomous, self-improving alternative.**
-
-## Status
-
-> **Phase 1 Complete.** Core infrastructure implemented. Phase 2 (Literature Ingestion) in progress.
-
-### Implemented Crates
+## Crates
 
 | Crate | Description | Status |
 |-------|-------------|--------|
-| `ferrumyx-embed` | PubMedBERT embeddings (768-dim, ~130ms inference) | ✅ Working |
-| `ferrumyx-ingestion` | Literature pipeline (PubMed, chunking, dedup) | ✅ Scaffold |
-| `ferrumyx-ranker` | Target scoring with DepMap CRISPR integration | ✅ Scaffold |
-| `ferrumyx-kg` | Knowledge graph repository | ✅ Scaffold |
-| `ferrumyx-agent` | IronClaw agent with tools (NER, KG, ranker) | ✅ Scaffold |
+| `ferrumyx-embed` | BiomedBERT embeddings via Candle (768-dim) | ✅ Working |
+| `ferrumyx-ner` | Biomedical NER via Candle token classification | ✅ Working |
+| `ferrumyx-ingestion` | Literature pipeline (PubMed, chunking, dedup) | ✅ Working |
+| `ferrumyx-kg` | Knowledge graph & target scoring | ✅ Working |
+| `ferrumyx-ranker` | Target prioritization with DepMap CRISPR | 🔧 Scaffold |
+| `ferrumyx-agent` | IronClaw agent with tools | ✅ Working |
 | `ferrumyx-llm` | LLM abstraction layer | ✅ Scaffold |
 | `ferrumyx-common` | Shared utilities | ✅ Working |
-| `ferrumyx-web` | Web API | ✅ Scaffold |
+| `ferrumyx-web` | Web API & dashboard | ✅ Working |
 
-**Tests:** 27 passing across workspace
+## Quick Start
 
-## Architecture
+```bash
+# Start database
+cd docker && docker compose up -d postgres
 
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full system design (all 9 phases).
+# Run migrations
+cargo sqlx migrate run
 
-## Phases
+# Run tests
+cargo test --workspace
 
-| Phase | Description | Status |
-|---|---|---|
-| 1 | System Architecture & IronClaw scaffold | ✅ Complete |
-| 2 | Literature Ingestion Pipeline | 🔧 In Progress |
-| 3 | Knowledge Graph & Target Intelligence | ⏳ Planned |
-| 4 | Target Prioritization Engine | 🔧 Scaffold Ready |
-| 5 | Structural Analysis & Molecule Design | ⏳ Planned |
-| 6 | Autonomous Scientific Query Handling | ⏳ Planned |
-| 7 | Self-Improvement Framework | ⏳ Planned |
-| 8 | Security & LLM Strategy | ⏳ Planned |
-| 9 | Roadmap | ⏳ Planned |
-
-### Phase 2 Remaining Tasks
-
-- [ ] PostgreSQL + pgvector database setup
-- [ ] Database migrations (papers, chunks, embeddings, entities, kg_facts)
-- [ ] Wire PubMed API → chunker → embedder → database
-- [ ] Add Europe PMC, bioRxiv sources
-- [ ] NER extraction pipeline
-
-### Phase 4 Remaining Tasks
-
-- [ ] Download DepMap CRISPR data
-- [ ] Integrate COSMIC mutation data
-- [ ] Add TCGA expression data
-- [ ] Full weighted scoring pipeline
+# Start web server
+cargo run --release
+```
 
 ## MVP Scope
 
 **Target:** KRAS G12D Pancreatic Ductal Adenocarcinoma (PDAC)
 **Timeline:** 3-month MVP → 6-month expansion → 12-month autonomous optimisation
-
-## Quick Start
-
-```bash
-# Run tests
-cargo test --workspace
-
-# Test embeddings
-cargo run --package ferrumyx-embed --example test_embed --release
-```
 
 ## Disclaimer
 
@@ -146,4 +111,4 @@ Ferrumyx is a research-grade computational hypothesis generation system. All out
 
 ## License
 
-TBD
+Apache-2.0 OR MIT

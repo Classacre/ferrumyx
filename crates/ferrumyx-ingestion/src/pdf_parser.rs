@@ -23,10 +23,21 @@ pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
     for (page_num, page) in pdf.get_pages() {
         let mut page_text = String::new();
         if let Ok(content) = pdf.get_page_content(page) {
-            // Simple text extraction (basic - Ferrules provides better)
-            for obj in content.objects.values() {
-                if let lopdf::Object::String(bytes, _) = obj {
-                    if let Ok(text) = String::from_utf8(bytes.clone()) {
+            // Simple text extraction via content stream decoding
+            // lopdf returns raw content stream bytes; we decode text operators
+            let content_str = String::from_utf8_lossy(&content);
+            // Basic extraction: look for text between BT/ET operators
+            let mut in_text = false;
+            for line in content_str.lines() {
+                if line.contains("BT") { in_text = true; }
+                else if line.contains("ET") { in_text = false; }
+                else if in_text {
+                    // Extract text from Tj and TJ operators
+                    if line.contains("Tj") || line.contains("TJ") {
+                        // Very basic - just capture printable text
+                        let text: String = line.chars()
+                            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                            .collect();
                         page_text.push_str(&text);
                         page_text.push(' ');
                     }
@@ -126,25 +137,12 @@ pub fn parse_pdf_to_chunks(
 
     // Use existing chunker with section-aware splitting
     let chunks = chunk_document(
-        &parsed.full_text,
-        Some(&parsed.sections),
-        config,
+        paper_id,
+        parsed.sections,
+        &config,
     );
 
-    // Convert to DocumentChunk format
-    Ok(chunks
-        .into_iter()
-        .enumerate()
-        .map(|(i, c)| crate::models::DocumentChunk {
-            paper_id,
-            chunk_index: i,
-            section_type: c.section_type,
-            section_heading: c.heading,
-            content: c.text,
-            page_number: c.page_number,
-            token_count: c.token_count,
-        })
-        .collect())
+    Ok(chunks)
 }
 
 /// Parsed PDF document.

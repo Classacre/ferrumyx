@@ -5,18 +5,23 @@
 //!   2. Search each enabled source (PubMed, Europe PMC, …)
 //!   3. Deduplicate by DOI/PMID/SimHash
 //!   4. Upsert papers to PostgreSQL
-//!   5. Chunk each paper's abstract (full-text in later phases)
-//!   6. Bulk insert chunks
-//!   7. Emit progress events via broadcast channel
+//!   5. Fetch full-text PDFs where available (open access)
+//!   6. Parse PDFs with Ferrules (Rust-native) for section-aware extraction
+//!   7. Chunk documents (abstract + full-text sections)
+//!   8. Bulk insert chunks
+//!   9. Embed chunks if configured
+//!   10. Emit progress events via broadcast channel
 //!
 //! The pipeline is designed to be called from both the IronClaw tool
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
 use std::sync::Arc;
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn, instrument};
 use uuid::Uuid;
+use tempfile::NamedTempFile;
 
 use crate::models::{IngestionSource, SectionType};
 use crate::sources::pubmed::PubMedClient;
@@ -28,6 +33,7 @@ use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::pg_repository::PgIngestionRepository;
 use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
+use crate::pdf_parser::parse_pdf_sections;
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -222,7 +228,12 @@ pub async fn run_ingestion(
         let upsert = match repo.upsert_paper(paper).await {
             Ok(u) => u,
             Err(e) => {
-                let msg = format!("paper upsert failed for {:?}: {e}", paper.pmid);
+                // Use DOI if PMID is not available (e.g., ClinicalTrials)
+                let id = paper.pmid.as_ref()
+                    .or(paper.doi.as_ref())
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown");
+                let msg = format!("paper upsert failed for {}: {e}", id);
                 warn!("{}", &msg);
                 result.errors.push(msg);
                 continue;
@@ -236,8 +247,35 @@ pub async fn run_ingestion(
 
         result.papers_inserted += 1;
 
-        // Build sections from whatever text we have
-        let sections = build_sections(paper);
+        // Build sections from abstract (always available)
+        let mut sections = build_sections_from_abstract(paper);
+        
+        // ── 3. Fetch full-text PDF if available ───────────────────────────────
+        if let Some(ref pdf_url) = paper.full_text_url {
+            match fetch_and_parse_pdf(pdf_url).await {
+                Ok(pdf_sections) => {
+                    if !pdf_sections.is_empty() {
+                        info!(
+                            paper_id = %upsert.paper_id,
+                            n_sections = pdf_sections.len(),
+                            "Full-text PDF parsed successfully"
+                        );
+                        sections.extend(pdf_sections);
+                        // Mark as full-text available
+                        let _ = repo.set_full_text_status(upsert.paper_id, true).await;
+                    }
+                }
+                Err(e) => {
+                    debug!(
+                        paper_id = %upsert.paper_id,
+                        error = %e,
+                        "Full-text PDF fetch/parse failed, using abstract only"
+                    );
+                    // Non-fatal: continue with abstract-only
+                }
+            }
+        }
+
         if sections.is_empty() {
             continue;
         }
@@ -256,7 +294,12 @@ pub async fn run_ingestion(
                 );
             }
             Err(e) => {
-                let msg = format!("chunk insert failed for {:?}: {e}", paper.pmid);
+                // Use DOI if PMID is not available (e.g., ClinicalTrials)
+                let id = paper.pmid.as_ref()
+                    .or(paper.doi.as_ref())
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown");
+                let msg = format!("chunk insert failed for {}: {e}", id);
                 warn!("{}", &msg);
                 result.errors.push(msg);
                 // Mark paper as failed so it can be retried
@@ -327,9 +370,8 @@ pub fn build_query(job: &IngestionJob) -> String {
 
 // ── Section builder ───────────────────────────────────────────────────────────
 
-/// Convert PaperMetadata into document sections for chunking.
-/// At MVP: abstract only. Full-text sections added in Phase 2.
-fn build_sections(paper: &crate::models::PaperMetadata) -> Vec<DocumentSection> {
+/// Convert PaperMetadata abstract into document sections for chunking.
+fn build_sections_from_abstract(paper: &crate::models::PaperMetadata) -> Vec<DocumentSection> {
     let mut sections = Vec::new();
 
     if let Some(ref abstract_text) = paper.abstract_text {
@@ -354,6 +396,44 @@ fn build_sections(paper: &crate::models::PaperMetadata) -> Vec<DocumentSection> 
     }
 
     sections
+}
+
+// ── Full-text PDF fetcher ─────────────────────────────────────────────────────
+
+/// Download a PDF from URL and parse it with Ferrules.
+/// Returns sections extracted from the PDF.
+async fn fetch_and_parse_pdf(pdf_url: &str) -> anyhow::Result<Vec<DocumentSection>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent("Ferrumyx/0.1 (research)")
+        .build()?;
+
+    // Download PDF
+    let resp = client.get(pdf_url).send().await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("PDF download failed: HTTP {}", resp.status());
+    }
+
+    let pdf_bytes = resp.bytes().await?;
+    
+    // Write to temp file (lopdf requires file path)
+    let mut temp_file = NamedTempFile::new()?;
+    std::io::Write::write_all(&mut temp_file, &pdf_bytes)?;
+    let temp_path = temp_file.path().to_path_buf();
+
+    // Parse with Ferrules
+    let parsed = tokio::task::spawn_blocking(move || {
+        parse_pdf_sections(&temp_path)
+    }).await??;
+
+    info!(
+        title = ?parsed.title,
+        n_sections = parsed.sections.len(),
+        page_count = parsed.page_count,
+        "PDF parsed with Ferrules"
+    );
+
+    Ok(parsed.sections)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -401,7 +481,7 @@ mod tests {
             source: IngestionSource::PubMed,
             open_access: false, full_text_url: None,
         };
-        let sections = build_sections(&paper);
+        let sections = build_sections_from_abstract(&paper);
         assert!(sections.iter().any(|s| s.section_type == SectionType::Abstract));
         assert!(sections.iter().any(|s| s.heading.as_deref() == Some("Title")));
     }

@@ -11,23 +11,24 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- for fuzzy title matching
 -- Papers and source tracking
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS papers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    doi             TEXT UNIQUE,
-    pmid            TEXT UNIQUE,
-    pmcid           TEXT,
-    title           TEXT NOT NULL,
-    abstract_text   TEXT,
-    authors         JSONB,
-    journal         TEXT,
-    pub_date        DATE,
-    source          TEXT NOT NULL,
-    open_access     BOOLEAN DEFAULT FALSE,
-    full_text_url   TEXT,
-    retrieval_tier  SMALLINT,           -- 1=PMC XML, 2=Unpaywall PDF, ..., 6=abstract only
-    parse_status    TEXT DEFAULT 'pending',
-    abstract_simhash BIGINT,            -- for deduplication
-    ingested_at     TIMESTAMPTZ DEFAULT NOW(),
-    raw_json        JSONB
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doi                 TEXT UNIQUE,
+    pmid                TEXT UNIQUE,
+    pmcid               TEXT,
+    title               TEXT NOT NULL,
+    abstract_text       TEXT,
+    authors             JSONB,
+    journal             TEXT,
+    pub_date            DATE,
+    source              TEXT NOT NULL,
+    open_access         BOOLEAN DEFAULT FALSE,
+    full_text_url       TEXT,
+    full_text_available BOOLEAN DEFAULT FALSE,  -- true if PDF was parsed successfully
+    retrieval_tier      SMALLINT,               -- 1=PMC XML, 2=Unpaywall PDF, ..., 6=abstract only
+    parse_status        TEXT DEFAULT 'pending',
+    abstract_simhash    BIGINT,                 -- for deduplication
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    raw_json            JSONB
 );
 CREATE INDEX IF NOT EXISTS idx_papers_doi    ON papers (doi) WHERE doi IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_papers_pmid   ON papers (pmid) WHERE pmid IS NOT NULL;

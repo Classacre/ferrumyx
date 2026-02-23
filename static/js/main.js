@@ -1,7 +1,169 @@
 // Ferrumyx Web UI — Main JavaScript
 
+// ── SSE Connection for real-time updates ──
+let eventSource = null;
+let reconnectAttempts = 0;
+const maxReconnectDelay = 30000; // 30 seconds max
+
+function connectSSE() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    eventSource = new EventSource('/events');
+
+    eventSource.onopen = () => {
+        reconnectAttempts = 0;
+        console.log('SSE connected');
+        updateConnectionStatus('connected');
+    };
+
+    eventSource.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleSSEEvent(data);
+        } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+        }
+    };
+
+    eventSource.onerror = () => {
+        console.log('SSE disconnected, reconnecting...');
+        updateConnectionStatus('disconnected');
+
+        // Exponential backoff reconnection
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+        reconnectAttempts++;
+        setTimeout(connectSSE, delay);
+    };
+}
+
+function updateConnectionStatus(status) {
+    const indicator = document.getElementById('sse-status');
+    if (indicator) {
+        indicator.className = status === 'connected' 
+            ? 'badge bg-success' 
+            : 'badge bg-warning text-dark';
+        indicator.textContent = status === 'connected' ? '● Live' : '○ Reconnecting...';
+    }
+}
+
+function handleSSEEvent(event) {
+    console.log('SSE event:', event.type, event);
+
+    switch (event.type) {
+        case 'paper_ingested':
+            showNotification('📄 New paper ingested', event.title, 'info');
+            incrementStat('papers-count');
+            break;
+
+        case 'target_scored':
+            showNotification('🎯 Target scored', `${event.gene} in ${event.cancer}: ${event.score.toFixed(3)}`, 'success');
+            incrementStat('targets-count');
+            break;
+
+        case 'docking_complete':
+            showNotification('🧪 Docking complete', `${event.molecule_id} → ${event.gene}: ${event.vina_score.toFixed(1)}`, 'success');
+            break;
+
+        case 'pipeline_status':
+            updatePipelineProgress(event);
+            break;
+
+        case 'feedback_metric':
+            // Update metrics display if visible
+            const metricEl = document.querySelector(`[data-metric="${event.metric}"]`);
+            if (metricEl) metricEl.textContent = event.value.toFixed(4);
+            break;
+
+        case 'notification':
+            showNotification(event.level === 'error' ? '❌ Error' : 'ℹ️ Info', event.message, event.level);
+            break;
+    }
+}
+
+function showNotification(title, message, level = 'info') {
+    const container = document.getElementById('notification-container') || createNotificationContainer();
+
+    const alertClass = {
+        'info': 'alert-info',
+        'success': 'alert-success',
+        'warning': 'alert-warning',
+        'error': 'alert-danger'
+    }[level] || 'alert-info';
+
+    const notification = document.createElement('div');
+    notification.className = `alert ${alertClass} alert-dismissible fade show notification-toast`;
+    notification.innerHTML = `
+        <strong>${title}</strong><br>
+        <small>${message}</small>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    container.appendChild(notification);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
+function createNotificationContainer() {
+    const container = document.createElement('div');
+    container.id = 'notification-container';
+    container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+    document.body.appendChild(container);
+    return container;
+}
+
+function incrementStat(statId) {
+    const el = document.getElementById(statId);
+    if (el) {
+        const current = parseInt(el.textContent.replace(/[^0-9]/g, ''), 10) || 0;
+        animateCounter(el, current + 1);
+    }
+}
+
+function updatePipelineProgress(event) {
+    const progressBar = document.getElementById('pipeline-progress');
+    const statusText = document.getElementById('pipeline-status-text');
+    const stageText = document.getElementById('pipeline-stage');
+
+    if (progressBar) {
+        const progress = Math.min(event.count || 0, 100);
+        progressBar.style.width = `${progress}%`;
+        progressBar.setAttribute('aria-valuenow', progress);
+    }
+
+    if (statusText) {
+        statusText.textContent = event.message;
+    }
+
+    if (stageText) {
+        stageText.textContent = event.stage;
+        stageText.className = 'badge ' + getStageBadgeClass(event.stage);
+    }
+}
+
+function getStageBadgeClass(stage) {
+    switch (stage) {
+        case 'search': return 'bg-info text-dark';
+        case 'upsert': return 'bg-primary';
+        case 'chunk': return 'bg-warning text-dark';
+        case 'embed': return 'bg-secondary';
+        case 'ner': return 'bg-danger';
+        case 'complete': return 'bg-success';
+        case 'error': return 'bg-danger';
+        default: return 'bg-secondary';
+    }
+}
+
 // ── Highlight active nav link ──
 document.addEventListener('DOMContentLoaded', () => {
+    // Connect to SSE on page load
+    connectSSE();
+
     const path = window.location.pathname;
     document.querySelectorAll('.nav-link').forEach(link => {
         const href = link.getAttribute('href');

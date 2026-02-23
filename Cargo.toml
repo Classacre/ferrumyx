@@ -9,6 +9,7 @@ members = [
     "crates/ferrumyx-common",
     "crates/ferrumyx-web",
     "crates/ferrumyx-embed",
+    "crates/ferrumyx-ner",
 ]
 
 [workspace.package]
@@ -42,3 +43,11 @@ tower-http  = { version = "0.6", features = ["fs", "cors", "compression-gzip", "
 tokio-stream = { version = "0.1", features = ["sync"] }
 minijinja   = { version = "2", features = ["loader"] }
 futures-util = "0.3"
+lopdf       = "0.34"
+
+# Candle ML framework
+candle-core = "0.9"
+candle-nn = "0.9"
+candle-transformers = "0.9"
+hf-hub = { version = "0.4", features = ["tokio"] }
+tokenizers = "0.21"

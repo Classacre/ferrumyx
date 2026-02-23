@@ -1,12 +1,105 @@
 //! Knowledge graph explorer.
 
-use axum::{extract::{State, Query}, response::Html};
-use serde::Deserialize;
+use axum::{
+    extract::{State, Query},
+    response::{Html, IntoResponse},
+    Json,
+};
+use serde::{Deserialize, Serialize};
 use crate::state::SharedState;
 use crate::handlers::dashboard::nav_html;
+use ferrumyx_common::error::ApiError;
 
 #[derive(Deserialize, Default)]
 pub struct KgFilter { pub gene: Option<String> }
+
+// === API Types ===
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ApiKgFact {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+    pub confidence: f64,
+    pub source: String,
+    pub evidence_count: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApiKgStats {
+    pub entity_count: i64,
+    pub fact_count: i64,
+    pub gene_count: i64,
+    pub cancer_count: i64,
+}
+
+// === API Endpoints ===
+
+/// GET /api/kg - List KG facts
+pub async fn api_kg_facts(
+    State(state): State<SharedState>,
+    Query(filter): Query<KgFilter>,
+) -> Result<impl IntoResponse, ApiError> {
+    let gene = filter.gene.as_deref().unwrap_or("KRAS");
+
+    let facts = sqlx::query_as::<_, ApiKgFact>(
+        r#"
+        SELECT 
+            COALESCE(eg1.symbol, e1.name) as subject,
+            kf.predicate,
+            COALESCE(eg2.symbol, e2.name) as object,
+            kf.confidence,
+            COALESCE(kf.source_pmid, kf.source_db, 'unknown') as source,
+            kf.evidence_count
+        FROM kg_facts kf
+        JOIN entities e1 ON kf.subject_id = e1.id
+        LEFT JOIN ent_genes eg1 ON eg1.id = e1.id
+        JOIN entities e2 ON kf.object_id = e2.id
+        LEFT JOIN ent_genes eg2 ON eg2.id = e2.id
+        WHERE kf.valid_until IS NULL
+          AND (eg1.symbol = $1 OR eg2.symbol = $1)
+        ORDER BY kf.confidence DESC
+        LIMIT 100
+        "#
+    )
+    .bind(gene)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(facts))
+}
+
+/// GET /api/kg/stats - KG statistics
+pub async fn api_kg_stats(
+    State(state): State<SharedState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let entity_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    let fact_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM kg_facts WHERE valid_until IS NULL")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    let gene_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ent_genes")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    let cancer_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ent_cancer_types")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+    Ok(Json(ApiKgStats {
+        entity_count,
+        fact_count,
+        gene_count,
+        cancer_count,
+    }))
+}
 
 pub async fn kg_page(
     State(state): State<SharedState>,

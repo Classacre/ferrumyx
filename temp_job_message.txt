@@ -1,0 +1,62 @@
+JOB HUNTING TASK FOR MIKA:
+
+## SEARCH STRATEGY
+1. Search for bioinformatics, biostatistics, research assistant, data analyst, clinical research, genomics, and health research jobs in SYDNEY (priority), then Perth, then rest of Australia.
+2. Use web_search but WAIT 2 SECONDS between each search request (rate limit is 1 req/sec, add buffer).
+3. Use browser tool ONLY as fallback when web_fetch returns 403/blocked. Always use profile=openclaw.
+4. Focus on: entry-level to mid-level positions, roles accepting visa holders, biotech/pharma/research/healthcare sectors.
+
+## PRIORITY LOCATIONS
+1. Sydney (highest priority - exhaust this first)
+2. Perth (secondary)
+3. Rest of Australia (Melbourne, Brisbane, etc.)
+
+## BROWSER FALLBACK INSTRUCTIONS
+- Only use browser when web_fetch fails with 403 or Cloudflare block
+- Always use profile=openclaw (not chrome)
+- Start browser first if needed: browser action=start profile=openclaw
+
+## EXCLUDED JOBS (Already Applied)
+- Kids Research Institute - Biostatistician
+
+## CRITICAL: NO HALLUCINATIONS
+Before writing ANY resume or cover letter:
+1. READ the actual files in C:\Users\nieuw\Documents\AIO\Job Applications\User Info\ folder
+2. Extract Mika resume PDF text using: python -c "import sys; sys.stdout.reconfigure(encoding=utf-8); import fitz; doc=fitz.open(rC:\Users\nieuw\Documents\AIO\Job Applications\User Info\Resume of Mika Nieuwenhuyzen.pdf); print(\n.join([p.get_text() for p in doc]))"
+3. Read User Links.md for additional info (visa status, work rights, etc.)
+4. ONLY include information that exists in these source files
+5. DO NOT invent job titles, dates, company names, or achievements
+6. If unsure about something, leave it out rather than guess
+
+## FOR EACH SUITABLE JOB FOUND:
+1. Create folder: C:\Users\nieuw\Documents\AIO\Job Applications\Sydney\[Company] - [Position]\ or ...Perth\... or ...Australia\...
+2. Try to find the hiring managers name from the job listing. If not found, use the company HR/recruitment contact.
+3. Create Resume.md and Cover Letter.md following these ANTI-AI WRITING RULES:
+   - NO puffery words: pivotal, crucial, vital, testament, underscores, highlights importance, broader trends, marking a shift, indelible mark, deeply rooted, fostering, cultivating, ensuring, reflecting, contributing to, valuable insights, align/resonate with
+   - NO -ing phrases that add superficial analysis at sentence ends
+   - NO excessive emphasis on significance/legacy/impact
+   - BE SPECIFIC with facts and achievements from the SOURCE FILES ONLY
+   - WRITE naturally like a human - direct, clear, without flourishes
+   - USE concrete numbers and specific examples FROM THE RESUME
+   - VARY sentence structure naturally
+4. Convert to PDF using available tools
+5. Add link to job folder in C:\Users\nieuw\Documents\AIO\Job Applications\Job List.md
+
+## OBSIDIAN TASK (IMPORTANT)
+Add ONLY ONE task per job to C:\Users\nieuw\Documents\AIO\Mains\To-do.md under the Due This Week section:
+- [ ] Apply to [Company] - [Position] YYYY-MM-DD
+Due date = 2 days from today. DO NOT create a duplicate task without a due date.
+
+## VERIFIED MIKA INFO (cross-reference with source files)
+- Master of Bioinformatics (Distinction) from UWA, July 2024 - Dec 2025
+- Bachelor of Biomedical Sciences (Double Major: Immunology and Anatomy) from UWA, July 2020 - July 2024
+- Global Excellence Scholarship recipient (both degrees)
+- McCusker Outstanding Intern Award
+- Dissertation: Gene Body Methylation and Expression Noise in Arabidopsis - analyzed 21,527 single-cell transcriptomes across 19 root cell types on HPC cluster
+- Work: AI Workshop Facilitator at UWA AI Club (Apr-Nov 2025), CS Tutor at Code Camp (Jun-Jul 2025), Data Analyst/Translator at PT. Power Plant Services (May 2020-Feb 2024)
+- Skills: R, Python, Bash, HPC/SLURM, single-cell transcriptomics, statistical modeling
+- Certifications: Accenture Data Analytics (2024), Duke Medical Neuroscience (2023)
+- Visa: Bridging Visa A for 485 - unlimited work hours, no restrictions
+- Contact: nieuwenhuyzenmikamartin@gmail.com, 0478579673
+
+ALWAYS verify against source files before writing. When in doubt, read the files again.

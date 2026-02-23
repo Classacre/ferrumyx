@@ -115,6 +115,17 @@ impl PgIngestionRepository {
         Ok(())
     }
 
+    /// Mark whether a paper has full-text available (PDF parsed successfully).
+    pub async fn set_full_text_status(&self, paper_id: Uuid, has_full_text: bool) -> Result<()> {
+        sqlx::query("UPDATE papers SET full_text_available = $1 WHERE id = $2")
+            .bind(has_full_text)
+            .bind(paper_id)
+            .execute(&self.pool)
+            .await
+            .context("set_full_text_status failed")?;
+        Ok(())
+    }
+
     // ── Chunk operations ─────────────────────────────────────────────────────
 
     /// Insert a document chunk. Embedding is null until the embedding service runs.

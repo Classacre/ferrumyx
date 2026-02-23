@@ -8,3 +8,4 @@ pub mod molecules;
 pub mod kg;
 pub mod metrics;
 pub mod system;
+pub mod search;
