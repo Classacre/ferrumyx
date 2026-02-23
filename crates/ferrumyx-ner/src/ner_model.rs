@@ -278,7 +278,7 @@ impl NerModel {
                 Self::load_bert_model(vb, &config_info)?
             }
             ModelArch::DebertaV2 => {
-                Self::load_deberta_model(vb)?
+                Self::load_deberta_model(vb, &config_info)?
             }
         };
 
@@ -369,11 +369,14 @@ impl NerModel {
         })
     }
     
-    fn load_deberta_model(vb: VarBuilder) -> Result<ModelInner> {
-        // Build DeBERTa config
+    fn load_deberta_model(vb: VarBuilder, config_info: &ModelConfigInfo) -> Result<ModelInner> {
+        // Convert id2label to the format expected by DeBERTa (u32 keys)
+        let id2label: std::collections::HashMap<u32, String> = config_info.id2label.clone();
+        
+        // Build DeBERTa config with id2label
         let deberta_config = debertav2::Config {
             vocab_size: 128100,
-            hidden_size: 1024,
+            hidden_size: config_info.hidden_size,
             num_hidden_layers: 24,
             num_attention_heads: 16,
             intermediate_size: 4096,
@@ -397,7 +400,7 @@ impl NerModel {
             conv_kernel_size: None,
             conv_groups: None,
             conv_act: None,
-            id2label: None,
+            id2label: Some(id2label),
             label2id: None,
             pooler_dropout: None,
             pooler_hidden_act: None,

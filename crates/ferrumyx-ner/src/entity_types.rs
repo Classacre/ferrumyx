@@ -47,9 +47,13 @@ fn get_label_map() -> &'static HashMap<String, EntityType> {
     LABEL_MAP.get_or_init(|| {
         let mut m = HashMap::new();
         
-        // BC5CDR labels
+        // BC5CDR labels (OpenMed Disease model)
         m.insert("Chemical".to_string(), EntityType::Chemical);
         m.insert("Disease".to_string(), EntityType::Disease);
+        
+        // OpenMed model uses lowercase labels
+        m.insert("disease".to_string(), EntityType::Disease);
+        m.insert("chemical".to_string(), EntityType::Chemical);
         
         // SciSpacy / CRAFT labels
         m.insert("GGP".to_string(), EntityType::Gene);  // Gene or Gene Product

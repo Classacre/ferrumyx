@@ -36,9 +36,10 @@ async fn main() -> anyhow::Result<()> {
     println!("Labels: {:?}", genomic_model.labels());
     
     let genomic_texts = vec![
-        "BRCA1 mutations increase breast cancer risk.",
-        "Expression of TP53 was upregulated in the tumor samples.",
-        "The EGFR gene is commonly mutated in lung adenocarcinoma.",
+        "HeLa cells are widely used in cancer research.",
+        "The MCF-7 cell line is derived from breast cancer.",
+        "We used A549 and HCT116 cells for the experiment.",
+        "MDA-MB-231 is a triple-negative breast cancer cell line.",
     ];
     
     for text in &genomic_texts {

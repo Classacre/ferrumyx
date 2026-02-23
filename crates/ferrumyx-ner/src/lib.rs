@@ -44,6 +44,9 @@ mod ner_model;
 mod entity_types;
 pub mod pipeline;
 
+#[cfg(test)]
+mod pipeline_test;
+
 pub use ner_model::{NerModel, NerConfig, NerEntity};
 pub use entity_types::{EntityType, normalize_entity_label};
 pub use pipeline::{NerPipeline, PipelineEntity};

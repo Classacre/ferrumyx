@@ -13,6 +13,8 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
+csv = "1"
+dirs = "5"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
