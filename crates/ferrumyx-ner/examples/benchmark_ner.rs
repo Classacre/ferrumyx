@@ -2,7 +2,8 @@
 //! 
 //! Run with: cargo run --example benchmark_ner --release --features cuda
 
-use ferrumyx_ner::{NerModel, NerConfig, ModelPool};
+use ferrumyx_ner::{NerModel, NerConfig};
+use ferrumyx_ner::model_pool::ModelPool;
 use std::time::Instant;
 
 #[tokio::main]
@@ -47,11 +48,11 @@ async fn main() -> anyhow::Result<()> {
     
     // Benchmark 2: With model pooling
     println!("\n2. With Model Pooling");
-    let pool = ModelPool::new(4); // Max 4 concurrent models
+    let pool = ModelPool::with_capacity(4); // Max 4 concurrent models
     
     let start = Instant::now();
     for (i, text) in batch_texts.iter().enumerate() {
-        let model = pool.get_or_load(NerConfig::diseases()).await?;
+        let model: std::sync::Arc<NerModel> = pool.get_or_load(NerConfig::diseases()).await?;
         let _ = model.extract(text)?;
         if (i + 1) % 10 == 0 {
             print!("\r   Processed {}/{} texts", i + 1, batch_texts.len());
@@ -65,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
     
     // Benchmark 3: Batch processing
     println!("\n3. Batch Processing");
-    let model = pool.get_or_load(NerConfig::diseases()).await?;
+    let model: std::sync::Arc<NerModel> = pool.get_or_load(NerConfig::diseases()).await?;
     
     let start = Instant::now();
     let results = model.extract_batch(&batch_texts)?;

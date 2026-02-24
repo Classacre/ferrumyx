@@ -25,6 +25,7 @@ regex = "1"
 [features]
 default = []
 cuda = ["candle-core/cuda", "candle-nn/cuda"]
+fast-ner = []
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

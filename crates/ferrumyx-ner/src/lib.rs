@@ -45,6 +45,7 @@ mod entity_types;
 pub mod pipeline;
 pub mod model_pool;
 pub mod benchmark;
+pub mod fast_ner;
 
 #[cfg(test)]
 mod pipeline_test;
