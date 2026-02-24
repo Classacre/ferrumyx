@@ -46,6 +46,8 @@ pub mod pipeline;
 pub mod model_pool;
 pub mod benchmark;
 pub mod fast_ner;
+pub mod entity_db;
+pub mod ner_optimizer;
 
 #[cfg(test)]
 mod pipeline_test;
