@@ -2,25 +2,12 @@
 
 use axum::{extract::State, response::Html};
 use crate::state::SharedState;
-use crate::handlers::dashboard::nav_html;
+use crate::handlers::dashboard::NAV_HTML;
 
-pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
-    // Pull latest values for each metric
-    let metrics: Vec<(String, f64, String)> = sqlx::query_as(
-        "SELECT metric_name, metric_value, evidence_source
-         FROM feedback_events
-         WHERE id IN (
-             SELECT DISTINCT ON (metric_name) id
-             FROM feedback_events
-             ORDER BY metric_name, recorded_at DESC
-         )
-         ORDER BY metric_name"
-    ).fetch_all(&state.db).await.unwrap_or_default();
-
-    let weight_history: Vec<(String, String)> = sqlx::query_as(
-        "SELECT approved_by, updated_at::TEXT FROM weight_update_log
-         ORDER BY updated_at DESC LIMIT 10"
-    ).fetch_all(&state.db).await.unwrap_or_default();
+pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
+    // Placeholder metrics - would need feedback_events table implementation
+    let metrics: Vec<(String, f64, String)> = Vec::new();
+    let weight_history: Vec<(String, String)> = Vec::new();
 
     let metrics_cards = if metrics.is_empty() {
         r#"<div class="alert alert-info">
@@ -90,11 +77,11 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
                 <div class="card-header"><h6 class="mb-0">📋 Metric Definitions</h6></div>
                 <div class="card-body">
                     <ul class="list-unstyled metric-definitions">
-                        <li><strong>recall_at_n:</strong> Top-N targets vs DrugBank approved drugs. Target: &gt; 0.60</li>
-                        <li><strong>docking_ic50_pearson_r:</strong> Correlation between docking scores and ChEMBL IC50. Target: &gt; 0.45</li>
-                        <li><strong>ranking_kendall_tau:</strong> Ranking stability week-over-week. Target: &gt; 0.80</li>
-                        <li><strong>literature_recall:</strong> % of CIViC-validated targets in top-50. Target: &gt; 0.70</li>
-                        <li><strong>false_positive_rate:</strong> Clinically invalidated targets in shortlist. Target: &lt; 0.20</li>
+                        <li><strong>recall_at_n:</strong> Top-N targets vs DrugBank approved drugs. Target: > 0.60</li>
+                        <li><strong>docking_ic50_pearson_r:</strong> Correlation between docking scores and ChEMBL IC50. Target: > 0.45</li>
+                        <li><strong>ranking_kendall_tau:</strong> Ranking stability week-over-week. Target: > 0.80</li>
+                        <li><strong>literature_recall:</strong> % of CIViC-validated targets in top-50. Target: > 0.70</li>
+                        <li><strong>false_positive_rate:</strong> Clinically invalidated targets in shortlist. Target: < 0.20</li>
                     </ul>
                 </div>
             </div>
@@ -114,7 +101,7 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, nav_html(), metrics_cards, weight_rows))
+</html>"#, NAV_HTML, metrics_cards, weight_rows))
 }
 
 fn metric_meta(name: &str) -> (&'static str, &'static str, bool) {

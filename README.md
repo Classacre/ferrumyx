@@ -5,7 +5,7 @@
 Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/nearai/ironclaw) (Rust AI agent framework). It is **not a chatbot** — it is an internal scientific system that:
 
 - Continuously ingests oncology literature (PubMed, Europe PMC, bioRxiv, ClinicalTrials.gov)
-- Maintains a structured, evolving cancer knowledge graph (PostgreSQL + pgvector)
+- Maintains a structured, evolving cancer knowledge graph (LanceDB embedded)
 - Identifies and ranks promising therapeutic targets using multi-factor scoring
 - Evaluates structural druggability (fpocket, AlphaFold, PDB)
 - Conducts in silico molecular docking and ADMET prediction
@@ -30,6 +30,7 @@ Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/near
 
 ```
 Ferrumyx (100% Rust)
+├── ferrumyx-db         — LanceDB embedded vector database
 ├── ferrumyx-ingestion  — PDF parsing, chunking, PubMed API
 ├── ferrumyx-embed      — Candle + BiomedBERT embeddings
 ├── ferrumyx-ner        — Candle NER (biomedical entities)
@@ -38,10 +39,6 @@ Ferrumyx (100% Rust)
 ├── ferrumyx-llm        — LLM abstraction layer
 ├── ferrumyx-agent      — IronClaw agent with tools
 └── ferrumyx-web        — Web API & dashboard
-
-Docker (PostgreSQL only)
-├── postgres            — pgvector/pgvector:pg16
-└── pgadmin             — Optional (--profile tools)
 ```
 
 ## Why Ferrumyx?

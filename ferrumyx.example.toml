@@ -94,20 +94,18 @@ ollama_rpm     = 120
 # ── Embedding ─────────────────────────────────────────────────────────────────
 [embedding]
 # Which backend to use for text embeddings (written to paper_chunks.embedding)
-# "openai"           — text-embedding-3-small (1536-dim, fast, cheap, no GPU)
+# "rust_native"     — Microsoft BiomedBERT via Candle (recommended, no API key)
+# "openai"           — text-embedding-3-small (1536-dim, fast, cheap)
 # "gemini"           — text-embedding-004 (768-dim, good quality, free tier)
-# "openai_compatible"— any /v1/embeddings endpoint
-# "biomedbert"       — local Docker service (768-dim, requires docker/biomedbert)
 # "ollama"           — local Ollama embedding model
-backend         = "openai"
-api_key         = ""         # leave blank to inherit from [llm.openai] if same provider
-embedding_model = "text-embedding-3-small"
+backend         = "rust_native"
+api_key         = ""         # only needed for openai/gemini
+embedding_model = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"
 # Alternatives:
-#   OpenAI large:  embedding_model = "text-embedding-3-large"   (3072-dim, better)
-#   Gemini:        embedding_model = "text-embedding-004"        (768-dim)
-#   BiomedBERT:    backend = "biomedbert" (start with: docker compose --profile embed up)
-#   Ollama:        embedding_model = "nomic-embed-text"          (768-dim, local)
-embedding_dim   = 1536       # must match your chosen model's output dimension
+#   OpenAI:        backend = "openai", embedding_model = "text-embedding-3-small", embedding_dim = 1536
+#   Gemini:        backend = "gemini", embedding_model = "text-embedding-004", embedding_dim = 768
+#   Ollama:        backend = "ollama", embedding_model = "nomic-embed-text", embedding_dim = 768
+embedding_dim   = 768        # BiomedBERT outputs 768-dim vectors
 
 # ── Ingestion ─────────────────────────────────────────────────────────────────
 [ingestion]
@@ -138,9 +136,11 @@ secondary_threshold = 0.45
 
 # ── NER service ───────────────────────────────────────────────────────────────
 [ner]
-service_url = "http://localhost:8001"
-# Start NER service: cd docker && docker compose --profile ner up -d
-# Runs without GPU; first start downloads ~1GB of models.
+# Default uses Rust-based Aho-Corasick trie matching (fast, no Docker needed)
+# Options: "trie" (recommended) | "scispacy" (Docker Python service)
+primary = "trie"
+# service_url is only needed if primary = "scispacy"
+# service_url = "http://localhost:8001"
 
 # ── Structural analysis ───────────────────────────────────────────────────────
 [structural]

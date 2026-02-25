@@ -4,7 +4,7 @@
 //!   1. Build query from gene/mutation/cancer params
 //!   2. Search each enabled source (PubMed, Europe PMC, …)
 //!   3. Deduplicate by DOI/PMID/SimHash
-//!   4. Upsert papers to PostgreSQL
+//!   4. Upsert papers to LanceDB
 //!   5. Fetch full-text PDFs where available (open access)
 //!   6. Parse PDFs with Ferrules (Rust-native) for section-aware extraction
 //!   7. Chunk documents (abstract + full-text sections)
@@ -16,14 +16,12 @@
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
 use std::sync::Arc;
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn, instrument};
 use uuid::Uuid;
 use tempfile::NamedTempFile;
 
-use crate::models::{IngestionSource, SectionType};
 use crate::sources::pubmed::PubMedClient;
 use crate::sources::europepmc::EuropePmcClient;
 use crate::sources::biorxiv::BioRxivClient;
@@ -31,9 +29,11 @@ use crate::sources::clinicaltrials::ClinicalTrialsClient;
 use crate::sources::crossref::CrossRefClient;
 use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
-use crate::pg_repository::PgIngestionRepository;
+use crate::repository::IngestionRepository;
 use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
 use crate::pdf_parser::parse_pdf_sections;
+use crate::models::SectionType;
+use ferrumyx_ner::trie_ner::TrieNer;
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ pub struct IngestionResult {
 #[instrument(skip(repo, progress_tx))]
 pub async fn run_ingestion(
     job: IngestionJob,
-    repo: Arc<PgIngestionRepository>,
+    repo: Arc<IngestionRepository>,
     progress_tx: Option<broadcast::Sender<IngestionProgress>>,
 ) -> IngestionResult {
     let job_id = Uuid::new_v4();
@@ -154,6 +154,17 @@ pub async fn run_ingestion(
         Arc::new(EmbeddingClient::new(cfg.clone()))
     });
 
+    // Initialize NER once for the entire pipeline (loads real databases)
+    info!("Initializing NER with complete biomedical databases...");
+    let ner = match TrieNer::with_complete_databases() {
+        Ok(ner) => ner,
+        Err(e) => {
+            warn!("Failed to load complete databases, falling back to embedded subset: {}", e);
+            TrieNer::with_embedded_subset()
+        }
+    };
+    info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);
+
     let mut result = IngestionResult {
         job_id,
         query: query.clone(),
@@ -166,7 +177,7 @@ pub async fn run_ingestion(
         duration_ms: 0,
     };
 
-    let prog_base = IngestionProgress::new(job_id, "search", "");
+let prog_base = IngestionProgress::new(job_id, "search", "");
     emit("search", &format!("Searching with query: {query}"), prog_base.clone());
 
     // ── 1. Collect papers from all enabled sources ────────────────────────────
@@ -283,6 +294,26 @@ pub async fn run_ingestion(
         let chunks = chunk_document(upsert.paper_id, sections, &chunker_cfg);
         let n_chunks = chunks.len();
 
+        // Extract entities from chunks using the pre-initialized NER
+        for chunk in &chunks {
+            let entities = ner.extract(&chunk.content);
+            if !entities.is_empty() {
+                // Store entities in database (linking to chunk)
+                for entity in entities {
+                    if let Err(e) = repo.insert_entity(
+                        upsert.paper_id,
+                        chunk.chunk_id,
+                        entity.label.as_str(),
+                        &entity.text,
+                        None, // normalized_id - not available in ExtractedEntity
+                        entity.confidence,
+                    ).await {
+                        warn!("Failed to insert entity: {}", e);
+                    }
+                }
+            }
+        }
+
         match repo.bulk_insert_chunks(&chunks).await {
             Ok(inserted) => {
                 result.chunks_inserted += inserted;
@@ -312,7 +343,7 @@ pub async fn run_ingestion(
 
         // Embed chunks immediately if embedding is configured
         if let Some(ref ec) = embed_client {
-            match embed_pending_chunks(ec.as_ref(), repo.pool(), upsert.paper_id).await {
+            match embed_pending_chunks(ec.as_ref(), repo.as_ref(), upsert.paper_id).await {
                 Ok(n) => {
                     result.chunks_embedded += n;
                     debug!(paper_id = %upsert.paper_id, n, "Chunks embedded");

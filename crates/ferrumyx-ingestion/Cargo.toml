@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 ferrumyx-common = { path = "../ferrumyx-common" }
+ferrumyx-db = { path = "../ferrumyx-db" }
 ferrumyx-embed = { path = "../ferrumyx-embed", optional = true }
+ferrumyx-ner = { path = "../ferrumyx-ner" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -19,8 +21,6 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 quick-xml.workspace = true
-sqlx.workspace = true
-pgvector.workspace = true
 regex       = "1"
 lazy_static = "1"
 lopdf.workspace = true

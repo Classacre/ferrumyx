@@ -106,6 +106,7 @@ impl SectionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     pub paper_id: Uuid,
+    pub chunk_id: Uuid,  // Unique ID for this chunk
     pub chunk_index: usize,
     pub section_type: SectionType,
     pub section_heading: Option<String>,

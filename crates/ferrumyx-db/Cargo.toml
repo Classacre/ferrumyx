@@ -1,0 +1,37 @@
+[package]
+name = "ferrumyx-db"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# LanceDB for embedded vector database
+lancedb = "0.26"
+arrow = "57"
+arrow-array = "57"
+arrow-schema = "57"
+
+# Async runtime
+tokio.workspace = true
+futures = "0.3"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# UUID for IDs
+uuid.workspace = true
+
+# Time
+chrono.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4"

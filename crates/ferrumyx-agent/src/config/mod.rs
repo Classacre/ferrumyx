@@ -183,19 +183,23 @@ fn default_biomedbert_url() -> String { "http://localhost:8002".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NerConfig {
+    /// Primary NER backend: "trie" (Rust Aho-Corasick) or "scispacy" (Docker)
     #[serde(default = "default_ner_primary")]
     pub primary: String,
     #[serde(default = "default_bern2_threshold")]
     pub bern2_citation_threshold: u32,
+    /// Deprecated: SciSpacy Docker image (no longer used, trie is default)
     #[serde(default = "default_scispacy_image")]
     pub scispacy_docker_image: String,
+    /// Deprecated: BERN2 Docker image (no longer used)
     #[serde(default = "default_bern2_image")]
     pub bern2_docker_image: String,
+    /// NER service URL (only needed if primary = "scispacy")
     #[serde(default = "default_ner_url")]
     pub service_url: String,
 }
 
-fn default_ner_primary()    -> String { "scispacy".to_string() }
+fn default_ner_primary()    -> String { "trie".to_string() }  // Rust trie is default
 fn default_bern2_threshold()-> u32    { 50 }
 fn default_scispacy_image() -> String { "ferrumyx/scispacy-ner:latest".to_string() }
 fn default_bern2_image()    -> String { "ferrumyx/bern2-ner:latest".to_string() }

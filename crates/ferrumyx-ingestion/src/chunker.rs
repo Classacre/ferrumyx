@@ -4,6 +4,8 @@
 use crate::models::{DocumentChunk, SectionType};
 use uuid::Uuid;
 
+use uuid; // Ensure uuid is available for Uuid::new_v4() calls
+
 /// Configuration for the chunker.
 #[derive(Debug, Clone)]
 pub struct ChunkerConfig {
@@ -66,6 +68,7 @@ fn chunk_section(
     if matches!(section.section_type, SectionType::Abstract | SectionType::FigureCaption) {
         chunks.push(DocumentChunk {
             paper_id,
+            chunk_id: Uuid::new_v4(),
             chunk_index: *chunk_index,
             section_type: section.section_type.clone(),
             section_heading: section.heading.clone(),
@@ -95,6 +98,7 @@ fn chunk_section(
 
         chunks.push(DocumentChunk {
             paper_id,
+            chunk_id: Uuid::new_v4(),
             chunk_index: *chunk_index,
             section_type: section.section_type.clone(),
             section_heading: section.heading.clone(),

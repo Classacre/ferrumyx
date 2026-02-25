@@ -9,3 +9,5 @@ pub mod kg;
 pub mod metrics;
 pub mod system;
 pub mod search;
+pub mod ner;
+pub mod depmap;

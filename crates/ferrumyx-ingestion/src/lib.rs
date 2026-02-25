@@ -14,6 +14,9 @@ pub mod dedup;
 pub mod pdf_parser;
 pub mod models;
 pub mod normalise;
-pub mod pg_repository;
+pub mod repository;
 pub mod pipeline;
 pub mod embedding;
+
+// Re-export for backwards compatibility
+pub use repository::IngestionRepository;

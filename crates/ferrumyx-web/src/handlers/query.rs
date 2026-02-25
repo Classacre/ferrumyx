@@ -3,7 +3,9 @@
 use axum::{extract::State, response::Html, Form};
 use serde::{Deserialize, Serialize};
 use crate::state::SharedState;
-use crate::handlers::dashboard::nav_html;
+use crate::handlers::dashboard::NAV_HTML;
+use ferrumyx_db::entities::EntityRepository;
+use ferrumyx_db::kg_facts::KgFactRepository;
 
 #[derive(Deserialize)]
 pub struct QueryForm {
@@ -37,46 +39,33 @@ pub async fn query_submit(
     State(state): State<SharedState>,
     Form(form): Form<QueryForm>,
 ) -> Html<String> {
-    // Parse cancer filter
-    let cancer_filter = form.cancer_code.as_deref().unwrap_or("PAAD");
-    let min_score = form.min_confidence.unwrap_or(0.45);
+    // Use repositories to query data
+    let entity_repo = EntityRepository::new(state.db.clone());
+    let kg_repo = KgFactRepository::new(state.db.clone());
+    
+    // Get entities and facts for basic scoring
+    let entities = entity_repo.list(0, 100).await.unwrap_or_default();
+    let facts = kg_repo.list(0, 100).await.unwrap_or_default();
+    
+    // Build simple results from KG facts
+    let gene_filter = form.gene.as_deref().unwrap_or("");
     let max_results = form.max_results.unwrap_or(20);
-
-    // Query target scores from DB
-    let rows: Vec<(String, String, f64, Option<f64>, Option<String>, Option<Vec<String>>)> =
-        sqlx::query_as(
-            "SELECT eg.symbol, ec.oncotree_code,
-                    ts.composite_score, ts.confidence_adj,
-                    ts.shortlist_tier, ts.flags
-             FROM target_scores ts
-             JOIN entities ge ON ts.gene_entity_id = ge.id
-             JOIN ent_genes eg ON eg.id = ge.id
-             JOIN entities ce ON ts.cancer_entity_id = ce.id
-             JOIN ent_cancer_types ec ON ec.id = ce.id
-             WHERE ts.is_current = TRUE
-               AND ec.oncotree_code = $1
-               AND ts.composite_score >= $2
-             ORDER BY ts.composite_score DESC
-             LIMIT $3"
-        )
-        .bind(cancer_filter)
-        .bind(min_score)
-        .bind(max_results as i64)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    let results: Vec<QueryResult> = rows.into_iter().enumerate().map(|(i, row)| {
-        QueryResult {
+    
+    let results: Vec<QueryResult> = facts
+        .iter()
+        .filter(|f| gene_filter.is_empty() || f.subject_name.contains(gene_filter))
+        .enumerate()
+        .take(max_results)
+        .map(|(i, f)| QueryResult {
             rank: i + 1,
-            gene_symbol: row.0,
-            cancer_code: row.1,
-            composite_score: row.2,
-            confidence_adj: row.3.unwrap_or(0.0),
-            shortlist_tier: row.4.unwrap_or_else(|| "secondary".to_string()),
-            flags: row.5.unwrap_or_default(),
-        }
-    }).collect();
+            gene_symbol: f.subject_name.clone(),
+            cancer_code: form.cancer_code.clone().unwrap_or_else(|| "PAAD".to_string()),
+            composite_score: f.confidence.map(|c| c as f64).unwrap_or(0.5),
+            confidence_adj: f.confidence.map(|c| c as f64).unwrap_or(0.5),
+            shortlist_tier: "secondary".to_string(),
+            flags: vec![],
+        })
+        .collect();
 
     Html(render_query_page(Some((&form.query_text, results))))
 }
@@ -237,5 +226,5 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, nav_html(), results_html)
+</html>"#, NAV_HTML, results_html)
 }

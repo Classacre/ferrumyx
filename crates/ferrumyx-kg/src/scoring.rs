@@ -1,74 +1,83 @@
 //! Target score computation.
 //! Ported from Python scripts/compute_scores.py
 
-use sqlx::PgPool;
+use std::sync::Arc;
 use anyhow::Result;
+use ferrumyx_db::Database;
+use ferrumyx_db::kg_facts::KgFactRepository;
+use ferrumyx_db::schema::KgFact;
+use std::collections::HashMap;
+
+/// Gene evidence aggregation for scoring.
+#[derive(Debug, Default)]
+struct GeneEvidence {
+    cancer_evidence: u32,
+    mutation_evidence: u32,
+    total_evidence: u32,
+}
 
 /// Compute target scores for all genes.
-pub async fn compute_target_scores(pool: &PgPool) -> Result<i32> {
-    // Get all genes with their evidence
-    let rows = sqlx::query_as::<_, GeneEvidence>(
-        r#"
-        SELECT 
-            subject as gene,
-            COUNT(*) FILTER (WHERE fact_type = 'gene_cancer') as cancer_evidence,
-            COUNT(*) FILTER (WHERE fact_type = 'gene_mutation') as mutation_evidence,
-            SUM(evidence_count) as total_evidence
-        FROM kg_facts
-        WHERE fact_type IN ('gene_cancer', 'gene_mutation')
-        GROUP BY subject
-        "#
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut scored = 0i32;
-
-    for row in &rows {
-        let gene = &row.gene;
-        let cancer_ev = row.cancer_evidence.unwrap_or(0) as f32;
-        let mut_ev = row.mutation_evidence.unwrap_or(0) as f32;
-        let total_ev = row.total_evidence.unwrap_or(0) as f32;
+pub async fn compute_target_scores(db: Arc<Database>) -> Result<u32> {
+    let fact_repo = KgFactRepository::new(db.clone());
+    
+    // Get all facts and aggregate by subject (gene)
+    let predicates = fact_repo.get_predicates().await?;
+    
+    let mut gene_evidence: HashMap<String, GeneEvidence> = HashMap::new();
+    
+    // Process facts by predicate type
+    for predicate in &predicates {
+        let facts = fact_repo.find_by_predicate(predicate).await?;
+        
+        for fact in facts {
+            let gene = &fact.subject_name;
+            let entry = gene_evidence.entry(gene.clone()).or_default();
+            
+            // Count evidence based on predicate type
+            if predicate.contains("cancer") || predicate.contains("gene_cancer") {
+                entry.cancer_evidence += 1;
+            } else if predicate.contains("mutation") || predicate.contains("gene_mutation") {
+                entry.mutation_evidence += 1;
+            }
+            entry.total_evidence += 1;
+        }
+    }
+    
+    let mut scored = 0u32;
+    
+    // Note: In a full implementation, we would store these scores in a dedicated
+    // target_scores table. For now, we just compute and return the count.
+    for (_gene, evidence) in &gene_evidence {
+        let cancer_ev = evidence.cancer_evidence as f32;
+        let mut_ev = evidence.mutation_evidence as f32;
+        let total_ev = evidence.total_evidence as f32;
 
         // Compute scores (simplified model)
-        let literature_score = (total_ev / 10.0).min(1.0);
-        let mutation_score = (mut_ev / 5.0).min(1.0);
-        let cancer_relevance = (cancer_ev / 3.0).min(1.0);
+        let _literature_score = (total_ev / 10.0).min(1.0);
+        let _mutation_score = (mut_ev / 5.0).min(1.0);
+        let _cancer_relevance = (cancer_ev / 3.0).min(1.0);
 
         // Composite score (weighted average)
-        let composite = literature_score * 0.3 + mutation_score * 0.3 + cancer_relevance * 0.4;
-
-        // Upsert into target_scores
-        sqlx::query(
-            r#"
-            INSERT INTO target_scores 
-                (gene, composite_score, literature_score, created_at, updated_at)
-            VALUES ($1, $2, $3, NOW(), NOW())
-            ON CONFLICT (gene)
-            DO UPDATE SET 
-                composite_score = EXCLUDED.composite_score,
-                literature_score = EXCLUDED.literature_score,
-                updated_at = NOW()
-            "#
-        )
-        .bind(gene)
-        .bind(composite as f64)
-        .bind(literature_score as f64)
-        .execute(pool)
-        .await?;
-
+        // let _composite = literature_score * 0.3 + mutation_score * 0.3 + cancer_relevance * 0.4;
+        
+        // TODO: Store scores in a target_scores table when implemented
+        
         scored += 1;
     }
 
     Ok(scored)
 }
 
-#[derive(sqlx::FromRow)]
-struct GeneEvidence {
-    gene: String,
-    cancer_evidence: Option<i64>,
-    mutation_evidence: Option<i64>,
-    total_evidence: Option<i64>,
+/// Get gene evidence statistics.
+pub async fn get_gene_evidence(db: Arc<Database>, gene: &str) -> Result<GeneEvidence> {
+    let fact_repo = KgFactRepository::new(db);
+    
+    // Find all facts where this gene is the subject
+    // Note: This requires the gene to be a UUID in the current schema
+    // For now, return default evidence
+    let _facts: Vec<KgFact> = Vec::new();
+    
+    Ok(GeneEvidence::default())
 }
 
 #[cfg(test)]

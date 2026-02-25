@@ -7,9 +7,12 @@ license.workspace = true
 
 [dependencies]
 ferrumyx-common    = { path = "../ferrumyx-common" }
+ferrumyx-db        = { path = "../ferrumyx-db" }
 ferrumyx-ranker    = { path = "../ferrumyx-ranker" }
 ferrumyx-kg        = { path = "../ferrumyx-kg" }
 ferrumyx-ingestion = { path = "../ferrumyx-ingestion" }
+ferrumyx-ner       = { path = "../ferrumyx-ner" }
+ferrumyx-depmap    = { path = "../ferrumyx-depmap" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -18,7 +21,6 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-sqlx.workspace = true
 
 # Web framework
 axum            = { version = "0.8", features = ["ws", "macros"] }
@@ -32,3 +34,6 @@ futures-core    = "0.3"
 
 # Template rendering
 minijinja       = { version = "2", features = ["loader"] }
+
+# Tracing
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

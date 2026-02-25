@@ -1,37 +1,34 @@
-//! IronClaw tool: NER extraction via Rust-native Candle model.
+//! IronClaw tool: NER extraction via Rust-native Trie-based matching.
 
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
-use ferrumyx_ner::{NerModel, NerConfig, NerEntity};
+use ferrumyx_ner::{TrieNer, ExtractedEntity};
 use super::FerrumyxTool;
 use std::sync::OnceLock;
 
-static NER_MODEL: OnceLock<NerModel> = OnceLock::new();
+static NER_MODEL: OnceLock<TrieNer> = OnceLock::new();
 
-pub struct NerExtractTool {
-    config: NerConfig,
-}
+pub struct NerExtractTool;
 
 impl NerExtractTool {
     pub fn new() -> Self {
-        Self {
-            config: NerConfig::biomedical(),
-        }
+        Self
     }
     
-    async fn get_model(&self) -> Result<&'static NerModel> {
-        if let Some(model) = NER_MODEL.get() {
-            return Ok(model);
-        }
-        
-        let model = NerModel::new(self.config.clone())
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to load NER model: {}", e))?;
-        
-        // Race condition is fine - both threads would load the same model
-        let _ = NER_MODEL.set(model);
-        Ok(NER_MODEL.get().unwrap())
+    fn get_model() -> &'static TrieNer {
+        NER_MODEL.get_or_init(|| {
+            match TrieNer::with_complete_databases() {
+                Ok(ner) => {
+                    tracing::info!("NER model loaded: {} patterns", ner.stats().total_patterns);
+                    ner
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load complete databases, using embedded subset: {}", e);
+                    TrieNer::with_embedded_subset()
+                }
+            }
+        })
     }
 }
 
@@ -73,9 +70,8 @@ impl FerrumyxTool for NerExtractTool {
             "Running NER extraction"
         );
 
-        let model = self.get_model().await?;
-        let entities = model.extract(text)
-            .map_err(|e| anyhow::anyhow!("NER extraction failed: {}", e))?;
+        let model = Self::get_model();
+        let entities = model.extract(text);
 
         tracing::info!(
             tool = "ner_extract",
@@ -83,8 +79,19 @@ impl FerrumyxTool for NerExtractTool {
             "NER complete"
         );
 
+        // Convert entities to JSON-serializable format
+        let entities_json: Vec<Value> = entities.iter().map(|e| {
+            serde_json::json!({
+                "text": e.text,
+                "label": format!("{:?}", e.label),
+                "start": e.start,
+                "end": e.end,
+                "confidence": e.confidence
+            })
+        }).collect();
+
         Ok(serde_json::json!({
-            "entities": entities,
+            "entities": entities_json,
             "n_entities": entities.len(),
             "chunk_id": chunk_id
         }))

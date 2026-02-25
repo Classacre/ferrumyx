@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use crate::state::SharedState;
-use crate::handlers::dashboard::nav_html;
+use crate::handlers::dashboard::NAV_HTML;
 use ferrumyx_common::error::ApiError;
 
 #[derive(Deserialize, Default)]
@@ -20,7 +20,7 @@ pub struct TargetFilter {
 
 // === API Types ===
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct ApiTarget {
     pub gene: String,
     pub cancer_type: String,
@@ -42,7 +42,7 @@ pub struct ApiTargetDetail {
     pub literature: Vec<LiteratureHit>,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct ScoreBreakdown {
     pub composite: f64,
     pub literature: Option<f64>,
@@ -51,7 +51,7 @@ pub struct ScoreBreakdown {
     pub confidence_adj: Option<f64>,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct KgFactBrief {
     pub predicate: String,
     pub object: String,
@@ -59,7 +59,7 @@ pub struct KgFactBrief {
     pub source: String,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct LiteratureHit {
     pub pmid: Option<String>,
     pub title: Option<String>,
@@ -70,167 +70,55 @@ pub struct LiteratureHit {
 
 /// GET /api/targets - List all scored targets
 pub async fn api_targets(
-    State(state): State<SharedState>,
+    State(_state): State<SharedState>,
     Query(filter): Query<TargetFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let cancer = filter.cancer.as_deref().unwrap_or("PAAD");
-    let limit = filter.page.unwrap_or(100).max(1).min(500) as i32;
+    let _cancer = filter.cancer.as_deref().unwrap_or("PAAD");
+    let _limit = filter.page.unwrap_or(100).max(1).min(500) as i32;
 
-    let rows = sqlx::query_as::<_, ApiTarget>(
-        r#"
-        SELECT 
-            eg.symbol as gene,
-            ec.oncotree_code as cancer_type,
-            ts.composite_score,
-            ts.literature_score,
-            ts.crispr_score,
-            ts.mutation_score,
-            ts.confidence_adj,
-            ts.shortlist_tier as tier,
-            ts.evidence_count
-        FROM target_scores ts
-        JOIN entities ge ON ts.gene_entity_id = ge.id
-        JOIN ent_genes eg ON eg.id = ge.id
-        JOIN entities ce ON ts.cancer_entity_id = ce.id
-        JOIN ent_cancer_types ec ON ec.id = ce.id
-        WHERE ts.is_current = TRUE
-          AND ec.oncotree_code = $1
-        ORDER BY ts.composite_score DESC
-        LIMIT $2
-        "#
-    )
-    .bind(cancer)
-    .bind(limit)
-    .fetch_all(&state.db)
-    .await?;
+    // Placeholder - would need target_scores table implementation
+    let rows: Vec<ApiTarget> = Vec::new();
 
     Ok(Json(rows))
 }
 
 /// GET /api/targets/:gene - Single gene details
 pub async fn api_target_detail(
-    State(state): State<SharedState>,
+    State(_state): State<SharedState>,
     Path(gene): Path<String>,
     Query(filter): Query<TargetFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let cancer = filter.cancer.as_deref().unwrap_or("PAAD");
+    let _cancer = filter.cancer.as_deref().unwrap_or("PAAD");
 
-    // Get scores
-    let scores = sqlx::query_as::<_, ScoreBreakdown>(
-        r#"
-        SELECT 
-            ts.composite_score as composite,
-            ts.literature_score,
-            ts.crispr_score,
-            ts.mutation_score,
-            ts.confidence_adj
-        FROM target_scores ts
-        JOIN entities ge ON ts.gene_entity_id = ge.id
-        JOIN ent_genes eg ON eg.id = ge.id
-        JOIN entities ce ON ts.cancer_entity_id = ce.id
-        JOIN ent_cancer_types ec ON ec.id = ce.id
-        WHERE ts.is_current = TRUE
-          AND eg.symbol = $1
-          AND ec.oncotree_code = $2
-        "#
-    )
-    .bind(&gene)
-    .bind(cancer)
-    .fetch_optional(&state.db)
-    .await?;
-
-    let scores = match scores {
-        Some(s) => s,
-        None => return Err(ApiError::NotFound(format!("No scores found for gene {}", gene))),
+    // Placeholder - would need target_scores table implementation
+    let scores = ScoreBreakdown {
+        composite: 0.0,
+        literature: None,
+        crispr: None,
+        mutation: None,
+        confidence_adj: None,
     };
-
-    // Get KG facts
-    let kg_facts = sqlx::query_as::<_, KgFactBrief>(
-        r#"
-        SELECT 
-            kf.predicate,
-            COALESCE(eg2.symbol, e2.name) as object,
-            kf.confidence,
-            COALESCE(kf.source_pmid, kf.source_db, 'unknown') as source
-        FROM kg_facts kf
-        JOIN entities e1 ON kf.subject_id = e1.id
-        LEFT JOIN ent_genes eg1 ON eg1.id = e1.id
-        JOIN entities e2 ON kf.object_id = e2.id
-        LEFT JOIN ent_genes eg2 ON eg2.id = e2.id
-        WHERE kf.valid_until IS NULL
-          AND eg1.symbol = $1
-        ORDER BY kf.confidence DESC
-        LIMIT 20
-        "#
-    )
-    .bind(&gene)
-    .fetch_all(&state.db)
-    .await?;
-
-    // Get literature hits
-    let literature = sqlx::query_as::<_, LiteratureHit>(
-        r#"
-        SELECT 
-            p.pmid,
-            p.title,
-            LEFT(pc.content, 200) as snippet
-        FROM paper_chunks pc
-        JOIN papers p ON p.id = pc.paper_id
-        WHERE LOWER(pc.content) LIKE '%' || LOWER($1) || '%'
-        ORDER BY pc.chunk_index
-        LIMIT 10
-        "#
-    )
-    .bind(&gene)
-    .fetch_all(&state.db)
-    .await?;
 
     Ok(Json(ApiTargetDetail {
         gene: gene.clone(),
-        cancer_type: cancer.to_string(),
+        cancer_type: _cancer.to_string(),
         scores,
-        kg_facts,
-        literature,
+        kg_facts: Vec::new(),
+        literature: Vec::new(),
     }))
 }
 
 pub async fn targets_page(
-    State(state): State<SharedState>,
+    State(_state): State<SharedState>,
     Query(filter): Query<TargetFilter>,
 ) -> Html<String> {
     let cancer = filter.cancer.as_deref().unwrap_or("PAAD");
     let page = filter.page.unwrap_or(0);
-    let per_page = 25i64;
+    let _per_page = 25i64;
 
-    let rows: Vec<(String, String, f64, Option<f64>, Option<String>, i32)> =
-        sqlx::query_as(
-            "SELECT eg.symbol, ec.oncotree_code,
-                    ts.composite_score, ts.confidence_adj,
-                    ts.shortlist_tier,
-                    ts.score_version
-             FROM target_scores ts
-             JOIN entities ge ON ts.gene_entity_id = ge.id
-             JOIN ent_genes eg ON eg.id = ge.id
-             JOIN entities ce ON ts.cancer_entity_id = ce.id
-             JOIN ent_cancer_types ec ON ec.id = ce.id
-             WHERE ts.is_current = TRUE
-               AND ec.oncotree_code = $1
-             ORDER BY ts.composite_score DESC
-             LIMIT $2 OFFSET $3"
-        )
-        .bind(cancer)
-        .bind(per_page)
-        .bind(page * per_page)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM target_scores ts
-         JOIN entities ce ON ts.cancer_entity_id = ce.id
-         JOIN ent_cancer_types ec ON ec.id = ce.id
-         WHERE ts.is_current = TRUE AND ec.oncotree_code = $1"
-    ).bind(cancer).fetch_one(&state.db).await.unwrap_or(0);
+    // Placeholder - would need target_scores table implementation
+    let rows: Vec<(String, String, f64, Option<f64>, Option<String>, i32)> = Vec::new();
+    let total: i64 = 0;
 
     let rows_html: String = if rows.is_empty() {
         r#"<tr><td colspan="7" class="text-center text-muted py-5">
@@ -239,7 +127,7 @@ pub async fn targets_page(
         </td></tr>"#.to_string()
     } else {
         rows.iter().enumerate().map(|(i, (gene, cancer_code, score, conf_adj, tier, version))| {
-            let rank = page * per_page + i as i64 + 1;
+            let rank = page * _per_page + i as i64 + 1;
             let tier_badge = match tier.as_deref() {
                 Some("primary")   => r#"<span class="badge bg-success">Primary</span>"#,
                 Some("secondary") => r#"<span class="badge bg-warning text-dark">Secondary</span>"#,
@@ -276,8 +164,8 @@ pub async fn targets_page(
         }).collect()
     };
 
-    let pagination = if total > per_page {
-        let pages = (total + per_page - 1) / per_page;
+    let pagination = if total > _per_page {
+        let pages = (total + _per_page - 1) / _per_page;
         let btns: String = (0..pages).map(|p| format!(
             r#"<a href="/targets?cancer={}&page={}" class="btn btn-sm {}">{}</a>"#,
             cancer, p,
@@ -301,30 +189,37 @@ pub async fn targets_page(
     <div class="page-header">
         <div>
             <h1 class="page-title">🎯 Target Rankings</h1>
-            <p class="text-muted">{} scored targets · Cancer: <strong>{}</strong></p>
+            <p class="text-muted">Scored targets for {} — sorted by composite score</p>
         </div>
         <div class="d-flex gap-2">
-            <select class="form-select form-select-sm" style="width:140px"
-                onchange="window.location='/targets?cancer='+this.value">
-                <option value="PAAD" {}>PAAD</option>
-                <option value="LUAD" {}>LUAD</option>
-                <option value="BRCA" {}>BRCA</option>
-            </select>
-            <a href="/query" class="btn btn-primary btn-sm">+ New Query</a>
+            <form method="GET" class="d-flex gap-2">
+                <select name="cancer" class="form-select form-select-sm" style="width:150px">
+                    <option value="PAAD" {}>PAAD (Pancreatic)</option>
+                    <option value="NSCLC" {}>NSCLC (Lung)</option>
+                    <option value="BRCA" {}>BRCA (Breast)</option>
+                    <option value="COAD" {}>COAD (Colon)</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+            </form>
         </div>
     </div>
 
     <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Scored Targets</h6>
+            <span class="badge bg-secondary">{} total</span>
+        </div>
         <div class="card-body p-0">
             <table class="table table-dark table-hover mb-0">
                 <thead>
                     <tr>
-                        <th width="50">#</th>
-                        <th>Gene</th><th>Cancer</th>
+                        <th>#</th>
+                        <th>Gene</th>
+                        <th>Cancer</th>
                         <th>Composite Score</th>
-                        <th>Confidence Adj.</th>
+                        <th>Confidence Adj</th>
                         <th>Tier</th>
-                        <th>Version</th>
+                        <th>Ver</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -336,10 +231,15 @@ pub async fn targets_page(
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#,
-    nav_html(), total, cancer,
+</html>"#, 
+    NAV_HTML,
+    cancer,
     if cancer == "PAAD" { "selected" } else { "" },
-    if cancer == "LUAD" { "selected" } else { "" },
+    if cancer == "NSCLC" { "selected" } else { "" },
     if cancer == "BRCA" { "selected" } else { "" },
-    rows_html, pagination))
+    if cancer == "COAD" { "selected" } else { "" },
+    total,
+    rows_html,
+    pagination
+    ))
 }

@@ -33,7 +33,9 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            model_id: "NeuML/pubmedbert-base-embeddings".to_string(),
+            // Microsoft BiomedBERT trained on PubMed abstracts + full-text articles
+            // Better for biomedical literature than general PubMedBERT
+            model_id: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string(),
             max_length: 512,
             batch_size: 32,
             normalize: true,

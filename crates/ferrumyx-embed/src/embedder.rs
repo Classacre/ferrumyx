@@ -267,16 +267,18 @@ impl BiomedBertEmbedder {
 
     /// Embed a single batch of texts.
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        // Tokenize all texts
-        let mut input_ids_vec = Vec::new();
-        let mut attention_mask_vec = Vec::new();
-        let mut token_type_ids_vec = Vec::new();
+        // Use batch tokenization for better performance
+        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+        
+        let encodings = self.tokenizer
+            .encode_batch(text_refs, true)
+            .map_err(|e| EmbedError::Tokenizer(e.to_string()))?;
 
-        for text in texts {
-            let encoding = self.tokenizer
-                .encode(text.as_str(), true)
-                .map_err(|e| EmbedError::Tokenizer(e.to_string()))?;
+        let mut input_ids_vec = Vec::with_capacity(texts.len());
+        let mut attention_mask_vec = Vec::with_capacity(texts.len());
+        let mut token_type_ids_vec = Vec::with_capacity(texts.len());
 
+        for encoding in &encodings {
             let ids = encoding.get_ids();
             let mask = encoding.get_attention_mask();
             let type_ids = encoding.get_type_ids();

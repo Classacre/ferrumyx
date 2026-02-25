@@ -11,11 +11,11 @@ use std::sync::Arc;
 use ferrumyx_ingestion::pipeline::{
     IngestionJob, IngestionSourceSpec, run_ingestion,
 };
-use ferrumyx_ingestion::embedding::{EmbeddingConfig, EmbeddingBackend};
-use ferrumyx_ingestion::pg_repository::PgIngestionRepository;
+use ferrumyx_ingestion::repository::IngestionRepository;
 
 use crate::state::{SharedState, AppEvent};
-use crate::handlers::dashboard::nav_html;
+use crate::handlers::dashboard::NAV_HTML;
+use ferrumyx_db::papers::PaperRepository;
 
 // ── Form input ────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ pub async fn ingestion_run(
 
     let job = IngestionJob {
         gene:           form.gene.clone(),
-        mutation:       form.mutation.filter(|m| !m.is_empty()),
+        mutation:       form.mutation.clone().filter(|m| !m.is_empty()),
         cancer_type:    form.cancer.clone(),
         max_results:    form.max_results.unwrap_or(100),
         sources,
@@ -57,51 +57,59 @@ pub async fn ingestion_run(
         embedding_cfg:  None,
     };
 
-    // Run the pipeline (blocking in this handler for MVP; use spawn_blocking in prod)
-    let repo = Arc::new(PgIngestionRepository::new(state.db.clone()));
-
-    // Emit SSE start event
+    // Emit SSE start event immediately
     let _ = state.event_tx.send(AppEvent::PipelineStatus {
         stage:   "search".to_string(),
         message: format!("Starting ingestion: {} {} in {}", job.gene, job.mutation.as_deref().unwrap_or(""), job.cancer_type),
         count:   0,
     });
 
-    let result = run_ingestion(job, repo, None).await;
+    // Spawn ingestion in background task so we can return immediately
+    let event_tx = state.event_tx.clone();
+    let db = state.db.clone();
+    
+    tokio::spawn(async move {
+        let repo = Arc::new(IngestionRepository::new(db));
+        
+        // Update progress before starting
+        let _ = event_tx.send(AppEvent::PipelineStatus {
+            stage:   "searching".to_string(),
+            message: "Searching PubMed and Europe PMC...".to_string(),
+            count:   0,
+        });
 
-    // Emit SSE completion events
-    let _ = state.event_tx.send(AppEvent::PipelineStatus {
-        stage:   "complete".to_string(),
-        message: format!(
-            "Ingestion done — {} new papers, {} chunks",
-            result.papers_inserted, result.chunks_inserted
-        ),
-        count:   result.papers_inserted as u64,
+        let result = run_ingestion(job, repo, None).await;
+
+        // Emit SSE completion events
+        let _ = event_tx.send(AppEvent::PipelineStatus {
+            stage:   "complete".to_string(),
+            message: format!(
+                "Ingestion complete — {} papers found, {} inserted, {} chunks",
+                result.papers_found, result.papers_inserted, result.chunks_inserted
+            ),
+            count:   result.papers_inserted as u64,
+        });
+
+        // Also emit individual PaperIngested events
+        for i in 0..result.papers_inserted.min(10) {
+            let _ = event_tx.send(AppEvent::PaperIngested {
+                paper_id: format!("{}-{}", result.job_id, i),
+                title:    format!("Paper #{} ingested from {}", i + 1, result.query),
+                source:   "ingestion".to_string(),
+            });
+        }
     });
 
-    // Also emit individual PaperIngested events (up to 10 for live feed)
-    for i in 0..result.papers_inserted.min(10) {
-        let _ = state.event_tx.send(AppEvent::PaperIngested {
-            paper_id: format!("{}-{}", result.job_id, i),
-            title:    format!("Paper #{} ingested from {}", i + 1, result.query),
-            source:   "ingestion".to_string(),
-        });
-    }
-
+    // Return immediately with status that job is running
     let stats = load_stats(&state).await;
-
     let summary = format!(
-        "✅ Job {} complete — {} papers found, {} inserted, {} duplicate, {} chunks. Duration: {}ms. Errors: {}",
-        result.job_id,
-        result.papers_found,
-        result.papers_inserted,
-        result.papers_duplicate,
-        result.chunks_inserted,
-        result.duration_ms,
-        result.errors.len()
+        "🔄 Ingestion job started for {} {} in {}. Check the Live Activity feed for real-time progress.",
+        form.gene,
+        form.mutation.as_deref().unwrap_or(""),
+        form.cancer
     );
 
-    Html(render_page(stats, Some((&summary, &result.errors))))
+    Html(render_page_with_progress(stats, &summary, form.max_results.unwrap_or(100) as i64))
 }
 
 // ── Stats loader ──────────────────────────────────────────────────────────────
@@ -115,21 +123,19 @@ struct PageStats {
 }
 
 async fn load_stats(state: &SharedState) -> PageStats {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM papers")
-        .fetch_one(&state.db).await.unwrap_or(0);
-    let parsed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM papers WHERE parse_status='parsed'")
-        .fetch_one(&state.db).await.unwrap_or(0);
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM papers WHERE parse_status='pending'")
-        .fetch_one(&state.db).await.unwrap_or(0);
-    let failed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM papers WHERE parse_status='failed'")
-        .fetch_one(&state.db).await.unwrap_or(0);
-
-    let recent_audit: Vec<(String, String, String, String)> = sqlx::query_as(
-        "SELECT COALESCE(paper_doi,'—'), COALESCE(paper_pmid,'—'), action, source
-         FROM ingestion_audit ORDER BY occurred_at DESC LIMIT 20"
-    ).fetch_all(&state.db).await.unwrap_or_default();
-
-    PageStats { total, parsed, pending, failed, recent_audit }
+    // Use repository to get paper count
+    let paper_repo = PaperRepository::new(state.db.clone());
+    let total = paper_repo.count().await.unwrap_or(0) as i64;
+    
+    // For now, return placeholder values for parsed/pending/failed
+    // In a full implementation, we'd track these in the database
+    PageStats { 
+        total, 
+        parsed: total,  // All papers are considered parsed for now
+        pending: 0, 
+        failed: 0, 
+        recent_audit: vec![]  // No audit log in LanceDB yet
+    }
 }
 
 // ── Source parser ─────────────────────────────────────────────────────────────
@@ -152,23 +158,23 @@ fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) -> String {
-    let banner = match result_banner {
-        None => String::new(),
-        Some((summary, errors)) => {
-            let error_html = if errors.is_empty() {
-                String::new()
-            } else {
-                let items: String = errors.iter().map(|e| format!("<li>{}</li>", e)).collect();
-                format!(r#"<div class="alert alert-warning mt-2"><strong>Warnings:</strong><ul class="mb-0">{}</ul></div>"#, items)
-            };
-            format!(r#"
-            <div class="alert alert-success alert-dismissible mt-3">
-                {}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-            {}"#, summary, error_html)
-        }
+    render_page_with_progress(stats, result_banner.map(|(s, _)| s).unwrap_or(""), 0)
+}
+
+fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i64) -> String {
+    let banner = if summary.is_empty() {
+        String::new()
+    } else {
+        let is_running = summary.contains("started");
+        let alert_class = if is_running { "alert-info" } else { "alert-success" };
+        format!(r#"
+        <div class="alert {} alert-dismissible mt-3">
+            {}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>"#, alert_class, summary)
     };
+    
+    let progress_display = if total_expected > 0 { "block" } else { "none" };
 
     let audit_rows: String = if stats.recent_audit.is_empty() {
         r#"<tr><td colspan="4" class="text-center text-muted py-3">No ingestion events yet.</td></tr>"#.to_string()
@@ -218,22 +224,72 @@ fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) ->
     </div>
 
     <!-- Pipeline Progress Indicator -->
-    <div class="card mt-3" id="pipeline-progress-card" style="display: none;">
+    <div class="card mt-3" id="pipeline-progress-card" style="display: {};">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6 class="mb-0">🔄 Pipeline Progress</h6>
             <div>
                 <span id="sse-status" class="badge bg-success">● Live</span>
-                <span id="pipeline-stage" class="badge bg-secondary ms-2">idle</span>
+                <span id="pipeline-stage" class="badge bg-primary ms-2">running</span>
             </div>
         </div>
         <div class="card-body">
-            <div class="progress mb-2" style="height: 25px;">
-                <div id="pipeline-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
-                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress mb-2" style="height: 30px;">
+                <div id="pipeline-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                     role="progressbar" style="width: 5%" aria-valuenow="5" aria-valuemin="0" aria-valuemax="100">
+                    <span id="progress-text">Starting...</span>
                 </div>
             </div>
-            <p id="pipeline-status-text" class="text-muted small mb-0">Ready to start ingestion...</p>
+            <div class="d-flex justify-content-between text-muted small">
+                <span id="papers-found">Papers found: 0</span>
+                <span id="papers-inserted">Inserted: 0</span>
+                <span id="papers-remaining">Remaining: {}</span>
+            </div>
+            <p id="pipeline-status-text" class="text-muted small mt-2 mb-0">Searching PubMed and Europe PMC...</p>
         </div>
+        <script>
+            // Auto-show progress card and start listening to SSE
+            document.getElementById('pipeline-progress-card').style.display = 'block';
+            
+            let papersFound = 0;
+            let papersInserted = 0;
+            const totalExpected = {};
+            
+            // Connect to SSE
+            const evtSource = new EventSource('/api/events');
+            evtSource.onmessage = function(e) {{
+                const data = JSON.parse(e.data);
+                
+                if (data.type === 'pipeline_status') {{
+                    document.getElementById('pipeline-status-text').textContent = data.message;
+                    document.getElementById('pipeline-stage').textContent = data.stage;
+                    
+                    if (data.stage === 'searching') {{
+                        document.getElementById('pipeline-progress').style.width = '10%';
+                        document.getElementById('progress-text').textContent = '10%';
+                    }} else if (data.stage === 'complete') {{
+                        document.getElementById('pipeline-progress').style.width = '100%';
+                        document.getElementById('progress-text').textContent = '100%';
+                        document.getElementById('pipeline-stage').className = 'badge bg-success ms-2';
+                        document.getElementById('pipeline-stage').textContent = 'complete';
+                        setTimeout(() => evtSource.close(), 2000);
+                    }}
+                }}
+                
+                if (data.type === 'paper_ingested') {{
+                    papersInserted++;
+                    document.getElementById('papers-inserted').textContent = 'Inserted: ' + papersInserted;
+                    const percent = Math.min(100, Math.round((papersInserted / totalExpected) * 100));
+                    document.getElementById('pipeline-progress').style.width = percent + '%';
+                    document.getElementById('progress-text').textContent = percent + '%';
+                    document.getElementById('papers-remaining').textContent = 'Remaining: ' + Math.max(0, totalExpected - papersInserted);
+                }}
+            }};
+            
+            evtSource.onerror = function() {{
+                document.getElementById('sse-status').className = 'badge bg-danger';
+                document.getElementById('sse-status').textContent = '● Disconnected';
+            }};
+        </script>
     </div>
 
     <div class="card mt-4">
@@ -306,8 +362,11 @@ fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) ->
 <script src="/static/js/main.js"></script>
 </body>
 </html>"#,
-        nav_html(),
+        NAV_HTML,
         banner,
         stats.total, stats.parsed, stats.pending, stats.failed,
+        progress_display,
+        total_expected,
+        total_expected,
         audit_rows)
 }

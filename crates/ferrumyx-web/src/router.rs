@@ -22,6 +22,8 @@ use crate::handlers::{
     metrics::metrics_page,
     system::system_page,
     search::hybrid_search,
+    ner::{ner_page, ner_extract, api_ner_stats, api_ner_extract},
+    depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
 };
 use crate::sse::sse_handler;
 
@@ -41,6 +43,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/metrics",    get(metrics_page))
         .route("/system",     get(system_page))
         .route("/audit",      get(system_page)) // alias for now
+        .route("/ner",        get(ner_page).post(ner_extract))
+        .route("/depmap",     get(depmap_page))
 
         // SSE streaming
         .route("/api/events", get(sse_handler))
@@ -51,6 +55,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/kg",            get(api_kg_facts))
         .route("/api/kg/stats",      get(api_kg_stats))
         .route("/api/search",        get(hybrid_search))
+        .route("/api/ner/stats",     get(api_ner_stats))
+        .route("/api/ner/extract",   post(api_ner_extract))
+        .route("/api/depmap/gene",   get(api_depmap_gene))
+        .route("/api/depmap/celllines", get(api_depmap_celllines))
 
         // Static files
         .nest_service("/static", ServeDir::new("static"))

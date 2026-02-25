@@ -2,39 +2,36 @@
 
 use axum::{extract::State, response::Html};
 use crate::state::SharedState;
+use ferrumyx_db::papers::PaperRepository;
+use ferrumyx_db::chunks::ChunkRepository;
+use ferrumyx_db::entities::EntityRepository;
+use ferrumyx_db::kg_facts::KgFactRepository;
+
+/// Navigation HTML template shared across all pages
+pub const NAV_HTML: &str = include_str!("../../templates/nav.html");
 
 pub async fn dashboard(State(state): State<SharedState>) -> Html<String> {
-    // Query DB for summary stats
-    let paper_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM papers")
-        .fetch_one(&state.db).await.unwrap_or(0);
+    // Query DB for summary stats using repositories
+    let paper_count: u64 = PaperRepository::new(state.db.clone())
+        .count().await.unwrap_or(0);
 
-    let chunk_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM paper_chunks")
-        .fetch_one(&state.db).await.unwrap_or(0);
+    let chunk_count: u64 = ChunkRepository::new(state.db.clone())
+        .count().await.unwrap_or(0);
 
-    let entity_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities")
-        .fetch_one(&state.db).await.unwrap_or(0);
+    let entity_count: u64 = EntityRepository::new(state.db.clone())
+        .count().await.unwrap_or(0);
 
-    let kg_fact_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM kg_facts WHERE valid_until IS NULL"
-    ).fetch_one(&state.db).await.unwrap_or(0);
+    let kg_fact_count: u64 = KgFactRepository::new(state.db.clone())
+        .count().await.unwrap_or(0);
 
-    let top_targets: Vec<(String, String, f64)> = sqlx::query_as(
-        "SELECT eg.symbol, ec.oncotree_code, ts.composite_score
-         FROM target_scores ts
-         JOIN entities ge ON ts.gene_entity_id = ge.id
-         JOIN ent_genes eg ON eg.id = ge.id
-         JOIN entities ce ON ts.cancer_entity_id = ce.id
-         JOIN ent_cancer_types ec ON ec.id = ce.id
-         WHERE ts.is_current = TRUE
-         ORDER BY ts.composite_score DESC
-         LIMIT 10"
-    ).fetch_all(&state.db).await.unwrap_or_default();
+    // For now, return empty top targets until we implement target scoring
+    let top_targets: Vec<(String, String, f64)> = Vec::new();
 
     Html(render_dashboard(paper_count, chunk_count, entity_count, kg_fact_count, top_targets))
 }
 
 fn render_dashboard(
-    papers: i64, chunks: i64, entities: i64, facts: i64,
+    papers: u64, chunks: u64, entities: u64, facts: u64,
     top_targets: Vec<(String, String, f64)>,
 ) -> String {
     let targets_html = if top_targets.is_empty() {
@@ -98,110 +95,75 @@ fn render_dashboard(
         <div class="stat-card">
             <div class="stat-icon">🧬</div>
             <div class="stat-value" id="entity-count">{}</div>
-            <div class="stat-label">Entities</div>
+            <div class="stat-label">Entities Extracted</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">🕸️</div>
+            <div class="stat-icon">🔗</div>
             <div class="stat-value" id="fact-count">{}</div>
-            <div class="stat-label">KG Facts (active)</div>
+            <div class="stat-label">KG Facts</div>
         </div>
     </div>
 
-    <!-- Top targets table -->
+    <!-- Top Targets -->
     <div class="card mt-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">🎯 Top Ranked Targets</h5>
-            <a href="/targets" class="btn btn-sm btn-outline-primary">View All</a>
+            <h5 class="mb-0">🎯 Top Target Scores</h5>
+            <a href="/targets" class="btn btn-sm btn-outline-secondary">View All</a>
         </div>
-        <div class="card-body p-0">
-            <table class="table table-dark table-hover mb-0">
+        <div class="card-body">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th width="50">#</th>
+                        <th>Rank</th>
                         <th>Gene</th>
                         <th>Cancer</th>
-                        <th>Composite Score</th>
-                        <th width="80">Action</th>
+                        <th>Score</th>
+                        <th></th>
                     </tr>
                 </thead>
-                <tbody>{}</tbody>
+                <tbody>
+                    {}
+                </tbody>
             </table>
         </div>
     </div>
 
-    <!-- Live activity feed -->
-    <div class="card mt-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">⚡ Live Activity</h5>
-            <span class="badge bg-success" id="sse-status">● Connected</span>
+    <!-- Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📥 Ingestion</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Ingest papers from PubMed, bioRxiv, or PDF uploads.</p>
+                    <a href="/ingest" class="btn btn-primary">Start Ingestion</a>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <div id="activity-feed" class="activity-feed">
-                <div class="activity-item text-muted">Waiting for events...</div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">🔍 Query</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Query the knowledge graph with natural language.</p>
+                    <a href="/query" class="btn btn-primary">Ask a Question</a>
+                </div>
             </div>
         </div>
     </div>
 </main>
-<script src="/static/js/main.js"></script>
+
 <script>
-    // Connect to SSE and update activity feed
-    const evtSource = new EventSource('/api/events');
-    evtSource.onmessage = (e) => {{
-        const data = JSON.parse(e.data);
-        addActivity(data);
-        if (data.type === 'paper_ingested') updateStat('paper-count');
-        if (data.type === 'target_scored') updateStat('entity-count');
-    }};
-    evtSource.onerror = () => {{
-        document.getElementById('sse-status').className = 'badge bg-danger';
-        document.getElementById('sse-status').textContent = '● Disconnected';
-    }};
-
-    function addActivity(data) {{
-        const feed = document.getElementById('activity-feed');
-        const item = document.createElement('div');
-        item.className = 'activity-item';
-        item.innerHTML = `<span class="activity-time">${{new Date().toLocaleTimeString()}}</span> ${{formatEvent(data)}}`;
-        feed.insertBefore(item, feed.firstChild);
-        if (feed.children.length > 50) feed.removeChild(feed.lastChild);
-    }}
-
-    function formatEvent(data) {{
-        switch(data.type) {{
-            case 'paper_ingested': return `📄 Paper ingested: <strong>${{data.title}}</strong> (via ${{data.source}})`;
-            case 'target_scored': return `🎯 Target scored: <strong>${{data.gene}}</strong> in ${{data.cancer}} — ${{data.score.toFixed(3)}}`;
-            case 'docking_complete': return `⚗️ Docking complete: ${{data.gene}} — Vina: ${{data.vina_score.toFixed(2)}} kcal/mol`;
-            case 'pipeline_status': return `🔄 [${{data.stage}}] ${{data.message}}`;
-            case 'feedback_metric': return `📊 Metric: ${{data.metric}} = ${{data.value.toFixed(4)}}`;
-            case 'notification': return `${{data.level === 'error' ? '🔴' : 'ℹ️'}} ${{data.message}}`;
-            default: return JSON.stringify(data);
-        }}
-    }}
+function refreshStats() {{
+    location.reload();
+}}
 </script>
 </body>
-</html>"#,
-        nav_html(), papers, chunks, entities, facts, targets_html)
-}
-
-pub fn nav_html() -> &'static str {
-    r#"<nav class="sidebar">
-    <div class="sidebar-brand">
-        <span class="brand-icon">⚗️</span>
-        <span class="brand-name">Ferrumyx</span>
-        <span class="brand-version">v0.1</span>
-    </div>
-    <ul class="sidebar-nav">
-        <li class="nav-section">Research</li>
-        <li><a href="/" class="nav-link active"><span class="nav-icon">🏠</span> Dashboard</a></li>
-        <li><a href="/query" class="nav-link"><span class="nav-icon">🔍</span> Target Query</a></li>
-        <li><a href="/targets" class="nav-link"><span class="nav-icon">🎯</span> Target Rankings</a></li>
-        <li><a href="/kg" class="nav-link"><span class="nav-icon">🕸️</span> Knowledge Graph</a></li>
-        <li><a href="/molecules" class="nav-link"><span class="nav-icon">⚗️</span> Molecules</a></li>
-        <li class="nav-section">Operations</li>
-        <li><a href="/ingestion" class="nav-link"><span class="nav-icon">📥</span> Ingestion</a></li>
-        <li><a href="/metrics" class="nav-link"><span class="nav-icon">📊</span> Self-Improvement</a></li>
-        <li><a href="/system" class="nav-link"><span class="nav-icon">⚙️</span> System</a></li>
-        <li><a href="/audit" class="nav-link"><span class="nav-icon">🔒</span> Audit Log</a></li>
-    </ul>
-</nav>"#
+</html>"#, 
+    NAV_HTML,
+    papers, chunks, entities, facts,
+    targets_html
+    )
 }
