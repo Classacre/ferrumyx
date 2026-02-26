@@ -50,6 +50,9 @@ pub struct IngestionJob {
     /// If provided, chunks are embedded immediately after insert.
     /// If None, a separate embed pass is needed (e.g. scheduled background job).
     pub embedding_cfg: Option<EmbeddingConfig>,
+    /// Whether to attempt downloading paywalled PDFs via Sci-Hub.
+    /// WARNING: Use at your own risk. Disabled by default.
+    pub enable_scihub_fallback: bool,
 }
 
 /// Which literature sources to search.
@@ -71,9 +74,17 @@ impl Default for IngestionJob {
             mutation: Some("G12D".to_string()),
             cancer_type: "pancreatic cancer".to_string(),
             max_results: 100,
-            sources: vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc],
+            sources: vec![
+                IngestionSourceSpec::PubMed,
+                IngestionSourceSpec::EuropePmc,
+                IngestionSourceSpec::BioRxiv,
+                IngestionSourceSpec::MedRxiv,
+                IngestionSourceSpec::ClinicalTrials,
+                IngestionSourceSpec::CrossRef,
+            ],
             pubmed_api_key: None,
             embedding_cfg: None,
+            enable_scihub_fallback: false,
         }
     }
 }
@@ -156,11 +167,11 @@ pub async fn run_ingestion(
 
     // Initialize NER once for the entire pipeline (loads real databases)
     info!("Initializing NER with complete biomedical databases...");
-    let ner = match TrieNer::with_complete_databases() {
+    let ner = match tokio::task::spawn_blocking(|| TrieNer::with_complete_databases()).await.unwrap() {
         Ok(ner) => ner,
         Err(e) => {
             warn!("Failed to load complete databases, falling back to embedded subset: {}", e);
-            TrieNer::with_embedded_subset()
+            tokio::task::spawn_blocking(|| TrieNer::with_embedded_subset()).await.unwrap()
         }
     };
     info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);
