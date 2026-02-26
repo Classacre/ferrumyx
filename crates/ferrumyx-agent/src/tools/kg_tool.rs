@@ -66,7 +66,7 @@ impl Tool for KgQueryTool {
             .ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing required param: entity".to_string()))?;
         let predicate   = params["predicate"].as_str().unwrap_or("%");
         let min_conf    = params["min_confidence"].as_f64().unwrap_or(0.3);
-        let limit       = params["limit"].as_i64().unwrap_or(50);
+        let _limit      = params["limit"].as_i64().unwrap_or(50);
 
         // TODO: Implement LanceDB query for facts
         let facts: Vec<Value> = vec![];
@@ -127,16 +127,36 @@ impl Tool for KgUpsertTool {
         let object    = params["object"].as_str().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: object".to_string()))?;
         let confidence = params["confidence"].as_f64().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: confidence".to_string()))?;
         let source_pmid = params["source_pmid"].as_str();
-        let source_db   = params["source_db"].as_str();
+        let _source_db   = params["source_db"].as_str();
 
-        // TODO: Implement LanceDB upsert for facts
+        let repo = ferrumyx_kg::repository::KgRepository::new(self.db.clone());
+        
+        let fact = ferrumyx_db::schema::KgFact {
+            id: uuid::Uuid::new_v4(),
+            paper_id: source_pmid.map(|p| uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, p.as_bytes())).unwrap_or_else(|| uuid::Uuid::nil()),
+            subject_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, subject.as_bytes()),
+            subject_name: subject.to_string(),
+            predicate: predicate.to_string(),
+            object_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, object.as_bytes()),
+            object_name: object.to_string(),
+            confidence: Some(confidence as f32),
+            evidence: Some("Manually inserted via Agent tool".to_owned()),
+            created_at: chrono::Utc::now(),
+        };
 
-        let res = serde_json::json!({
-            "status": "inserted",
-            "fact": { "subject": subject, "predicate": predicate, "object": object,
-                      "confidence": confidence }
-        });
-        Ok(ToolOutput::success(res, start.elapsed()))
+        match repo.insert_fact(&fact).await {
+            Ok(_) => {
+                let res = serde_json::json!({
+                    "status": "inserted",
+                    "fact": { "subject": subject, "predicate": predicate, "object": object,
+                              "confidence": confidence }
+                });
+                Ok(ToolOutput::success(res, start.elapsed()))
+            },
+            Err(e) => {
+                Err(ToolError::ExecutionFailed(format!("Failed to insert fact: {}", e)))
+            }
+        }
     }
 
     fn requires_approval(&self, _params: &serde_json::Value) -> ApprovalRequirement { ApprovalRequirement::Always }

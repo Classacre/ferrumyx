@@ -1,15 +1,22 @@
 # Ferrumyx
 
+<div align="center">
+  <img src="crates/ferrumyx-web/static/logo.svg" alt="Ferrumyx Logo" width="200"/>
+</div>
+
+<div align="center">
+  <a href="https://colab.research.google.com/github/Classacre/ferrumyx/blob/main/ferrumyx_colab.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+</div>
+
 **Open-Source Autonomous Oncology Drug Discovery Engine**
 
-Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/nearai/ironclaw) (Rust AI agent framework). It is **not a chatbot** — it is an internal scientific system that:
+Ferrumyx is an autonomous R&D engine built natively in Rust on the [IronClaw](https://github.com/nearai/ironclaw) autonomous agent framework. Designed as a fully self-improving scientific system, Ferrumyx orchestrates end-to-end therapeutic target discovery and molecular design without human intervention. 
 
-- Continuously ingests oncology literature (PubMed, Europe PMC, bioRxiv, ClinicalTrials.gov)
-- Maintains a structured, evolving cancer knowledge graph (LanceDB embedded)
-- Identifies and ranks promising therapeutic targets using multi-factor scoring
-- Evaluates structural druggability (fpocket, AlphaFold, PDB)
-- Conducts in silico molecular docking and ADMET prediction
-- **Learns from outcomes and improves target prioritisation over time**
+By leveraging IronClaw's robust event loop, reasoning capabilities, and Tool Registry, Ferrumyx operates as a persistent agent. It autonomously queries the latest biomedical literature, constructs and updates a dense Knowledge Graph within a local embedded LanceDB, and iteratively refines its multi-parametric scoring heuristics based on continuous evaluation of generated targets. This closed-loop learning architecture ensures that the system's predictive accuracy scales with its ingestion volume.
+
+For a detailed technical breakdown of the engine's layers, reasoning loop, and state management, please refer directly to the [Architecture Document (ARCHITECTURE.md)](ARCHITECTURE.md).
 
 ## Current Status (Phase 2)
 
@@ -41,31 +48,27 @@ Ferrumyx (100% Rust)
 └── ferrumyx-web        — Web API & dashboard
 ```
 
-## Why Ferrumyx?
+## Computational Methodology and Framework
 
-| Feature | Ferrumyx | PandaOmics | BenevolentAI | Other Open Source |
-|---------|----------|------------|--------------|-------------------|
-| **Open Source** | ✅ Apache/MIT | ❌ Proprietary | ❌ Proprietary | ✅ Various |
-| **Self-Hosted** | ✅ Your data stays yours | ❌ Cloud only | ❌ Cloud only | ✅ Varies |
-| **Autonomous Agent** | ✅ Runs itself | ❌ Manual tool | ❌ Manual tool | ❌ None |
-| **Self-Improving** | ✅ Learns from outcomes | ❌ | ❌ | ❌ |
-| **Knowledge Graph** | ✅ Biological KG | ✅ Biological KG | ✅ Biological KG | ❌ Fragmented |
-| **Literature Mining** | ✅ PubMed, Europe PMC, bioRxiv | ✅ 47M publications | ✅ Limited | ❌ |
-| **No Python** | ✅ 100% Rust | ❌ | ❌ | ❌ |
-| **Security-First** | ✅ Rust + IronClaw | ❌ | ❌ | ❌ |
-| **Cost** | **Free** | $199/mo (academic) | Enterprise only | Free |
+Ferrumyx leverages a defense-in-depth, 100% Rust architecture to mitigate performance bottlenecks typically associated with large-scale scientific computation pipelines. By operating independently of external data services, we ensure computational reproducibility and data security.
 
-### What Makes Us Different
+### Core Algorithmic Components
 
-1. **Autonomous Agent** — Ferrumyx runs itself. Define a target, and it continuously ingests, analyzes, and prioritizes without human intervention.
+1. **Information Extraction Engine**
+   Employs highly optimized biomedical named entity recognition (NER) via Aho-Corasick dictionary matching across multiple taxonomic classes (Genes, Proteins, Drugs, Diseases). High-throughput ingestion queues process dense literature efficiently.
 
-2. **Self-Improving** — The system learns from outcomes (clinical trial results, publication retractions, new evidence) and adjusts its scoring weights automatically.
+2. **Graph-Theoretic Knowledge Representation**
+   Extracts semantic triplets from unstructured text and constructs a local graph topology. The system uses SimHash-based deduplication algorithms to merge conflicting factual nodes and scales linearly via embedded LanceDB vector storage.
 
-3. **100% Rust** — No Python dependencies, no Docker containers for ML services. Single binary deployment possible.
+3. **Composite Target Prioritization Matrix**
+   Implements a multi-parametric heuristic function `S(g,c)` merging independent component scalars:
+   - Structural variants and mutation frequencies
+   - CRISPR dependency models (DepMap)
+   - Survival correlates
+   - Proteomic pocket detectability
 
-4. **Security-First Rust** — Built on IronClaw for defense-in-depth against prompt injection, data exfiltration, and malicious tools.
-
-5. **Open Source** — Free forever. Inspect the code, modify algorithms, self-host on your infrastructure.
+4. **In Silico Pipeline Orchestration**
+   Autonomously invokes structural parsing logic, Lipinski's Rule of 5 evaluations for druglikeness (ADMET metrics), and schedules downstream molecular interactions.
 
 ## Crates
 
@@ -102,15 +105,6 @@ cargo test --workspace
 # Manual start agent / web server
 cargo run --release --bin ferrumyx
 ```
-
-## MVP Scope
-
-**Target:** KRAS G12D Pancreatic Ductal Adenocarcinoma (PDAC)
-**Timeline:** 3-month MVP → 6-month expansion → 12-month autonomous optimisation
-
-## Disclaimer
-
-Ferrumyx is a research-grade computational hypothesis generation system. All outputs require expert wet-lab validation. Not intended for clinical use.
 
 ## License
 

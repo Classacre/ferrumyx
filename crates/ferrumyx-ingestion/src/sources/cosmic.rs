@@ -19,7 +19,7 @@
 //!   - frequency: Mutation frequency in cancer type
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -92,11 +92,11 @@ pub struct CosmicClient {
 
 impl CosmicClient {
     pub fn new() -> Self {
-        Self { client: Client::new(), api_key: None }
+        Self { client: Client::new().unwrap(), api_key: None }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
-        Self { client: Client::new(), api_key: Some(api_key.into()) }
+        Self { client: Client::new().unwrap(), api_key: Some(api_key.into()) }
     }
 
     /// Fetch mutations for a specific gene.

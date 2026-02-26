@@ -5,3 +5,5 @@ pub mod scorer;
 pub mod normalise;
 pub mod weights;
 pub mod depmap_provider;
+pub mod tcga_provider;
+pub mod gtex_provider;

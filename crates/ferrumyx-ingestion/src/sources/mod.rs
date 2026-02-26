@@ -9,6 +9,8 @@ pub mod depmap;
 pub mod depmap_cache;
 pub mod cosmic;
 pub mod chembl;
+pub mod tcga;
+pub mod gtex;
 pub mod scihub;
 
 use async_trait::async_trait;
@@ -19,6 +21,8 @@ pub use depmap::{DepMapClient, GeneDependency};
 pub use depmap_cache::DepMapCache;
 pub use cosmic::{CosmicClient, MutationRecord, MutationType};
 pub use chembl::{ChemblClient, CompoundRecord, TargetRecord, ActivityRecord};
+pub use tcga::TcgaClient;
+pub use gtex::GtexClient;
 pub use scihub::SciHubClient;
 
 /// Common interface for all literature source clients.

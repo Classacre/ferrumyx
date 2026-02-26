@@ -27,6 +27,7 @@ lopdf.workspace = true
 tempfile    = "3"
 scraper = "0.25.0"
 url = "2.5.8"
+strsim = "0.11.1"
 
 [features]
 default = ["rust-embed"]

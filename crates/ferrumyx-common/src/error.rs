@@ -22,6 +22,12 @@ pub enum FerrumyxError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+    
+    #[error("Security error: {0}")]
+    SecurityError(String),
+    
+    #[error("Ingestion error: {0}")]
+    IngestionError(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

@@ -13,7 +13,7 @@
 //! to the chunk's embedding field in LanceDB.
 
 use anyhow::{Context, Result};
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -68,7 +68,7 @@ pub struct EmbeddingClient {
 
 impl EmbeddingClient {
     pub fn new(cfg: EmbeddingConfig) -> Self {
-        Self { cfg, client: Client::new() }
+        Self { cfg, client: Client::new().unwrap() }
     }
 
     /// Embed a batch of texts; returns `(N, dim)` f32 vectors.
@@ -94,7 +94,7 @@ impl EmbeddingClient {
             "input": texts,
         });
         let resp: serde_json::Value = self.client
-            .post("https://api.openai.com/v1/embeddings")
+            .post("https://api.openai.com/v1/embeddings")?
             .bearer_auth(key)
             .json(&body)
             .send().await?
@@ -115,7 +115,7 @@ impl EmbeddingClient {
             self.cfg.model, key
         );
         let resp: serde_json::Value = self.client
-            .post(&url)
+            .post(&url)?
             .json(&serde_json::json!({"requests": requests}))
             .send().await?
             .json().await?;
@@ -137,7 +137,7 @@ impl EmbeddingClient {
             "model": &self.cfg.model,
             "input": texts,
         });
-        let mut req = self.client.post(&url).json(&body);
+        let mut req = self.client.request(reqwest::Method::POST, &url)?.json(&body);
         if let Some(ref k) = self.cfg.api_key {
             req = req.bearer_auth(k);
         }
@@ -155,7 +155,7 @@ impl EmbeddingClient {
             "normalize": true,
         });
         let resp: serde_json::Value = self.client
-            .post(&url)
+            .post(&url)?
             .json(&body)
             .send().await
             .with_context(|| format!(
@@ -179,7 +179,7 @@ impl EmbeddingClient {
         for text in texts {
             let url = format!("{}/api/embeddings", base);
             let body = serde_json::json!({"model": &self.cfg.model, "prompt": text});
-            let resp: serde_json::Value = self.client.post(&url).json(&body).send().await?
+            let resp: serde_json::Value = self.client.request(reqwest::Method::POST, &url)?.json(&body).send().await?
                 .json().await?;
             let vec: Vec<f32> = resp["embedding"].as_array().unwrap_or(&vec![])
                 .iter().map(|v| v.as_f64().unwrap_or(0.0) as f32)

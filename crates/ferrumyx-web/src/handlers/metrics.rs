@@ -46,55 +46,85 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
     };
 
     Html(format!(r#"<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ferrumyx — Self-Improvement Metrics</title>
+    <title>Metrics — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        .metric-card {{
+            background: var(--bg-surface);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: transform var(--transition-fast);
+        }}
+        .metric-card:hover {{
+            transform: translateY(-2px);
+            border-color: var(--border-bright);
+        }}
+        .metric-label {{
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }}
+        .metric-value {{
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-top: 0.25rem;
+        }}
+    </style>
 </head>
 <body>
 {}
 <main class="main-content">
     <div class="page-header">
         <div>
-            <h1 class="page-title">📊 Self-Improvement Metrics</h1>
+            <h1 class="page-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                Self-Improvement Metrics
+            </h1>
             <p class="text-muted">Feedback loop performance — explicit, measurable signals only</p>
         </div>
     </div>
 
-    <div class="alert alert-secondary mb-4">
-        <strong>🔒 Human-gated:</strong> Weight updates require operator approval before application.
-        No automatic parameter changes. See <a href="/audit" class="alert-link">Audit Log</a> for full history.
-    </div>
-
-    <h5 class="mb-3">Current Metric Values</h5>
-    <div class="row g-3">{}</div>
-
-    <div class="row g-4 mt-2">
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header"><h6 class="mb-0">📋 Metric Definitions</h6></div>
-                <div class="card-body">
-                    <ul class="list-unstyled metric-definitions">
-                        <li><strong>recall_at_n:</strong> Top-N targets vs DrugBank approved drugs. Target: > 0.60</li>
-                        <li><strong>docking_ic50_pearson_r:</strong> Correlation between docking scores and ChEMBL IC50. Target: > 0.45</li>
-                        <li><strong>ranking_kendall_tau:</strong> Ranking stability week-over-week. Target: > 0.80</li>
-                        <li><strong>literature_recall:</strong> % of CIViC-validated targets in top-50. Target: > 0.70</li>
-                        <li><strong>false_positive_rate:</strong> Clinically invalidated targets in shortlist. Target: < 0.20</li>
-                    </ul>
-                </div>
+    <div class="card mb-4" style="border-left: 4px solid var(--warning);">
+        <div class="d-flex align-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <div>
+                <strong style="color:var(--text-main);">Human-gated constraint active:</strong> Weight updates require operator approval before application.
+                No automatic parameter changes. See full history for audit events.
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header"><h6 class="mb-0">⚖️ Weight Update History</h6></div>
-                <div class="card-body p-0">
-                    <table class="table table-dark table-sm mb-0">
-                        <thead><tr><th>Timestamp</th><th>Approved By</th></tr></thead>
-                        <tbody>{}</tbody>
-                    </table>
-                </div>
+    </div>
+
+    <h5 class="mb-3 mt-4" style="font-family:'Outfit'">Current Metric Values</h5>
+    <div class="grid-2 mb-4">{}</div>
+
+    <div class="grid-2 mt-4">
+        <div class="card h-100">
+            <div class="card-header">Metric Definitions</div>
+            <div class="card-body" style="padding: 0;">
+                <ul style="list-style: none; padding: 0; margin: 0; display:flex; flex-direction:column; gap: 1rem;">
+                    <li><strong style="color:var(--brand-blue)">recall_at_n:</strong> Top-N targets vs DrugBank approved drugs. Target: > 0.60</li>
+                    <li><strong style="color:var(--brand-blue)">docking_ic50_pearson_r:</strong> Correlation between docking scores and ChEMBL IC50. Target: > 0.45</li>
+                    <li><strong style="color:var(--brand-blue)">ranking_kendall_tau:</strong> Ranking stability week-over-week. Target: > 0.80</li>
+                    <li><strong style="color:var(--brand-blue)">literature_recall:</strong> % of CIViC-validated targets in top-50. Target: > 0.70</li>
+                    <li><strong style="color:var(--brand-blue)">false_positive_rate:</strong> Clinically invalidated targets in shortlist. Target: < 0.20</li>
+                </ul>
+            </div>
+        </div>
+        <div class="card h-100">
+            <div class="card-header">Weight Update History</div>
+            <div class="table-container p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>Timestamp</th><th>Approved By Entity</th></tr></thead>
+                    <tbody>{}</tbody>
+                </table>
             </div>
         </div>
     </div>

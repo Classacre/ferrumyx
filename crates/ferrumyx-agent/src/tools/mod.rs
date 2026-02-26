@@ -20,24 +20,24 @@ use ironclaw::tools::ToolRegistry;
 
 /// Convenience function: build the default Ferrumyx tool registry natively using IronClaw's registry.
 /// Call once at startup and store in AppState / IronClaw agent context.
-pub fn build_default_registry(db: Arc<ferrumyx_db::Database>) -> ToolRegistry {
-    let mut reg = ToolRegistry::new();
-    reg.register(Arc::new(ingestion_tool::IngestPubmedTool::new(db.clone())));
-    reg.register(Arc::new(ingestion_tool::IngestEuropePmcTool::new(db.clone())));
-    reg.register(Arc::new(ingestion_tool::IngestAllSourcesTool::new(db.clone())));
-    reg.register(Arc::new(ner_tool::NerExtractTool::new()));
-    reg.register(Arc::new(ranker_tool::ScoreTargetsTool::new(db.clone())));
-    reg.register(Arc::new(kg_tool::KgQueryTool::new(db.clone())));
-    reg.register(Arc::new(kg_tool::KgUpsertTool::new(db)));
+pub fn build_default_registry(db: Arc<ferrumyx_db::Database>) -> Arc<ToolRegistry> {
+    let reg = ToolRegistry::new();
+    reg.register_sync(Arc::new(ingestion_tool::IngestPubmedTool::new(db.clone())));
+    reg.register_sync(Arc::new(ingestion_tool::IngestEuropePmcTool::new(db.clone())));
+    reg.register_sync(Arc::new(ingestion_tool::IngestAllSourcesTool::new(db.clone())));
+    reg.register_sync(Arc::new(ner_tool::NerExtractTool::new()));
+    reg.register_sync(Arc::new(ranker_tool::ScoreTargetsTool::new(db.clone())));
+    reg.register_sync(Arc::new(kg_tool::KgQueryTool::new(db.clone())));
+    reg.register_sync(Arc::new(kg_tool::KgUpsertTool::new(db)));
     
     // Register Molecule tools
     let cache_dir = std::path::PathBuf::from("./data/cache");
-    reg.register(Arc::new(molecules_tool::FetchStructureTool::new(cache_dir)));
-    reg.register(Arc::new(molecules_tool::DetectPocketsTool::new(std::path::PathBuf::from("fpocket"))));
-    reg.register(Arc::new(molecules_tool::DockMoleculeTool::new(std::path::PathBuf::from("vina"))));
+    reg.register_sync(Arc::new(molecules_tool::FetchStructureTool::new(cache_dir)));
+    reg.register_sync(Arc::new(molecules_tool::DetectPocketsTool::new(std::path::PathBuf::from("fpocket"))));
+    reg.register_sync(Arc::new(molecules_tool::DockMoleculeTool::new(std::path::PathBuf::from("vina"))));
 
     tracing::info!("ToolRegistry ready");
-    reg
+    Arc::new(reg)
 }
 
 // ─────────────────────────────────────────────

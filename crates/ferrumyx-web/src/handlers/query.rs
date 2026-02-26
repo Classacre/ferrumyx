@@ -74,37 +74,42 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
     let results_html = match results {
         None => String::new(),
         Some((query, ref targets)) if targets.is_empty() => format!(
-            r#"<div class="alert alert-warning mt-4">No targets found for query: <em>{}</em>. Try broadening your filters or running more ingestion.</div>"#,
+            r#"<div class="card mt-4 p-4 text-center">
+                <div class="text-warning mb-2"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
+                <div class="text-muted">No targets found for query: <em class="text-main">{}</em>. Try broadening your filters or running more ingestion.</div>
+            </div>"#,
             query
         ),
         Some((query, targets)) => {
             let rows: String = targets.iter().map(|t| {
                 let tier_badge = match t.shortlist_tier.as_str() {
-                    "primary" => r#"<span class="badge bg-success">Primary</span>"#,
-                    "secondary" => r#"<span class="badge bg-warning text-dark">Secondary</span>"#,
-                    _ => r#"<span class="badge bg-secondary">Excluded</span>"#,
+                    "primary" => r#"<span class="badge badge-success">Primary</span>"#,
+                    "secondary" => r#"<span class="badge badge-warning">Secondary</span>"#,
+                    _ => r#"<span class="badge badge-outline">Excluded</span>"#,
                 };
                 let flags_html = t.flags.iter().map(|f| format!(
-                    r#"<span class="badge bg-danger me-1">{}</span>"#, f
+                    r#"<span class="badge badge-danger" style="margin-right:4px">{}</span>"#, f
                 )).collect::<String>();
                 format!(r#"
                 <tr>
                     <td><span class="rank-badge">#{}</span></td>
-                    <td><a href="/targets?gene={}" class="gene-link fw-bold">{}</a></td>
-                    <td><span class="badge badge-cancer">{}</span></td>
-                    <td><div class="d-flex align-items-center gap-2">
-                        <div class="progress flex-grow-1" style="height:6px">
-                            <div class="progress-bar bg-primary" style="width:{}%"></div>
+                    <td><a href="/targets?gene={}" style="font-weight:700;">{}</a></td>
+                    <td><span class="badge badge-outline">{}</span></td>
+                    <td>
+                        <div class="d-flex align-center gap-3">
+                            <div class="progress-track" style="width: 100px;">
+                                <div class="progress-bar brand" style="width:{}%"></div>
+                            </div>
+                            <span class="score-value">{:.3}</span>
                         </div>
-                        <code>{:.3}</code>
-                    </div></td>
-                    <td><code class="text-warning">{:.3}</code></td>
+                    </td>
+                    <td><span style="color:var(--warning); font-family:'Inter',sans-serif; font-weight:600;">{:.3}</span></td>
                     <td>{}</td>
                     <td>{}</td>
                     <td>
-                        <div class="btn-group btn-group-sm">
-                            <a href="/targets?gene={}&cancer={}" class="btn btn-outline-primary">Detail</a>
-                            <a href="/molecules?gene={}" class="btn btn-outline-secondary">Dock</a>
+                        <div class="d-flex gap-2">
+                            <a href="/targets?gene={}&cancer={}" class="btn btn-outline btn-sm">Insights</a>
+                            <a href="/molecules?gene={}" class="btn btn-outline btn-sm">Dock</a>
                         </div>
                     </td>
                 </tr>"#,
@@ -117,17 +122,23 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
             format!(r#"
             <div class="card mt-4">
                 <div class="card-header">
-                    <h5 class="mb-0">Results for: <em class="text-primary">{}</em>
-                        <span class="badge bg-secondary ms-2">{} targets</span>
-                    </h5>
+                    <div>Results for: <em class="text-gradient">{}</em></div>
+                    <span class="badge badge-outline">{} targets</span>
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-dark table-hover mb-0">
-                        <thead><tr>
-                            <th>#</th><th>Gene</th><th>Cancer</th>
-                            <th>Score</th><th>Conf. Adj.</th>
-                            <th>Tier</th><th>Flags</th><th>Actions</th>
-                        </tr></thead>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Gene Target</th>
+                                <th>Indication</th>
+                                <th>Priority Score</th>
+                                <th>Conf. Adj.</th>
+                                <th>Tier</th>
+                                <th>Flags</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
                         <tbody>{}</tbody>
                     </table>
                 </div>
@@ -136,90 +147,101 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
     };
 
     format!(r#"<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ferrumyx — Target Query</title>
+    <title>Target Query — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        .query-textarea {{
+            min-height: 120px;
+            resize: vertical;
+        }}
+        .form-row {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }}
+    </style>
 </head>
 <body>
 {}
 <main class="main-content">
     <div class="page-header">
         <div>
-            <h1 class="page-title">🔍 Target Query</h1>
-            <p class="text-muted">Natural language scientific queries with structured filters</p>
+            <h1 class="page-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                Target Query Engine
+            </h1>
+            <p class="text-muted">Natural language scientific queries with structured semantic filters</p>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-body">
-            <form method="POST" action="/query">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Research Question</label>
-                    <textarea name="query_text" class="form-control form-control-lg query-textarea"
-                        rows="3" placeholder="e.g. What are promising synthetic lethal targets in KRAS G12D pancreatic cancer with structural druggability and low prior inhibitor exploration?"
-                        required></textarea>
-                    <div class="form-text">Ferrumyx will parse entities and map to structured filters below.</div>
-                </div>
+        <form method="POST" action="/query" class="d-flex flex-column gap-4">
+            <div>
+                <label class="form-label" style="font-family:'Outfit',sans-serif; font-size:1.1rem; color:var(--text-main);">Research Question</label>
+                <textarea name="query_text" class="form-control query-textarea"
+                    placeholder="e.g. What are promising synthetic lethal targets in KRAS G12D pancreatic cancer with structural druggability and low prior inhibitor exploration?"
+                    required></textarea>
+                <div class="text-muted mt-2" style="font-size:0.85rem;">Ferrumyx will parse entities and map to structured filters below.</div>
+            </div>
 
-                <div class="row g-3 mt-1">
-                    <div class="col-md-3">
-                        <label class="form-label">Cancer Type (OncoTree)</label>
-                        <input type="text" name="cancer_code" class="form-control"
-                            placeholder="PAAD" value="PAAD">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Gene Symbol</label>
-                        <input type="text" name="gene" class="form-control" placeholder="KRAS">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Mutation</label>
-                        <input type="text" name="mutation" class="form-control" placeholder="G12D">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Relationship</label>
-                        <select name="relationship" class="form-select">
-                            <option value="any">Any</option>
-                            <option value="synthetic_lethality" selected>Synthetic Lethality</option>
-                            <option value="inhibits">Inhibition</option>
-                            <option value="activates">Activation</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Min Confidence</label>
-                        <input type="range" name="min_confidence" class="form-range" min="0" max="1" step="0.05" value="0.45"
-                            oninput="document.getElementById('conf-val').textContent=this.value">
-                        <small>Threshold: <span id="conf-val">0.45</span></small>
-                    </div>
+            <div class="form-row">
+                <div>
+                    <label class="form-label">Cancer Type (OncoTree)</label>
+                    <input type="text" name="cancer_code" class="form-control" placeholder="PAAD" value="PAAD">
                 </div>
+                <div>
+                    <label class="form-label">Gene Symbol</label>
+                    <input type="text" name="gene" class="form-control" placeholder="KRAS">
+                </div>
+                <div>
+                    <label class="form-label">Mutation Indicator</label>
+                    <input type="text" name="mutation" class="form-control" placeholder="G12D">
+                </div>
+                <div>
+                    <label class="form-label">Target Relationship</label>
+                    <select name="relationship" class="form-control">
+                        <option value="any">Any Pipeline Edge</option>
+                        <option value="synthetic_lethality" selected>Synthetic Lethality</option>
+                        <option value="inhibits">Therapeutic Inhibition</option>
+                        <option value="activates">Therapeutic Activation</option>
+                    </select>
+                </div>
+            </div>
 
-                <div class="row g-3 mt-1">
-                    <div class="col-md-3">
-                        <label class="form-label">Min Structural Tractability</label>
-                        <input type="number" name="min_structural" class="form-control"
-                            min="0" max="1" step="0.1" value="0.4" placeholder="0.4">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Max ChEMBL Inhibitors</label>
-                        <input type="number" name="max_inhibitors" class="form-control"
-                            min="0" max="1000" value="20" placeholder="20">
-                        <div class="form-text">Novelty filter</div>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Max Results</label>
-                        <input type="number" name="max_results" class="form-control"
-                            min="1" max="100" value="20">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary btn-lg w-100">
-                            🔬 Run Query
-                        </button>
-                    </div>
+            <div class="form-row">
+                <div>
+                    <label class="form-label d-flex justify-between">
+                        <span>Min Confidence</span>
+                        <span id="conf-val" class="text-gradient" style="font-weight:600;">0.45</span>
+                    </label>
+                    <input type="range" name="min_confidence" style="width:100%; margin-top:0.75rem;" min="0" max="1" step="0.05" value="0.45"
+                        oninput="document.getElementById('conf-val').textContent=this.value">
                 </div>
-            </form>
-        </div>
+                <div>
+                    <label class="form-label">Min Structural Tractability</label>
+                    <input type="number" name="min_structural" class="form-control"
+                        min="0" max="1" step="0.1" value="0.4" placeholder="0.4">
+                </div>
+                <div>
+                    <label class="form-label d-flex justify-between">
+                        <span>Max ChEMBL Inhibitors</span>
+                        <span class="badge badge-primary">Novelty</span>
+                    </label>
+                    <input type="number" name="max_inhibitors" class="form-control"
+                        min="0" max="1000" value="20" placeholder="20">
+                </div>
+                <div class="d-flex align-center" style="margin-top: 1.5rem;">
+                    <button type="submit" class="btn btn-primary w-100" style="padding: 0.75rem; font-size: 1.05rem;">
+                        Execution Core
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 
     {}

@@ -8,7 +8,7 @@
 //! Polite pool: set User-Agent with mailto (see CrossRef etiquette)
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, instrument, warn};
 use chrono::NaiveDate;
 
@@ -25,10 +25,9 @@ pub struct CrossRefClient {
 
 impl CrossRefClient {
     pub fn new() -> Self {
-        let client = reqwest::ClientBuilder::new()
-            .user_agent(USER_AGENT)
-            .build()
-            .expect("CrossRef client build failed");
+        let mut client = Client::new().expect("CrossRef client build failed");
+        // Allow adding specific headers or handling user agents if needed by SandboxClient,
+        // but for now SandboxClient encapsulates reqwest configuration.
         Self { client }
     }
 
@@ -36,7 +35,7 @@ impl CrossRefClient {
     #[instrument(skip(self))]
     pub async fn resolve_doi(&self, doi: &str) -> anyhow::Result<Option<PaperMetadata>> {
         let url = format!("{}/{}", CR_API_BASE, doi);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.client.get(&url)?.send().await?;
         if !resp.status().is_success() {
             return Ok(None);
         }
@@ -54,7 +53,7 @@ impl CrossRefClient {
     ) -> anyhow::Result<Vec<serde_json::Value>> {
         let clean = query.replace("[tiab]", "").replace(" AND ", " ");
         let resp = self.client
-            .get(CR_SEARCH_URL)
+            .get(CR_SEARCH_URL)?
             .query(&[
                 ("query", clean.trim()),
                 ("rows",  &max_results.to_string()),

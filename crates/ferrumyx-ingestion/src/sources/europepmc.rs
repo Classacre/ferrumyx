@@ -4,7 +4,7 @@
 //! Endpoint: https://www.ebi.ac.uk/europepmc/webservices/rest/search
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, instrument};
 
 use crate::models::{Author, IngestionSource, PaperMetadata};
@@ -18,7 +18,7 @@ pub struct EuropePmcClient {
 
 impl EuropePmcClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self { client: Client::new().unwrap() }
     }
 }
 
@@ -38,7 +38,7 @@ impl LiteratureSource for EuropePmcClient {
         ];
 
         let resp = self.client
-            .get(EPMC_SEARCH_URL)
+            .get(EPMC_SEARCH_URL)?
             .query(&params)
             .send()
             .await?
@@ -77,7 +77,7 @@ impl LiteratureSource for EuropePmcClient {
                 open_access: r["isOpenAccess"].as_str() == Some("Y"),
                 full_text_url: r["fullTextUrlList"]["fullTextUrl"]
                     .as_array()
-                    .and_then(|urls| {
+                    .and_then(|urls: &Vec<serde_json::Value>| {
                         urls.iter()
                             .find(|u| u["documentStyle"].as_str() == Some("pdf"))
                             .and_then(|u| u["url"].as_str())
@@ -94,7 +94,7 @@ impl LiteratureSource for EuropePmcClient {
             "https://www.ebi.ac.uk/europepmc/webservices/rest/{}/fullTextXML",
             pmcid
         );
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.client.get(&url)?.send().await?;
         if !resp.status().is_success() {
             return Ok(None);
         }

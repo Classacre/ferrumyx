@@ -48,9 +48,9 @@ pub async fn molecules_page(
             let vina_fmt = vina.map(|v| format!("{:.2}", v)).unwrap_or("—".to_string());
             let gnina_fmt = gnina.map(|v| format!("{:.3}", v)).unwrap_or("—".to_string());
             let vina_class = match vina {
-                Some(v) if *v < -8.0 => "text-success fw-bold",
-                Some(v) if *v < -7.0 => "text-warning",
-                _ => "text-muted",
+                Some(v) if *v < -8.0 => "success fw-bold",
+                Some(v) if *v < -7.0 => "warning",
+                _ => "muted",
             };
             let smiles_short = if smiles.len() > 40 {
                 format!("{}…", &smiles[..40])
@@ -58,9 +58,9 @@ pub async fn molecules_page(
                 smiles.clone()
             };
             format!(r#"<tr>
-                <td class="font-monospace small" title="{}">{}</td>
-                <td class="fw-bold">{}</td>
-                <td class="{}">{} kcal/mol</td>
+                <td style="font-family: monospace; font-size: 0.9rem;" title="{}">{}</td>
+                <td style="font-weight:700; color:var(--text-main);">{}</td>
+                <td style="color:var(--{});">{} kcal/mol</td>
                 <td>{}</td>
                 <td class="text-muted small">{}</td>
             </tr>"#, smiles, smiles_short, gene_sym, vina_class, vina_fmt, gnina_fmt, ts)
@@ -68,11 +68,11 @@ pub async fn molecules_page(
     };
 
     Html(format!(r#"<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ferrumyx — Molecules</title>
+    <title>Molecules — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
@@ -80,47 +80,50 @@ pub async fn molecules_page(
 <main class="main-content">
     <div class="page-header">
         <div>
-            <h1 class="page-title">⚗️ Molecule Pipeline</h1>
-            <p class="text-muted">Docking results, ADMET scores, and candidate molecules</p>
+            <h1 class="page-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 2v4.07C7.38 6.55 4.55 9.38 4.07 13H2v-2c0-3.86 3.14-7 7-7zm.3 6V2.3A9.975 9.975 0 0 1 20.3 11H16.3c-.45-1.92-2-3.47-3.92-3.92zM4.07 15C4.55 18.62 7.38 21.45 11 21.93V17.9c-1.92-.45-3.47-2-3.92-3.92H4.07zM15 11v2h5.7c-.42 3.86-3.42 6.86-7.28 7.28V15h-2v5.7C5.56 20.28 2 16.56 2 12V6.3c.42-3.86 3.42-6.86 7.28-7.28v2h2v-2C16.44 2.72 20 6.44 20 11h-5z"/></svg>
+                Molecular Docking Engine
+            </h1>
+            <p class="text-muted">Docking results, ADMET scores, and generated ligand configurations</p>
         </div>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <div class="stat-card">
-                <div class="stat-icon">🧪</div>
-                <div class="stat-value">{}</div>
-                <div class="stat-label">Total Molecules</div>
+    <div class="grid-2 mb-4">
+        <div class="stat-card card-hover">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31.84 2.41 2 2.83V21h2v-1.17c1.16-.42 2-1.52 2-2.83 0-1.66-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10-4c-1.66 0-3 1.34-3 3 0 1.31.84 2.41 2 2.83V21h2v-1.17c1.16-.42 2-1.52 2-2.83 0-1.66-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM7 3C5.34 3 4 4.34 4 6c0 1.31.84 2.41 2 2.83V11h2V8.83C9.16 8.41 10 7.31 10 6c0-1.66-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10-4c-1.66 0-3 1.34-3 3 0 1.31.84 2.41 2 2.83V11h2V8.83c1.16-.42 2-1.52 2-2.83 0-1.66-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM11 11h2v2h-2z"/></svg>
             </div>
+            <div class="stat-value text-gradient">{}</div>
+            <div class="stat-label">Total Candidate Ligands</div>
         </div>
-        <div class="col-md-6">
-            <div class="stat-card">
-                <div class="stat-icon">🔬</div>
-                <div class="stat-value">{}</div>
-                <div class="stat-label">Docking Results</div>
+        <div class="stat-card card-hover">
+            <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
             </div>
+            <div class="stat-value text-gradient">{}</div>
+            <div class="stat-label">Verified Protein-Ligand Pockets</div>
         </div>
     </div>
 
-    <form class="d-flex gap-2 mb-4" method="GET" action="/molecules">
-        <input type="text" name="gene" class="form-control" style="max-width:200px"
-               placeholder="Filter by gene..." value="{}">
-        <button type="submit" class="btn btn-primary">Filter</button>
+    <form class="d-flex gap-3 mb-4 align-center" method="GET" action="/molecules">
+        <input type="text" name="gene" class="form-control" style="max-width:300px"
+               placeholder="Filter pipeline by target gene..." value="{}">
+        <button type="submit" class="btn btn-primary">Filter Run Log</button>
     </form>
 
     <div class="card">
         <div class="card-header">
-            <h6 class="mb-0">Docking Results</h6>
+            <div>Molecular Docking Simulations</div>
         </div>
-        <div class="card-body p-0">
-            <table class="table table-dark table-hover mb-0">
+        <div class="table-container">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th>SMILES</th>
-                        <th>Target Gene</th>
-                        <th>Vina Score</th>
-                        <th>Gnina Score</th>
-                        <th>Docked At</th>
+                        <th>SMILES Reference</th>
+                        <th>Target Pocket</th>
+                        <th>Binding Affinity (Vina)</th>
+                        <th>CNN Score (Gnina)</th>
+                        <th>Timestamp</th>
                     </tr>
                 </thead>
                 <tbody>{}</tbody>

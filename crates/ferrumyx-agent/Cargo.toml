@@ -31,3 +31,5 @@ toml            = { version = "0.8" }
 async-trait     = "0.1"
 reqwest         = { version = "0.12", features = ["json"] }
 ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }
+uuid = { workspace = true, features = ["v4"] }
+chrono.workspace = true

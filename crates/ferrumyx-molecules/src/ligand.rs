@@ -3,7 +3,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{info, debug, warn};
 
 /// A generated or retrieved molecule.
@@ -106,7 +106,7 @@ impl LigandGenerator {
     /// Create a new LigandGenerator.
     pub fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: Client::new().unwrap(),
         }
     }
 
@@ -122,7 +122,7 @@ impl LigandGenerator {
             "https://www.ebi.ac.uk/chembl/api/data/target?target_components__accession={}&format=json",
             target_uniprot_id
         );
-        let resp = match self.client.get(&target_url).send().await {
+        let resp = match self.client.get(&target_url)?.send().await {
             Ok(r) => r,
             Err(e) => {
                 warn!("Failed to fetch target from ChEMBL: {}", e);
@@ -151,7 +151,7 @@ impl LigandGenerator {
             "https://www.ebi.ac.uk/chembl/api/data/mechanism?target_chembl_id={}&format=json&limit=5",
             target_chembl_id
         );
-        let mech_resp = match self.client.get(&mech_url).send().await {
+        let mech_resp = match self.client.get(&mech_url)?.send().await {
             Ok(r) => r,
             Err(_) => return Ok(results),
         };
@@ -173,7 +173,7 @@ impl LigandGenerator {
                 mech.molecule_chembl_id
             );
             
-            if let Ok(resp) = self.client.get(&mol_url).send().await {
+            if let Ok(resp) = self.client.get(&mol_url)?.send().await {
                 if let Ok(mol_body) = resp.json::<ChemblMoleculeResponse>().await {
                     if let Some(mol_data) = mol_body.molecules.first() {
                         if let Some(structs) = &mol_data.molecule_structures {

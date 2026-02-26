@@ -9,7 +9,7 @@
 use async_trait::async_trait;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, instrument, warn};
 
 use crate::models::{Author, IngestionSource, PaperMetadata};
@@ -26,7 +26,7 @@ pub struct PubMedClient {
 impl PubMedClient {
     pub fn new(api_key: Option<String>) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::new().unwrap(),
             api_key,
         }
     }
@@ -48,12 +48,12 @@ impl PubMedClient {
         params.push(("retmax", max.to_string()));
         params.push(("usehistory", "n".to_string()));
 
-        let resp = self.client
-            .get(ESEARCH_URL)
+        let resp: serde_json::Value = self.client
+            .get(ESEARCH_URL)?
             .query(&params)
             .send()
             .await?
-            .json::<serde_json::Value>()
+            .json()
             .await?;
 
         let ids = resp["esearchresult"]["idlist"]
@@ -85,7 +85,7 @@ impl PubMedClient {
         }
 
         let xml = self.client
-            .get(EFETCH_URL)
+            .get(EFETCH_URL)?
             .query(&params)
             .send()
             .await?
@@ -110,7 +110,7 @@ impl LiteratureSource for PubMedClient {
              ?db=pmc&id={}&rettype=xml&retmode=xml",
             pmcid
         );
-        let xml = self.client.get(&url).send().await?.text().await?;
+        let xml = self.client.get(&url)?.send().await?.text().await?;
         if xml.trim().is_empty() || xml.contains("<error>") {
             return Ok(None);
         }

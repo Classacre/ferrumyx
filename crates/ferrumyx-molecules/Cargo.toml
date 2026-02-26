@@ -15,3 +15,6 @@ tokio = { version = "1.0", features = ["full"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 ferrumyx-common = { path = "../ferrumyx-common" }
 ferrumyx-db = { path = "../ferrumyx-db" }
+
+[dev-dependencies]
+tempfile = "3.26.0"

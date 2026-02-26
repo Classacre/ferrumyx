@@ -34,6 +34,7 @@ impl KgFactRepository {
         let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
         
         table.add(iter).execute().await?;
+
         Ok(())
     }
     
@@ -60,6 +61,7 @@ impl KgFactRepository {
         );
         
         table.add(iter).execute().await?;
+
         Ok(())
     }
     

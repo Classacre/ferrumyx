@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::weights::WeightVector;
 use crate::depmap_provider::DepMapProvider;
+use crate::tcga_provider::TcgaProvider;
+use crate::gtex_provider::GtexProvider;
 use crate::normalise::normalise_ceres;
 
 /// Raw component scores for a (gene, cancer) pair.
@@ -187,17 +189,56 @@ pub fn compute_crispr_component(
     Some(normalise_ceres(ceres))
 }
 
-/// Compute component scores with DepMap integration.
-///
-/// This is a convenience function that wires in the DepMap provider
-/// for the CRISPR dependency component.
-pub fn compute_component_scores_with_depmap(
+/// Compute TCGA survival correlation component score.
+pub fn compute_survival_component(
     gene: &str,
     cancer_type: &str,
+    tcga: &dyn TcgaProvider,
+) -> Option<f64> {
+    let correlation = tcga.get_survival_correlation(gene, cancer_type)?;
+    // the simulation returns correlation -1.0 to 1.0, map to 0.0-1.0
+    Some((correlation + 1.0) / 2.0)
+}
+
+/// Compute expression specificity from GTEx.
+pub fn compute_expression_component(
+    gene: &str,
+    tumour_tpm: Option<f64>,
+    gtex: &dyn GtexProvider,
+) -> Option<f64> {
+    let t_tpm = tumour_tpm?;
+    let median_exprs = gtex.get_median_expression(gene)?;
+    
+    // Average normal expression across all GTEx tissues
+    let sum: f64 = median_exprs.values().sum();
+    let count = median_exprs.len() as f64;
+    
+    if count == 0.0 {
+        return None;
+    }
+    let baseline = sum / count;
+    
+    if baseline == 0.0 {
+        return Some(1.0); // Extremely tumor specific
+    }
+    
+    let ratio = t_tpm / baseline;
+    // Cap at 10x ratio
+    Some((ratio / 10.0).clamp(0.0, 1.0))
+}
+
+/// Compute component scores with DepMap, TCGA, and GTEx integration.
+///
+/// This is a convenience function that wires in the providers
+/// for the automated components.
+pub fn compute_component_scores_with_providers(
+    gene: &str,
+    cancer_type: &str,
+    tumour_tpm: Option<f64>,
     depmap: &dyn DepMapProvider,
+    tcga: &dyn TcgaProvider,
+    gtex: &dyn GtexProvider,
     mutation_freq: Option<f64>,
-    survival_correlation: Option<f64>,
-    expression_specificity: Option<f64>,
     structural_tractability: Option<f64>,
     pocket_detectability: Option<f64>,
     novelty_score: Option<f64>,
@@ -205,6 +246,12 @@ pub fn compute_component_scores_with_depmap(
     literature_novelty: Option<f64>,
 ) -> ComponentScoresRaw {
     let crispr_dependency = depmap.get_mean_ceres(gene, cancer_type);
+    let survival_correlation = tcga.get_survival_correlation(gene, cancer_type);
+    
+    let expression_specificity = match tumour_tpm {
+        Some(tpm) => compute_expression_component(gene, Some(tpm), gtex),
+        None => None
+    };
     
     ComponentScoresRaw {
         mutation_freq,
@@ -223,6 +270,8 @@ pub fn compute_component_scores_with_depmap(
 mod tests {
     use super::*;
     use crate::depmap_provider::MockDepMapProvider;
+    use crate::tcga_provider::MockTcgaProvider;
+    use crate::gtex_provider::MockGtexProvider;
 
     #[test]
     fn test_composite_score_range() {
@@ -290,5 +339,32 @@ mod tests {
         
         let score = compute_crispr_component("KRAS", "LUAD", &provider);
         assert!(score.is_none());
+    }
+
+    #[test]
+    fn test_compute_survival_component() {
+        let tcga = MockTcgaProvider::new()
+            .with("TP53", "BRCA", -0.5); // Better survival -> negative correlation
+        
+        let score = compute_survival_component("TP53", "BRCA", &tcga);
+        assert!(score.is_some());
+        // -0.5 mapped to 0.0-1.0 is (-0.5 + 1.0) / 2.0 = 0.25
+        assert_eq!(score.unwrap(), 0.25);
+    }
+
+    #[test]
+    fn test_compute_expression_component() {
+        let gtex = MockGtexProvider::new()
+            .with("HER2", "Breast", 5.0)
+            .with("HER2", "Lung", 2.0); // Mean = 3.5
+        
+        // Tumour TPM = 35.0 (10x ratio)
+        let score_max = compute_expression_component("HER2", Some(35.0), &gtex);
+        assert!(score_max.is_some());
+        assert_eq!(score_max.unwrap(), 1.0); // 10x ratio clamped to 1.0
+
+        // Tumour TPM = 17.5 (5x ratio)
+        let score_mid = compute_expression_component("HER2", Some(17.5), &gtex);
+        assert_eq!(score_mid.unwrap(), 0.5); // 5x ratio -> 0.5
     }
 }

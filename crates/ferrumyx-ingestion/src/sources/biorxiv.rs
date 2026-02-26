@@ -7,7 +7,7 @@
 //! which returns article metadata matching a query string.
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, instrument, warn};
 use chrono::NaiveDate;
 
@@ -27,7 +27,7 @@ pub struct BioRxivClient {
 impl BioRxivClient {
     pub fn new_biorxiv() -> Self {
         Self {
-            client: Client::new(),
+            client: Client::new().unwrap(),
             server: "biorxiv",
             base:   BIORXIV_SEARCH_URL,
         }
@@ -35,7 +35,7 @@ impl BioRxivClient {
 
     pub fn new_medrxiv() -> Self {
         Self {
-            client: Client::new(),
+            client: Client::new().unwrap(),
             server: "medrxiv",
             base:   MEDRXIV_SEARCH_URL,
         }
@@ -51,7 +51,7 @@ impl BioRxivClient {
         max_results: usize,
     ) -> anyhow::Result<Vec<PaperMetadata>> {
         let url = format!("{}/{}/0/json", self.base, interval);
-        let resp = self.client.get(&url).send().await?.json::<serde_json::Value>().await?;
+        let resp = self.client.get(&url)?.send().await?.json::<serde_json::Value>().await?;
 
         let collection = resp["collection"]
             .as_array()
@@ -138,7 +138,7 @@ impl LiteratureSource for BioRxivClient {
     async fn fetch_full_text(&self, doi: &str) -> anyhow::Result<Option<String>> {
         // bioRxiv full-text HTML
         let url = format!("https://www.biorxiv.org/content/{}.full", doi);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.client.get(&url)?.send().await?;
         if !resp.status().is_success() {
             return Ok(None);
         }

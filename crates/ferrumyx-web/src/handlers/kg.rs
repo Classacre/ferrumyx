@@ -99,30 +99,30 @@ pub async fn kg_page(
 
     let fact_rows: String = if display_facts.is_empty() {
         format!(r#"<tr><td colspan="5" class="text-center text-muted py-4">
-            No KG facts found for <strong>{}</strong>. Run ingestion first.
+            No KG facts found for <strong style="color:var(--text-main);">{}</strong>. Run the ingestion pipeline first.
         </td></tr>"#, gene)
     } else {
         display_facts.iter().map(|(subj, pred, obj, conf, src)| {
-            let conf_class = if *conf > 0.7 { "text-success" }
-                             else if *conf > 0.4 { "text-warning" }
-                             else { "text-danger" };
-            let pred_badge = format!(r#"<span class="badge badge-predicate">{}</span>"#, pred);
+            let conf_class = if *conf > 0.7 { "success" }
+                             else if *conf > 0.4 { "warning" }
+                             else { "danger" };
+            let pred_badge = format!(r#"<span class="badge badge-outline">{}</span>"#, pred);
             format!(r#"<tr>
-                <td class="fw-bold">{}</td>
+                <td style="font-weight:600; color:var(--text-main);">{}</td>
                 <td>{}</td>
-                <td class="fw-bold">{}</td>
-                <td class="{}">{:.3}</td>
-                <td class="small text-muted">{}</td>
+                <td style="font-weight:600; color:var(--text-main);">{}</td>
+                <td><span class="badge badge-{}">{:.3}</span></td>
+                <td class="text-muted">{}</td>
             </tr>"#, subj, pred_badge, obj, conf_class, conf, src)
         }).collect()
     };
 
     Html(format!(r#"<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ferrumyx - Knowledge Graph</title>
+    <title>Knowledge Graph — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
@@ -130,32 +130,39 @@ pub async fn kg_page(
 <main class="main-content">
     <div class="page-header">
         <div>
-            <h1 class="page-title">Web Knowledge Graph Explorer</h1>
-            <p class="text-muted">Browse KG facts, confidence scores, and evidence provenance</p>
+            <h1 class="page-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3v.15l-3.32 1.62A2.97 2.97 0 0 0 8 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.6 0 1.15-.18 1.61-.48l3.36 1.64c-.01.12-.04.24-.04.37 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3c-.62 0-1.18.19-1.64.5l-3.32-1.62C10.96 12.15 11 12.04 11 11.91V11.9z"/></svg>
+                Knowledge Graph
+            </h1>
+            <p class="text-muted">Browse multi-modal KG facts, evidence confidence, and provenance</p>
         </div>
     </div>
 
-    <form class="d-flex gap-2 mb-4" method="GET" action="/kg">
-        <input type="text" name="gene" class="form-control" style="max-width:200px"
-               placeholder="Gene symbol..." value="{}">
-        <button type="submit" class="btn btn-primary">Search</button>
+    <form class="d-flex gap-3 mb-4 align-center" method="GET" action="/kg">
+        <input type="text" name="gene" class="form-control" style="max-width:300px"
+               placeholder="Search entities (e.g. KRAS)..." value="{}">
+        <button type="submit" class="btn btn-primary">Locate Node</button>
     </form>
 
     <div class="card">
         <div class="card-header">
-            <h6 class="mb-0">Facts involving <span class="text-primary">{}</span>
-                <span class="badge bg-secondary ms-2">{} facts</span>
-            </h6>
+            <div>Edges connected to <span class="text-gradient" style="font-weight:700">{}</span></div>
+            <span class="badge badge-outline">{} connections</span>
         </div>
-        <div class="card-body p-0">
-            <table class="table table-dark table-hover mb-0">
+        <div class="table-container">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th>Subject</th><th>Predicate</th><th>Object</th>
-                        <th>Confidence</th><th>Source</th>
+                        <th>Subject Entity</th>
+                        <th>Predicate Relation</th>
+                        <th>Object Entity</th>
+                        <th>Trust Score</th>
+                        <th>Provenance</th>
                     </tr>
                 </thead>
-                <tbody>{}</tbody>
+                <tbody>
+                    {}
+                </tbody>
             </table>
         </div>
     </div>

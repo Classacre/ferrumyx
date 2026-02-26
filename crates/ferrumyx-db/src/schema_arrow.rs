@@ -475,3 +475,66 @@ pub fn record_to_entity_mention(batch: &RecordBatch, row: usize) -> Result<Entit
             .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
+
+// =============================================================================
+// KgConflict Arrow Conversion
+// =============================================================================
+
+pub fn kg_conflict_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("fact_a_id", DataType::Utf8, false),
+        Field::new("fact_b_id", DataType::Utf8, false),
+        Field::new("conflict_type", DataType::Utf8, false),
+        Field::new("net_confidence", DataType::Float32, false),
+        Field::new("resolution", DataType::Utf8, false),
+        Field::new("detected_at", DataType::Utf8, false),
+    ]))
+}
+
+pub fn kg_conflict_to_record(conflict: &KgConflict) -> Result<RecordBatch> {
+    let schema = kg_conflict_schema();
+    
+    let id = StringArray::from(vec![conflict.id.to_string()]);
+    let fact_a_id = StringArray::from(vec![conflict.fact_a_id.to_string()]);
+    let fact_b_id = StringArray::from(vec![conflict.fact_b_id.to_string()]);
+    let conflict_type = StringArray::from(vec![conflict.conflict_type.as_str()]);
+    let net_confidence = Float32Array::from(vec![conflict.net_confidence]);
+    let resolution = StringArray::from(vec![conflict.resolution.as_str()]);
+    let detected_at = StringArray::from(vec![conflict.detected_at.to_rfc3339()]);
+    
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(fact_a_id),
+            Arc::new(fact_b_id),
+            Arc::new(conflict_type),
+            Arc::new(net_confidence),
+            Arc::new(resolution),
+            Arc::new(detected_at),
+        ],
+    ).map_err(|e| DbError::Arrow(e.to_string()))
+}
+
+pub fn record_to_kg_conflict(batch: &RecordBatch, row: usize) -> Result<KgConflict> {
+    let get_string = |col: usize| -> String {
+        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+    };
+    
+    let get_f32 = |col: usize| -> f32 {
+        batch.column(col).as_any().downcast_ref::<Float32Array>().unwrap().value(row)
+    };
+    
+    Ok(KgConflict {
+        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        fact_a_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        fact_b_id: uuid::Uuid::parse_str(&get_string(2)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        conflict_type: get_string(3),
+        net_confidence: get_f32(4),
+        resolution: get_string(5),
+        detected_at: chrono::DateTime::parse_from_rfc3339(&get_string(6))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
+    })
+}

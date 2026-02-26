@@ -11,7 +11,7 @@
 //!   - source      = ClinicalTrials
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use tracing::{debug, instrument};
 
 use crate::models::{Author, IngestionSource, PaperMetadata};
@@ -25,7 +25,7 @@ pub struct ClinicalTrialsClient {
 
 impl ClinicalTrialsClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self { client: Client::new().unwrap() }
     }
 
     async fn search_studies(
@@ -34,7 +34,7 @@ impl ClinicalTrialsClient {
         max_results: usize,
     ) -> anyhow::Result<Vec<serde_json::Value>> {
         let resp = self.client
-            .get(CT_API_URL)
+            .get(CT_API_URL)?
             .query(&[
                 ("query.term",    query),
                 ("pageSize",      &max_results.to_string()),

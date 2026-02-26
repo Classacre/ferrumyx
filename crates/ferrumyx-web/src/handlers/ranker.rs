@@ -313,123 +313,138 @@ pub async fn api_ranker_stats(
 
 fn render_ranker_page(_result: Option<RankedTarget>) -> String {
     format!(
-        r##"
-<!DOCTYPE html>
-<html>
+        r##"<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Ferrumyx — Target Ranker</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Target Ranker Engine — Ferrumyx</title>
+    <link rel="stylesheet" href="/static/css/main.css">
     <style>
-        body {{ padding: 2rem; background: #f8f9fa; }}
-        .container {{ max-width: 1400px; }}
-        .card {{ margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .score-primary {{ color: #198754; font-weight: bold; }}
-        .score-secondary {{ color: #fd7e14; font-weight: bold; }}
-        .score-excluded {{ color: #6c757d; }}
-        .component-bar {{ height: 20px; background: #e9ecef; border-radius: 4px; }}
-        .component-fill {{ height: 100%; border-radius: 4px; }}
+        .score-primary {{ color: var(--success); font-weight: 700; font-family: 'Outfit'; }}
+        .score-secondary {{ color: var(--warning); font-weight: 700; font-family: 'Outfit'; }}
+        .score-excluded {{ color: var(--text-muted); font-weight: 700; font-family: 'Outfit'; }}
+        .component-bar {{ height: 12px; background: var(--bg-surface); border: 1px solid var(--border-glass); border-radius: 6px; overflow: hidden; }}
+        .component-fill {{ height: 100%; border-radius: 0; background: var(--brand-blue); transition: width 0.5s ease-out; }}
+        .component-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }}
+        .method-table td:first-child {{ color: var(--text-main); font-weight: 500; border-bottom: 1px solid var(--border-glass); }}
+        .method-table td:last-child {{ text-align: right; color: var(--brand-purple); font-weight: 700; border-bottom: 1px solid var(--border-glass); }}
     </style>
 </head>
 <body>
     {}
-    <div class="container">
-        <h2>🎯 Target Ranker</h2>
-        <p class="text-muted">Multi-factor target prioritization scoring engine</p>
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    Target Prioritization Engine
+                </h1>
+                <p class="text-muted">Multi-factor composite scoring and algorithmic shortlisting matrix</p>
+            </div>
+        </div>
+
+        <div class="grid-2 align-start" style="grid-template-columns: 350px 1fr; gap: 2rem;">
+            <div class="card h-100">
+                <div class="card-header border-bottom border-glass pb-3 mb-3">Execute Target Computation</div>
+                <div class="card-body p-0">
+                    <form id="scoreForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small text-uppercase" style="letter-spacing:1px">Target Locus</label>
+                            <input type="text" id="geneInput" class="form-control font-outfit" style="font-size:1.1rem; color:var(--text-main)" placeholder="e.g., KRAS" value="KRAS">
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-muted small text-uppercase" style="letter-spacing:1px">Pathology Vector</label>
+                            <select id="cancerInput" class="form-control font-outfit" style="font-size:1.05rem; color:var(--text-main)">
+                                <option value="PAAD" selected>Pancreatic Adenocarcinoma (PAAD)</option>
+                                <option value="LUAD">Lung Adenocarcinoma (LUAD)</option>
+                                <option value="BRCA">Breast Cancer (BRCA)</option>
+                                <option value="COAD">Colon Adenocarcinoma (COAD)</option>
+                                <option value="GBM">Glioblastoma (GBM)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 py-3">Synthesize Matrix Score</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card h-100">
+                <div class="card-header border-bottom border-glass pb-3">Computation Matrix Topology</div>
+                <div class="card-body p-0 pt-3" id="scoreResult">
+                    <div class="d-flex align-center justify-center p-5 text-muted h-100 w-100" style="min-height:200px; border:1px dashed var(--border-glass); border-radius:8px;">
+                        Provide a target locus and pathology vector to compute the synthesis score.
+                    </div>
+                </div>
+            </div>
+        </div>
         
-        <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Score Target</h5>
-                        <form id="scoreForm">
-                            <div class="mb-3">
-                                <label class="form-label">Gene Symbol</label>
-                                <input type="text" id="geneInput" class="form-control" placeholder="e.g., KRAS" value="KRAS">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Cancer Type</label>
-                                <select id="cancerInput" class="form-select">
-                                    <option value="PAAD" selected>Pancreatic Adenocarcinoma (PAAD)</option>
-                                    <option value="LUAD">Lung Adenocarcinoma (LUAD)</option>
-                                    <option value="BRCA">Breast Cancer (BRCA)</option>
-                                    <option value="COAD">Colon Adenocarcinoma (COAD)</option>
-                                    <option value="GBM">Glioblastoma (GBM)</option>
-                                </select>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Compute Score</button>
-                        </form>
+        <div class="grid-2 gap-4 mt-4">
+            <div class="card h-100">
+                <div class="card-header border-bottom border-glass pb-3 mb-3 d-flex justify-between">
+                    <div>Top Computed Candidates <span class="text-muted" id="cancerLabel">PAAD</span></div>
+                    <span class="badge badge-outline">Algorithmic Rank</span>
+                </div>
+                <div class="table-container p-0">
+                    <div id="topTargets">
+                        <div class="p-4 text-center text-muted">Retrieving network data...</div>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Score Result</h5>
-                        <div id="scoreResult">
-                            <p class="text-muted">Enter a gene and cancer type to compute a target score.</p>
-                        </div>
+            <div class="card h-100" style="border-left: 4px solid var(--brand-blue);">
+                <div class="card-body p-4">
+                    <h5 class="card-title font-outfit mb-3">Mathematical Synthesis Model</h5>
+                    <p class="text-muted small">The composite rank function S(g,c) calculates weighted heuristic bounds:</p>
+                    <div class="p-3 mb-3 font-outfit text-center" style="background:var(--bg-card); border:1px solid var(--border-glass); border-radius:6px; color:var(--text-main); font-size:1.1rem; letter-spacing:1px;">
+                        S(g,c) = Σ(wᵢ × nᵢ) − P(g,c)
                     </div>
+                    <p class="text-muted small mb-3">Parameters:</p>
+                    <ul class="text-muted small mb-4" style="padding-left:1.5rem">
+                        <li><strong style="color:var(--text-main)">wᵢ</strong> — Feature weight vector magnitude (normalized = 1.0)</li>
+                        <li><strong style="color:var(--text-main)">nᵢ</strong> — Feature scalar projection (0.0–1.0 bounds)</li>
+                        <li><strong style="color:var(--text-main)">P(g,c)</strong> — Penalty heuristic (saturation, structural constraints)</li>
+                    </ul>
+                    
+                    <h6 class="font-outfit text-muted mb-2 text-uppercase" style="font-size:0.8rem; letter-spacing:1px">Configured Weights</h6>
+                    <table class="table mb-0 method-table" style="font-size: 0.85rem">
+                        <tbody>
+                            <tr><td>Mutation Frequency</td><td>20%</td></tr>
+                            <tr><td>CRISPR Dependency</td><td>18%</td></tr>
+                            <tr><td>Survival Correlation</td><td>15%</td></tr>
+                            <tr><td>Expression Specificity</td><td>12%</td></tr>
+                            <tr><td>Structural Tractability</td><td>12%</td></tr>
+                            <tr><td>Pocket Detectability</td><td>8%</td></tr>
+                            <tr><td>Novelty Density</td><td>7%</td></tr>
+                            <tr><td>Pathway Orthogonality</td><td>5%</td></tr>
+                            <tr><td>Literature Deficit</td><td>3%</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Top Targets for <span id="cancerLabel">PAAD</span></h5>
-                <div id="topTargets">
-                    <p class="text-muted">Loading...</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card mt-4">
-            <div class="card-body">
-                <h5 class="card-title">Scoring Methodology</h5>
-                <p>The composite score S(g,c) is computed as:</p>
-                <pre>S(g,c) = Σ(wᵢ × nᵢ) − P(g,c)</pre>
-                <p>Where:</p>
-                <ul>
-                    <li><strong>wᵢ</strong> — Weight for component i (sums to 1.0)</li>
-                    <li><strong>nᵢ</strong> — Normalised score for component i (0.0–1.0)</li>
-                    <li><strong>P(g,c)</strong> — Penalty term for saturation, low specificity, etc.</li>
-                </ul>
-                <h6>Component Weights (Default)</h6>
-                <table class="table table-sm">
-                    <tr><td>Mutation Frequency</td><td>20%</td></tr>
-                    <tr><td>CRISPR Dependency</td><td>18%</td></tr>
-                    <tr><td>Survival Correlation</td><td>15%</td></tr>
-                    <tr><td>Expression Specificity</td><td>12%</td></tr>
-                    <tr><td>Structural Tractability</td><td>12%</td></tr>
-                    <tr><td>Pocket Detectability</td><td>8%</td></tr>
-                    <tr><td>Novelty Score</td><td>7%</td></tr>
-                    <tr><td>Pathway Independence</td><td>5%</td></tr>
-                    <tr><td>Literature Novelty</td><td>3%</td></tr>
-                </table>
-            </div>
-        </div>
-    </div>
-    
+    </main>
+    <script src="/static/js/main.js"></script>
     <script>
         async function loadTopTargets(cancerType) {{
             try {{
                 const resp = await fetch('/api/ranker/top?cancer_type=' + cancerType);
                 const targets = await resp.json();
                 
-                let html = '<table class="table"><thead><tr><th>Gene</th><th>Score</th><th>Tier</th><th>CRISPR</th></tr></thead><tbody>';
+                let html = '<table class="table mb-0"><thead><tr><th>Locus</th><th>Confidence</th><th>Shortlist</th><th>CRISPR Dep</th></tr></thead><tbody>';
                 for (const t of targets) {{
                     const tierClass = t.tier === 'primary' ? 'score-primary' : t.tier === 'secondary' ? 'score-secondary' : 'score-excluded';
+                    const tierBadge = t.tier === 'primary' ? 'badge-success' : t.tier === 'secondary' ? 'badge-warning' : 'badge-outline';
                     html += `<tr>
-                        <td><strong>${{t.gene}}</strong></td>
+                        <td class="font-outfit" style="color:var(--text-main); font-weight:500">${{t.gene}}</td>
                         <td class="${{tierClass}}">${{(t.confidence_adjusted_score * 100).toFixed(1)}}%</td>
-                        <td><span class="badge ${{t.tier === 'primary' ? 'bg-success' : t.tier === 'secondary' ? 'bg-warning' : 'bg-secondary'}}">${{t.tier}}</span></td>
-                        <td>${{(t.component_scores.crispr_dependency * 100).toFixed(0)}}%</td>
+                        <td><span class="badge ${{tierBadge}}">${{t.tier.toUpperCase()}}</span></td>
+                        <td class="text-muted">${{(t.component_scores.crispr_dependency * 100).toFixed(0)}}%</td>
                     </tr>`;
                 }}
                 html += '</tbody></table>';
                 document.getElementById('topTargets').innerHTML = html;
             }} catch (e) {{
-                document.getElementById('topTargets').innerHTML = '<p class="text-danger">Error loading targets</p>';
+                document.getElementById('topTargets').innerHTML = '<div class="p-4 text-center text-danger">Topology network retrieval error</div>';
             }}
         }}
         
@@ -439,27 +454,31 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                 const result = await resp.json();
                 
                 const tierClass = result.tier === 'primary' ? 'score-primary' : result.tier === 'secondary' ? 'score-secondary' : 'score-excluded';
-                const tierBadge = result.tier === 'primary' ? 'bg-success' : result.tier === 'secondary' ? 'bg-warning' : 'bg-secondary';
+                const tierBadge = result.tier === 'primary' ? 'badge-success' : result.tier === 'secondary' ? 'badge-warning' : 'badge-outline';
                 
                 let html = `
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h4>${{result.gene}} in ${{result.cancer_type}}</h4>
-                            <p class="display-4 ${{tierClass}}">${{(result.confidence_adjusted_score * 100).toFixed(1)}}%</p>
-                            <p><span class="badge ${{tierBadge}}">${{result.tier.toUpperCase()}}</span></p>
-                            <p class="text-muted">Composite: ${{(result.composite_score * 100).toFixed(1)}}% | Penalty: ${{(result.penalty * 100).toFixed(1)}}%</p>
+                    <div class="grid-2 gap-4 pb-4 border-bottom border-glass mb-4">
+                        <div>
+                            <div class="text-muted text-uppercase mb-1" style="font-size:0.8rem; letter-spacing:1px">Composite Output</div>
+                            <div class="d-flex align-center gap-3">
+                                <div class="font-outfit ${{tierClass}}" style="font-size:3.5rem; line-height:1">${{(result.confidence_adjusted_score * 100).toFixed(1)}}<span style="font-size:1.5rem">%</span></div>
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="badge ${{tierBadge}}" style="align-self:flex-start">${{result.tier.toUpperCase()}} TIER</span>
+                                    <span class="text-muted small">C: ${{(result.composite_score * 100).toFixed(1)}}% | P: ${{(result.penalty * 100).toFixed(1)}}%</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <h6>Evidence</h6>
-                            <ul>
-                                <li>Literature: ${{result.evidence.literature_count}} papers</li>
-                                <li>KG Facts: ${{result.evidence.kg_fact_count}} relationships</li>
-                                <li>Clinical Trials: ${{result.evidence.clinical_trials}}</li>
-                            </ul>
+                        <div class="d-flex flex-column justify-center" style="border-left: 1px solid var(--border-glass); padding-left:1.5rem;">
+                            <div class="text-muted text-uppercase mb-2" style="font-size:0.8rem; letter-spacing:1px">Evidence Support Topology</div>
+                            <div class="d-flex flex-column gap-2 text-muted small">
+                                <div class="d-flex justify-between"><span>Literature Base</span> <strong style="color:var(--text-main)">${{result.evidence.literature_count}} corpus artifacts</strong></div>
+                                <div class="d-flex justify-between"><span>Knowledge Graph</span> <strong style="color:var(--text-main)">${{result.evidence.kg_fact_count}} edges</strong></div>
+                                <div class="d-flex justify-between"><span>Clinical Network</span> <strong style="color:var(--text-main)">${{result.evidence.clinical_trials}} trials</strong></div>
+                            </div>
                         </div>
                     </div>
-                    <h6 class="mt-3">Component Scores</h6>
-                    <div class="row">
+                    <div class="text-muted text-uppercase mb-3" style="font-size:0.8rem; letter-spacing:1px">Scalar Constituents</div>
+                    <div class="component-grid">
                 `;
                 
                 const components = [
@@ -470,15 +489,18 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                     ['Structure', result.component_scores.structural_tractability],
                     ['Pocket', result.component_scores.pocket_detectability],
                     ['Novelty', result.component_scores.novelty_score],
-                    ['Pathway', result.component_scores.pathway_independence],
-                    ['Lit. Novelty', result.component_scores.literature_novelty],
+                    ['Pathway Ortho', result.component_scores.pathway_independence],
+                    ['Lit. Deficit', result.component_scores.literature_novelty],
                 ];
                 
                 for (const [name, value] of components) {{
                     const pct = (value * 100).toFixed(0);
-                    const color = value > 0.7 ? '#198754' : value > 0.4 ? '#fd7e14' : '#dc3545';
-                    html += `<div class="col-md-4 mb-2">
-                        <small>${{name}}: ${{pct}}%</small>
+                    const color = value > 0.7 ? 'var(--success)' : value > 0.4 ? 'var(--warning)' : 'var(--danger)';
+                    html += `<div>
+                        <div class="d-flex justify-between align-center mb-1">
+                            <span class="text-muted small">${{name}}</span>
+                            <strong style="color:var(--text-main); font-size:0.85rem">${{pct}}%</strong>
+                        </div>
                         <div class="component-bar"><div class="component-fill" style="width: ${{pct}}%; background: ${{color}};"></div></div>
                     </div>`;
                 }}
@@ -486,7 +508,7 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                 html += '</div>';
                 document.getElementById('scoreResult').innerHTML = html;
             }} catch (e) {{
-                document.getElementById('scoreResult').innerHTML = '<p class="text-danger">Error computing score</p>';
+                document.getElementById('scoreResult').innerHTML = '<div class="p-4 text-center text-danger">Network synthesis interference detected</div>';
             }}
         }}
         
@@ -495,17 +517,21 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
             const gene = document.getElementById('geneInput').value;
             const cancer = document.getElementById('cancerInput').value;
             document.getElementById('cancerLabel').textContent = cancer;
-            scoreTarget(gene, cancer);
-            loadTopTargets(cancer);
+            
+            document.getElementById('scoreResult').innerHTML = '<div class="d-flex align-center justify-center p-5 text-brand-blue flex-column h-100"><div class="loading" style="width:24px; height:24px; border:3px solid rgba(59,130,246,0.3); border-radius:50%; border-top-color:var(--brand-blue); animation:spin 1s linear infinite;"></div><div class="mt-3 small">Synthesizing Network...</div></div>';
+            
+            setTimeout(() => {{
+                scoreTarget(gene, cancer);
+                loadTopTargets(cancer);
+            }}, 400);
         }});
         
-        // Load initial data
         loadTopTargets('PAAD');
         scoreTarget('KRAS', 'PAAD');
     </script>
+    <style>@keyframes spin {{ 100% {{ transform: rotate(360deg); }} }}</style>
 </body>
-</html>
-        "##,
+</html>"##,
         NAV_HTML
     )
 }

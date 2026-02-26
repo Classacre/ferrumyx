@@ -74,6 +74,10 @@ if (Test-Path $configFile) {
 # 6. Build and Run
 Write-Host "Building and starting Ferrumyx Agent..." -ForegroundColor Cyan
 $env:RUST_LOG = "info"
+
+Write-Host "Waiting for server to start, will attempt to open http://localhost:3000 in your browser..." -ForegroundColor Yellow
+Start-Job -ScriptBlock { Start-Sleep -Seconds 5; Start-Process "http://localhost:3000" } | Out-Null
+
 try {
     cargo run --release --bin ferrumyx
 } catch {

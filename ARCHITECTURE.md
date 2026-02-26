@@ -2,10 +2,10 @@
 
 **Autonomous Oncology Drug Discovery Engine**  
 **Built on IronClaw (Rust AI Agent Framework)**  
-**Version:** 0.1.0-draft  
+**Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Pre-implementation design  
-**Date:** 2026-02-21
+**Status:** Active Implementation (Phase 5 Complete)  
+**Date:** 2026-02-26
 
 ---
 
@@ -32,76 +32,80 @@
 
 ## 1.1 High-Level System Architecture Diagram
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                            FERRUMYX SYSTEM                                   │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                        CHANNEL LAYER                                   │  │
-│  │   REPL │ Web Gateway │ HTTP Webhook │ Telegram/Slack (WASM channel)    │  │
-│  └───────────────────────────┬────────────────────────────────────────────┘  │
-│                                │                                             │
-│  ┌───────────────────────────▼────────────────────────────────────────────┐  │
-│  │                     IRONCLAW AGENT CORE                                │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────────┐    │  │
-│  │  │  Intent Router  │  │  Agent Loop     │  │  Routines Engine     │    │  │
-│  │  │  (query parsing)│  │  (plan/act/obs) │  │  (cron/event/        │    │  │
-│  │  └─────────────────┘  └────────┬────────┘  │   webhook)           │    │  │
-│  │                                 │          └──────────────────────┘    │  │
-│  │  ┌──────────────────────────────▼────────────────────────────────────┐ │  │
-│  │  │                    TOOL REGISTRY                                  │ │  │
-│  │  │  Built-in │ MCP Tools │ WASM Tools                                │ │  │
-│  │  └───────────────────────────────────────────────────────────────────┘ │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                    FERRUMYX EXTENSION LAYER                            │  │
-│  │                                                                        │  │
-│  │  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────────┐    │  │
-│  │  │  Ingestion      │  │  KG Builder      │  │  Target Ranker      │    │  │
-│  │  │  Orchestrator   │  │  (LanceDB)       │  │  (Scoring Engine)   │    │  │
-│  │  └────────┬────────┘  └────────┬─────────┘  └─────────┬───────────┘    │  │
-│  │           │                    │                      │                │  │
-│  │  ┌────────▼────────┐  ┌────────▼─────────┐  ┌─────────▼───────────┐    │  │
-│  │  │  Molecule       │  │  Query Handler   │  │  Feedback Loop      │    │  │
-│  │  │  Design Pipeline│  │  (NL → Struct)   │  │  (Self-Improve)     │    │  │
-│  │  └─────────────────┘  └──────────────────┘  └─────────────────────┘    │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                      SANDBOX LAYER                                     │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────────┐                                              │  │
-│  │  │    WASM Sandbox      │                                              │  │
-│  │  │  (NER tools, light   │                                              │  │
-│  │  │   processing)        │                                              │  │
-│  │  │  Cap-based perms     │                                              │  │
-│  │  │  Endpoint allowlist  │                                              │  │
-│  │  │  Credential injection│                                              │  │
-│  │  └──────────────────────┘                                              │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                       STORAGE LAYER                                    │  │
-│  │                                                                        │  │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │  │
-│  │  │                    LanceDB (Embedded Vector DB)                 │   │  │
-│  │  │  papers │ chunks │ embeddings │ entities │ kg_facts │ scores    │   │  │
-│  │  │  molecules │ docking_results │ feedback │ audit_log             │   │  │
-│  │  └─────────────────────────────────────────────────────────────────┘   │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────┐   ┌─────────────────────┐                        │  │
-│  │  │  Workspace FS    │   │  Secrets Store      │                        │  │
-│  │  │  (IronClaw mem.) │   │  (AES-256-GCM)      │                        │  │
-│  │  └──────────────────┘   └─────────────────────┘                        │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                      LLM ABSTRACTION LAYER                             │  │
-│  │  Ollama (local) │ OpenAI │ Anthropic │ Custom HTTP endpoint            │  │
-│  │  Data classification gate → redaction → routing decision               │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    %% Styling
+    classDef layerBox fill:transparent,stroke:#5c6bc0,stroke-width:2px,stroke-dasharray: 5 5
+    classDef coreBox fill:#1e1e24,stroke:#4fc3f7,stroke-width:2px
+    classDef extBox fill:#1e1e24,stroke:#81c784,stroke-width:2px
+    classDef dbBox fill:#1e1e24,stroke:#ffb74d,stroke-width:2px
+
+    subgraph ChannelLayer [Channel Layer]
+        C1[REPL]
+        C2[Web Gateway]
+        C3[HTTP Webhook]
+        C4[Telegram/Slack WASM]
+    end
+    class ChannelLayer layerBox
+
+    subgraph IronClawCore [IronClaw Agent Core]
+        IC1[Intent Router<br/>query parsing]
+        IC2{Agent Loop<br/>plan/act/obs}
+        IC3[Routines Engine<br/>cron/event/webhook]
+        
+        subgraph ToolRegistry [Tool Registry]
+            TR1[Built-in]
+            TR2[MCP Tools]
+            TR3[WASM Tools]
+        end
+        
+        IC1 --> IC2
+        IC2 <--> ToolRegistry
+        IC3 --> IC2
+    end
+    class IronClawCore coreBox
+
+    subgraph FerrumyxExt [Ferrumyx Extension Layer]
+        direction TB
+        F1[Ingestion Orchestrator]
+        F2[KG Builder<br/>LanceDB]
+        F3[Target Ranker<br/>Scoring Engine]
+        
+        F4[Molecule Design Pipeline]
+        F5[Query Handler<br/>NL to Struct]
+        F6[Feedback Loop<br/>Self-Improve]
+        
+        F1 --> F4
+        F2 --> F5
+        F3 --> F6
+    end
+    class FerrumyxExt extBox
+
+    subgraph SandboxLayer [Sandbox Layer]
+        S1[WASM Sandbox<br/>NER tools, light processing<br/>Cap-based perms<br/>Endpoint allowlist]
+    end
+    class SandboxLayer layerBox
+
+    subgraph StorageLayer [Storage Layer]
+        DB1[(LanceDB Embedded Vector DB<br/>papers, chunks, embeddings, kg_facts)]
+        DB2[(Workspace FS<br/>IronClaw mem.)]
+        DB3[(Secrets Store<br/>AES-256-GCM)]
+    end
+    class StorageLayer dbBox
+
+    subgraph LLMLayer [LLM Abstraction Layer]
+        L1[Ollama local / OpenAI / Anthropic]
+        L2[Data classification gate -> redaction -> routing]
+        L1 --- L2
+    end
+    class LLMLayer layerBox
+
+    %% Connections
+    ChannelLayer --> IronClawCore
+    IronClawCore <--> FerrumyxExt
+    FerrumyxExt --> SandboxLayer
+    FerrumyxExt <--> StorageLayer
+    IronClawCore <--> LLMLayer
 ```
 
 ## 1.2 Modular Breakdown
@@ -122,16 +126,16 @@
 
 | Tool | Implementation | Notes |
 |---|---|---|
-| `pubmed_search` | Rust HTTP client | Native |
-| `europepmc_search` | Rust HTTP client | Native |
-| `pdf_parse` | Rust (lopdf/ferrules) | Native |
-| `ner_extract` | Rust (Aho-Corasick trie matching) | Native |
-| `embed_batch` | Rust (Candle + BiomedBERT) | Native |
-| `fpocket_run` | Rust (ONNX) | Native |
-| `vina_dock` | Rust (ONNX) | Native |
-| `rdkit_ops` | Rust (chemrust) | Native |
-| `admet_predict` | Rust (ONNX) | Native |
-| `deepchem_affinity` | Rust (ONNX) | Native |
+| `IngestPubmedTool` | Rust HTTP client | Native integration with PubMed API |
+| `IngestEuropePmcTool` | Rust HTTP client | Native integration with Europe PMC API |
+| `IngestAllSourcesTool` | Rust Orchestration | Parallel multi-source ingestion |
+| `NerExtractTool` | Rust (Aho-Corasick) | Native dictionary-based biomedical NER |
+| `ScoreTargetsTool` | Rust ranking logic | Multi-factor evidence scoring & DepMap |
+| `KgQueryTool` | Rust / LanceDB | Embedded vector DB graph queries |
+| `KgUpsertTool` | Rust / LanceDB | Knowledge graph construction |
+| `FetchStructureTool` | Rust HTTP / PDB | Fetch protein structures |
+| `DetectPocketsTool` | Rust (`fpocket` wrapper) | Detect binding pockets (structural) |
+| `DockMoleculeTool` | Rust (`vina` wrapper) | AutoDock Vina molecular docking |
 
 ### Storage Layer
 
@@ -141,233 +145,253 @@
 
 ## 1.3 Data Flow
 
-```text
-[External APIs / PDFs]
-        │
-        ▼
-┌──────────────────────────────┐
-│     INGESTION PIPELINE       │
-│  1. Paper discovery (API)    │
-│  2. Deduplication check      │
-│  3. Full-text retrieval      │
-│  4. PDF parse (Rust/lopdf)   │
-│  5. Section-aware chunking   │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     EMBEDDING PIPELINE       │
-│  6. BiomedBERT embed (Candle)│
-│  7. LanceDB store            │
-│  8. Full-text index          │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     NER + KG CONSTRUCTION    │
-│  9. Aho-Corasick NER (biomedical)│
-│  10. Entity normalization    │
-│  11. Fact triple extraction  │
-│  12. Confidence scoring      │
-│  13. Append to kg_facts      │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     TARGET PRIORITIZATION    │
-│  14. Join KG + external DBs  │
-│  15. Compute composite score │
-│  16. Store versioned scores  │
-│  17. Shortlist candidates    │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     STRUCTURAL ANALYSIS      │
-│  18. Fetch PDB / AlphaFold   │
-│  19. fpocket detection       │
-│  20. Ligand generation       │
-│  21. AutoDock Vina docking   │
-│  22. ADMET prediction        │
-│  23. Score and rank molecules│
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     QUERY RESPONSE / REPORT  │
-│  24. Assemble evidence bundle│
-│  25. LLM-assisted narrative  │
-│  26. Return ranked JSON      │
-└──────────────────────────────┘
+```mermaid
+flowchart TD
+    classDef pipeline fill:#1e1e24,stroke:#5c6bc0,stroke-width:2px
+
+    EXT[External APIs / PDFs]
+    
+    subgraph IngestionPipeline [INGESTION PIPELINE]
+        direction TB
+        I1[1. Paper discovery API]
+        I2[2. Deduplication check]
+        I3[3. Full-text retrieval]
+        I4[4. PDF parse Rust/lopdf]
+        I5[5. Section-aware chunking]
+        I1 --> I2 --> I3 --> I4 --> I5
+    end
+    class IngestionPipeline pipeline
+    
+    subgraph EmbeddingPipeline [EMBEDDING PIPELINE]
+        direction TB
+        E1[6. BiomedBERT embed Candle]
+        E2[7. LanceDB store]
+        E3[8. Full-text index]
+        E1 --> E2 --> E3
+    end
+    class EmbeddingPipeline pipeline
+    
+    subgraph NER_KGPipeline [NER + KG CONSTRUCTION]
+        direction TB
+        N1[9. Aho-Corasick NER biomedical]
+        N2[10. Entity normalization]
+        N3[11. Fact triple extraction]
+        N4[12. Confidence scoring]
+        N5[13. Append to kg_facts]
+        N1 --> N2 --> N3 --> N4 --> N5
+    end
+    class NER_KGPipeline pipeline
+    
+    subgraph TargetPipeline [TARGET PRIORITIZATION]
+        direction TB
+        T1[14. Join KG + external DBs]
+        T2[15. Compute composite score]
+        T3[16. Store versioned scores]
+        T4[17. Shortlist candidates]
+        T1 --> T2 --> T3 --> T4
+    end
+    class TargetPipeline pipeline
+    
+    subgraph StructuralPipeline [STRUCTURAL ANALYSIS]
+        direction TB
+        S1[18. Fetch PDB / AlphaFold]
+        S2[19. fpocket detection]
+        S3[20. Ligand generation]
+        S4[21. AutoDock Vina docking]
+        S5[22. ADMET prediction]
+        S6[23. Score and rank molecules]
+        S1 --> S2 --> S3 --> S4 --> S5 --> S6
+    end
+    class StructuralPipeline pipeline
+    
+    subgraph QueryPipeline [QUERY RESPONSE / REPORT]
+        direction TB
+        Q1[24. Assemble evidence bundle]
+        Q2[25. LLM-assisted narrative]
+        Q3[26. Return ranked JSON]
+        Q1 --> Q2 --> Q3
+    end
+    class QueryPipeline pipeline
+
+    EXT --> I1
+    I5 --> E1
+    E3 --> N1
+    N5 --> T1
+    T4 --> S1
+    S6 --> Q1
 ```
 
 ## 1.4 Memory Design: LanceDB Schema Overview
 
 ### Core Tables
 
-```sql
--- Papers and source tracking
-CREATE TABLE papers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    doi             TEXT UNIQUE,
-    pmid            TEXT UNIQUE,
-    pmcid           TEXT,
-    title           TEXT NOT NULL,
-    abstract        TEXT,
-    authors         JSONB,         -- [{name, affiliation, orcid}]
-    journal         TEXT,
-    pub_date        DATE,
-    source          TEXT NOT NULL, -- 'pubmed'|'europepmc'|'biorxiv'|...
-    open_access     BOOLEAN DEFAULT FALSE,
-    full_text_url   TEXT,
-    parse_status    TEXT DEFAULT 'pending', -- 'pending'|'parsed'|'failed'
-    ingested_at     TIMESTAMPTZ DEFAULT NOW(),
-    raw_json        JSONB          -- original API response
-);
+```rust
+// Papers and source tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Paper {
+    pub id: uuid::Uuid,
+    pub doi: Option<String>,
+    pub pmid: Option<String>,
+    pub pmcid: Option<String>,
+    pub title: String,
+    pub abstract_text: Option<String>,
+    pub authors: Option<String>,         // JSON string: [{name, affiliation, orcid}]
+    pub journal: Option<String>,
+    pub pub_date: Option<chrono::NaiveDate>,
+    pub source: String,                  // 'pubmed'|'europepmc'|'biorxiv'|...
+    pub open_access: bool,
+    pub full_text_url: Option<String>,
+    pub parse_status: String,            // 'pending'|'parsed'|'failed'
+    pub ingested_at: chrono::DateTime<chrono::Utc>,
+    pub raw_json: Option<String>         // original API response (JSON string)
+}
 
--- Parsed document chunks (section-aware)
-CREATE TABLE chunks (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    paper_id        UUID REFERENCES papers(id) ON DELETE CASCADE,
-    chunk_index     INTEGER NOT NULL,
-    section_type    TEXT,          -- 'abstract'|'intro'|'methods'|'results'|'discussion'
-    section_heading TEXT,
-    content         TEXT NOT NULL,
-    token_count     INTEGER,
-    embedding       vector(768),   -- BiomedBERT-base dimension
-    ts_vector       tsvector,      -- for full-text search
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-CREATE INDEX ON chunks USING GIN (ts_vector);
+// Parsed document chunks (section-aware)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chunk {
+    pub id: uuid::Uuid,
+    pub paper_id: uuid::Uuid,
+    pub chunk_index: i64,
+    pub section_type: Option<String>,    // 'abstract'|'intro'|'methods'|'results'|'discussion'
+    pub section_heading: Option<String>,
+    pub content: String,
+    pub token_count: Option<i64>,
+    pub embedding: Option<Vec<f32>>,     // 768-dim (BiomedBERT-base) or 1024-dim
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Biomedical entities
-CREATE TABLE entities (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    canonical_id    TEXT,          -- HGNC:1100, MESH:D009374, etc.
-    entity_type     TEXT NOT NULL, -- 'gene'|'mutation'|'cancer_type'|'compound'|'pathway'
-    name            TEXT NOT NULL,
-    aliases         TEXT[],
-    external_ids    JSONB,         -- {hgnc, uniprot, ensembl, chebi, ...}
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (canonical_id, entity_type)
-);
+// Biomedical entities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub id: uuid::Uuid,
+    pub canonical_id: Option<String>,    // HGNC:1100, MESH:D009374, etc.
+    pub entity_type: String,             // 'gene'|'mutation'|'cancer_type'|'compound'|'pathway'
+    pub name: String,
+    pub aliases: Option<Vec<String>>,
+    pub external_ids: Option<String>,    // JSON string {hgnc, uniprot, ensembl, chebi, ...}
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Knowledge graph facts (append-only)
-CREATE TABLE kg_facts (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    subject_id      UUID REFERENCES entities(id),
-    predicate       TEXT NOT NULL, -- 'inhibits'|'activates'|'mutated_in'|'synthetic_lethal_with'
-    object_id       UUID REFERENCES entities(id),
-    confidence      FLOAT NOT NULL CHECK (confidence BETWEEN 0 AND 1),
-    evidence_type   TEXT NOT NULL, -- 'experimental'|'computational'|'text_mined'
-    evidence_weight FLOAT NOT NULL,
-    source_pmid     TEXT,
-    source_doi      TEXT,
-    source_db       TEXT,          -- 'cosmic'|'depmap'|'chembl'|...
-    sample_size     INTEGER,
-    study_type      TEXT,          -- 'rct'|'cohort'|'in_vitro'|'cell_line'|...
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    valid_from      TIMESTAMPTZ DEFAULT NOW(),
-    valid_until     TIMESTAMPTZ   -- NULL = currently valid
-);
-CREATE INDEX ON kg_facts (subject_id, predicate, object_id);
-CREATE INDEX ON kg_facts (created_at);
+// Knowledge graph facts (append-only)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KgFact {
+    pub id: uuid::Uuid,
+    pub subject_id: uuid::Uuid,
+    pub predicate: String,               // 'inhibits'|'activates'|'mutated_in'|'synthetic_lethal_with'
+    pub object_id: uuid::Uuid,
+    pub confidence: f32,
+    pub evidence_type: String,           // 'experimental'|'computational'|'text_mined'
+    pub evidence_weight: f32,
+    pub source_pmid: Option<String>,
+    pub source_doi: Option<String>,
+    pub source_db: Option<String>,       // 'cosmic'|'depmap'|'chembl'|...
+    pub sample_size: Option<i64>,
+    pub study_type: Option<String>,      // 'rct'|'cohort'|'in_vitro'|'cell_line'|...
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub valid_from: chrono::DateTime<chrono::Utc>,
+    pub valid_until: Option<chrono::DateTime<chrono::Utc>>
+}
 
--- Target scoring (versioned)
-CREATE TABLE target_scores (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    gene_entity_id      UUID REFERENCES entities(id),
-    cancer_entity_id    UUID REFERENCES entities(id),
-    score_version       INTEGER NOT NULL,
-    composite_score     FLOAT NOT NULL,
-    component_scores    JSONB NOT NULL,  -- {mutation_freq, depmap, survival, ...}
-    weight_vector       JSONB NOT NULL,  -- snapshot of weights used
-    confidence_adj      FLOAT,
-    scored_at           TIMESTAMPTZ DEFAULT NOW(),
-    is_current          BOOLEAN DEFAULT TRUE
-);
-CREATE INDEX ON target_scores (gene_entity_id, cancer_entity_id, is_current);
+// Target scoring (versioned)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TargetScore {
+    pub id: uuid::Uuid,
+    pub gene_entity_id: uuid::Uuid,
+    pub cancer_entity_id: uuid::Uuid,
+    pub score_version: i64,
+    pub composite_score: f32,
+    pub component_scores: String,        // JSON string {mutation_freq, depmap, survival, ...}
+    pub weight_vector: String,           // snapshot of weights used
+    pub confidence_adj: Option<f32>,
+    pub scored_at: chrono::DateTime<chrono::Utc>,
+    pub is_current: bool
+}
 
--- Molecular structures and docking
-CREATE TABLE molecules (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    smiles          TEXT NOT NULL,
-    inchi_key       TEXT UNIQUE,
-    chembl_id       TEXT,
-    name            TEXT,
-    mw              FLOAT,
-    logp            FLOAT,
-    hbd             INTEGER,
-    hba             INTEGER,
-    tpsa            FLOAT,
-    sa_score        FLOAT,          -- synthetic accessibility
-    source          TEXT,           -- 'generated'|'retrieved'|'modified'
-    parent_id       UUID REFERENCES molecules(id),
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Molecular structures and docking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Molecule {
+    pub id: uuid::Uuid,
+    pub smiles: String,
+    pub inchi_key: Option<String>,
+    pub chembl_id: Option<String>,
+    pub name: Option<String>,
+    pub mw: Option<f32>,
+    pub logp: Option<f32>,
+    pub hbd: Option<i64>,
+    pub hba: Option<i64>,
+    pub tpsa: Option<f32>,
+    pub sa_score: Option<f32>,           // synthetic accessibility
+    pub source: Option<String>,          // 'generated'|'retrieved'|'modified'
+    pub parent_id: Option<uuid::Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
-CREATE TABLE docking_results (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    molecule_id     UUID REFERENCES molecules(id),
-    target_gene_id  UUID REFERENCES entities(id),
-    pdb_id          TEXT,
-    pocket_id       TEXT,
-    vina_score      FLOAT,
-    gnina_score     FLOAT,
-    pose_file       TEXT,           -- path in workspace FS
-    admet_scores    JSONB,
-    run_params      JSONB,
-    docked_at       TIMESTAMPTZ DEFAULT NOW()
-);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockingResult {
+    pub id: uuid::Uuid,
+    pub molecule_id: uuid::Uuid,
+    pub target_gene_id: uuid::Uuid,
+    pub pdb_id: Option<String>,
+    pub pocket_id: Option<String>,
+    pub vina_score: Option<f32>,
+    pub gnina_score: Option<f32>,
+    pub pose_file: Option<String>,       // path in workspace FS
+    pub admet_scores: Option<String>,    // JSON string
+    pub run_params: Option<String>,      // JSON string
+    pub docked_at: chrono::DateTime<chrono::Utc>
+}
 
--- Feedback and self-improvement
-CREATE TABLE feedback_events (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_type      TEXT NOT NULL,  -- 'drugbank_validation'|'chembl_correlation'|'trial_outcome'
-    target_gene_id  UUID REFERENCES entities(id),
-    cancer_id       UUID REFERENCES entities(id),
-    metric_name     TEXT NOT NULL,
-    metric_value    FLOAT NOT NULL,
-    evidence_source TEXT,
-    recorded_at     TIMESTAMPTZ DEFAULT NOW()
-);
+// Feedback and self-improvement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackEvent {
+    pub id: uuid::Uuid,
+    pub event_type: String,              // 'drugbank_validation'|'chembl_correlation'|'trial_outcome'
+    pub target_gene_id: uuid::Uuid,
+    pub cancer_id: uuid::Uuid,
+    pub metric_name: String,
+    pub metric_value: f32,
+    pub evidence_source: Option<String>,
+    pub recorded_at: chrono::DateTime<chrono::Utc>
+}
 
-CREATE TABLE weight_update_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    previous_weights JSONB NOT NULL,
-    new_weights      JSONB NOT NULL,
-    trigger_event    TEXT,
-    algorithm        TEXT,          -- 'bayesian'|'manual'|'gradient'
-    approved_by      TEXT,          -- human reviewer ID or 'auto'
-    delta_summary    JSONB,
-    updated_at       TIMESTAMPTZ DEFAULT NOW()
-);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeightUpdateLog {
+    pub id: uuid::Uuid,
+    pub previous_weights: String,        // JSON string
+    pub new_weights: String,             // JSON string
+    pub trigger_event: Option<String>,
+    pub algorithm: Option<String>,       // 'bayesian'|'manual'|'gradient'
+    pub approved_by: Option<String>,     // human reviewer ID or 'auto'
+    pub delta_summary: Option<String>,   // JSON string
+    pub updated_at: chrono::DateTime<chrono::Utc>
+}
 
--- Audit log for all LLM calls
-CREATE TABLE llm_audit_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id      TEXT,
-    model           TEXT NOT NULL,
-    backend         TEXT NOT NULL,  -- 'ollama'|'openai'|'anthropic'|'custom'
-    prompt_tokens   INTEGER,
-    completion_tokens INTEGER,
-    data_class      TEXT NOT NULL,  -- 'PUBLIC'|'INTERNAL'|'CONFIDENTIAL'
-    output_hash     TEXT NOT NULL,
-    latency_ms      INTEGER,
-    called_at       TIMESTAMPTZ DEFAULT NOW()
-);
+// Audit log for all LLM calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmAuditLog {
+    pub id: uuid::Uuid,
+    pub session_id: Option<String>,
+    pub model: String,
+    pub backend: String,                 // 'ollama'|'openai'|'anthropic'|'custom'
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    pub data_class: String,              // 'PUBLIC'|'INTERNAL'|'CONFIDENTIAL'
+    pub output_hash: String,
+    pub latency_ms: Option<i64>,
+    pub called_at: chrono::DateTime<chrono::Utc>
+}
 
--- Ingestion audit log
-CREATE TABLE ingestion_audit (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    paper_doi       TEXT,
-    paper_pmid      TEXT,
-    action          TEXT NOT NULL,  -- 'discovered'|'downloaded'|'parsed'|'embedded'|'failed'
-    source          TEXT NOT NULL,
-    detail          JSONB,
-    occurred_at     TIMESTAMPTZ DEFAULT NOW()
-);
+// Ingestion audit log
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestionAudit {
+    pub id: uuid::Uuid,
+    pub paper_doi: Option<String>,
+    pub paper_pmid: Option<String>,
+    pub action: String,                  // 'discovered'|'downloaded'|'parsed'|'embedded'|'failed'
+    pub source: String,
+    pub detail: Option<String>,          // JSON string
+    pub occurred_at: chrono::DateTime<chrono::Utc>
+}
 ```
 
 ### LanceDB Usage
@@ -387,25 +411,36 @@ let query = table
 
 ## 1.5 LLM Backend Abstraction Layer
 
-```text
-                    ┌──────────────────────────────┐
-                    │   ferrumyx_llm::LlmBackend   │
-                    │   (Rust trait)               │
-                    └──────────────┬───────────────┘
-                                   │
-          ┌────────────────────────┼────────────────────────┐
-          │                        │                        │
-          ▼                        ▼                        ▼
- ┌─────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
- │  OllamaBackend  │    │  OpenAIBackend  │    │  AnthropicBackend    │
- │  (local HTTP)   │    │  (REST API)     │    │  (REST API)          │
- └─────────────────┘    └─────────────────┘    └──────────────────────┘
-          │                        │
-          ▼                        ▼
- ┌─────────────────┐    ┌────────────────────────┐
- │  CustomHttp     │    │  Data Classification   │
- │  Backend        │    │  Gate (pre-call)       │
- └─────────────────┘    └────────────────────────┘
+```mermaid
+flowchart TD
+    classDef abstract fill:#1e1e24,stroke:#ffb74d,stroke-width:2px,stroke-dasharray: 5 5
+    classDef concrete fill:#1e1e24,stroke:#4fc3f7,stroke-width:2px
+    classDef gate fill:#1e1e24,stroke:#ef5350,stroke-width:2px
+
+    Llm[ferrumyx_llm::LlmBackend<br/>Rust trait]
+    class Llm abstract
+
+    subgraph Backends [Backend Implementations]
+        direction LR
+        Ollama[OllamaBackend<br/>local HTTP]
+        OpenAI[OpenAIBackend<br/>REST API]
+        Anthropic[AnthropicBackend<br/>REST API]
+    end
+    class Ollama,OpenAI,Anthropic concrete
+
+    Custom[CustomHttp<br/>Backend]
+    class Custom concrete
+    
+    Gate[Data Classification<br/>Gate pre-call]
+    class Gate gate
+
+    Llm --> Ollama
+    Llm --> OpenAI
+    Llm --> Anthropic
+    
+    Ollama --> Custom
+    OpenAI --> Gate
+    Anthropic --> Gate
 ```
 
 **Trait definition (conceptual Rust):**
@@ -434,55 +469,65 @@ pub struct LlmRouter {
 - `DataClass::Confidential` → local only; remote call = hard block + alert
 
 ### Default Configuration (Phase 3 Completed)
-In Phase 3, we transitioned from a scaffolded LLM backend to leveraging **Ollama** natively as the engine. The agent now runs the `llama3.2` model by default via the `rig-core` integration within `ferrumyx-agent`. The primary node of the entire application architecture is the IronClaw event loop hosted inside `ferrumyx-agent::main.rs`.
+In Phase 3, we transitioned from a scaffolded LLM backend to leveraging **Ollama** natively as the engine. The system includes an automated hardware detection routine embedded within startup scripts to dynamically optimize the chosen Ollama model (e.g., `llama3.2`, `qwen2.5-coder`, `mistral`) depending on available system RAM and resources. The agent runs transparently via the `rig-core` integration within `ferrumyx-agent`. The primary node of the entire application architecture is the IronClaw event loop hosted inside `ferrumyx-agent::main.rs`.
 
 ## 1.6 Self-Improvement Feedback Loop Architecture
 
-```text
-┌────────────────────────────────────────────────────────┐
-│           FEEDBACK COLLECTION LAYER                    │
-│  (scheduled routines: daily/weekly)                    │
-│  - ChEMBL activity data pull                           │
-│  - ClinicalTrials.gov outcome updates                  │
-│  - DrugBank approved drug list diff                    │
-│  - Target ranking stability measurement                │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│           METRIC COMPUTATION                           │
-│  - Retrospective recall@N                              │
-│  - Docking-IC50 Pearson correlation                    │
-│  - Ranking Kendall-tau stability                       │
-│  - False positive accumulation rate                    │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│        THRESHOLD EVALUATION (automated)                │
-│  If metric_delta > threshold:                          │
-│    → Generate weight update PROPOSAL                   │
-│  Else:                                                 │
-│    → Log metric, no action                             │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│         HUMAN-IN-THE-LOOP CHECKPOINT                   │
-│  Proposal presented to operator via:                   │
-│  - REPL / Web Gateway notification                     │
-│  - Detailed diff of old vs new weights                 │
-│  - Projected impact on current shortlist               │
-│  REQUIRED APPROVAL before weights applied              │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│          WEIGHT APPLICATION + AUDIT                    │
-│  - Atomic write to weight_update_log                   │
-│  - Re-score all targets with new weights               │
-│  - Mark old target_scores as is_current=FALSE          │
-└────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    classDef stage fill:#1e1e24,stroke:#81c784,stroke-width:2px
+    classDef human fill:#1e1e24,stroke:#ffb74d,stroke-width:2px,stroke-dasharray: 5 5
+
+    subgraph Feedback [FEEDBACK COLLECTION LAYER]
+        direction TB
+        F1[scheduled routines: daily/weekly]
+        F2[ChEMBL activity data pull]
+        F3[ClinicalTrials.gov outcome updates]
+        F4[DrugBank approved drug list diff]
+        F5[Target ranking stability measurement]
+    end
+    class Feedback stage
+
+    subgraph Metric [METRIC COMPUTATION]
+        direction TB
+        M1[Retrospective recall@N]
+        M2[Docking-IC50 Pearson correlation]
+        M3[Ranking Kendall-tau stability]
+        M4[False positive accumulation rate]
+    end
+    class Metric stage
+
+    subgraph Threshold [THRESHOLD EVALUATION automated]
+        direction TB
+        T1{If metric_delta > threshold}
+        T2[Generate weight update PROPOSAL]
+        T3[Log metric, no action]
+        T1 -->|Yes| T2
+        T1 -->|No| T3
+    end
+    class Threshold stage
+
+    subgraph Human [HUMAN-IN-THE-LOOP CHECKPOINT]
+        direction TB
+        H1[Proposal presented to operator via:<br/>REPL / Web Gateway notification]
+        H2[Detailed diff of old vs new weights]
+        H3[Projected impact on current shortlist]
+        H4((REQUIRED APPROVAL<br/>before weights applied))
+    end
+    class Human human
+
+    subgraph Update [WEIGHT APPLICATION + AUDIT]
+        direction TB
+        U1[Atomic write to weight_update_log]
+        U2[Re-score all targets with new weights]
+        U3[Mark old target_scores as is_current=FALSE]
+    end
+    class Update stage
+
+    Feedback --> Metric
+    Metric --> Threshold
+    T2 --> Human
+    Human --> Update
 ```
 
 ## 1.7 Security Boundary Definitions
@@ -1089,10 +1134,10 @@ Overlap is computed at the token level, not character level, to ensure consisten
 
 | Model | Dimensions | Max tokens | Intended use | Deployment |
 |---|---|---|---|---|
-| `dmis-lab/biobert-base-cased-v1.2` (BiomedBERT-base) | 768 | 512 | Default; MVP | Docker Python |
-| `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` | 768 | 512 | Default alternative | Docker Python |
-| `NationalLibraryOfMedicine/BiomedBERT-large-uncased-abstract-fulltext` | 1024 | 512 | High-precision mode | Docker Python (GPU recommended) |
-| SPECTER2 (from Semantic Scholar) | 768 | 512 | Citation-aware embeddings, optional | Docker Python |
+| `jinaai/jina-embeddings-v2-base-en` / `BiomedBERT` | 768 | 8192 / 512 | Default; MVP | Rust Native (Candle) |
+| `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` | 768 | 512 | Default alternative | Rust Native (Candle) |
+| `NationalLibraryOfMedicine/BiomedBERT-large-uncased-abstract-fulltext` | 1024 | 512 | High-precision mode | Rust Native (Candle) |
+| SPECTER2 (from Semantic Scholar) | 768 | 512 | Citation-aware embeddings, optional | Rust Native (Candle) |
 
 **Default selection:** `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` — trained on 14M+ PubMed abstracts + full-text articles; strong performance on biomedical STS benchmarks; freely available via HuggingFace.
 
@@ -1101,19 +1146,15 @@ Overlap is computed at the token level, not character level, to ensure consisten
 ### Embedding Service
 
 ```yaml
-[IronClaw DockerTool "embed_chunks"]
-  image: ferrumyx/embed-service:latest
-  # Dockerfile:
-  #   FROM python:3.11-slim
-  #   RUN pip install sentence-transformers torch --index-url ...
-  #   COPY embed_service.py .
-  #   ENTRYPOINT ["python", "embed_service.py"]
+[IronClaw Tool "embed_chunks"]
+  Crate: ferrumyx-embed
+  Tech: Rust + Candle Framework
 
-Input (stdin JSON):
-  {"chunks": ["text1", "text2", ...], "model": "pubmedbert-base"}
+Input (Rust struct):
+  EmbedRequest { chunks: vec!["text1", "text2", ...], model: "pubmedbert-base" }
 
-Output (stdout JSON):
-  {"embeddings": [[0.123, ...], [0.456, ...]], "dim": 768}
+Output (Rust struct):
+  EmbedResponse { embeddings: vec![vec![0.123, ...], vec![0.456, ...]], dim: 768 }
 ```
 
 **Batch size:** 32 chunks per inference call. Larger batches risk OOM on CPU-only environments. On GPU (CUDA), batch size 128 is feasible.
@@ -1124,55 +1165,23 @@ Output (stdout JSON):
 
 ### pgvector Storage
 
-```sql
--- Index creation (run once after initial bulk load)
-CREATE INDEX ON paper_chunks
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 200);
--- lists = sqrt(row_count) is rule of thumb
--- At 1M chunks: lists = 1000
--- At 10M chunks: lists = 3162
-
--- For large embedding column:
-CREATE INDEX ON paper_chunks
-  USING ivfflat (embedding_large vector_cosine_ops)
-  WITH (lists = 200);
+```rust
+// Index creation (handled transparently by LanceDB)
+// Typical parameters for the IVF-PQ index in LanceDB:
+// IVF lists = sqrt(row_count)
+// PQ subvectors = 96 (for 768-dim) or 128 (for 1024-dim)
 ```
 
-**Hybrid search (RRF):** IronClaw's built-in hybrid search combines vector similarity (ANN via ivfflat) with BM25 full-text search on `paper_chunks.text`. Reciprocal Rank Fusion weight: `rrf_k = 60` (default). Vector search weight 0.7, keyword weight 0.3 for domain-specific biomedical queries.
+**Hybrid search (RRF):** IronClaw's built-in hybrid search combines vector similarity (ANN via LanceDB) with BM25/FTS full-text search on `paper_chunks.content`. Reciprocal Rank Fusion weight: `rrf_k = 60` (default). Vector search weight 0.7, keyword weight 0.3 for domain-specific biomedical queries.
 
-```sql
--- Hybrid search query pattern
-WITH vector_results AS (
-  SELECT paper_id, chunk_index,
-         1 - (embedding <=> $query_vec) AS score,
-         ROW_NUMBER() OVER (ORDER BY embedding <=> $query_vec) AS rank
-  FROM paper_chunks
-  ORDER BY embedding <=> $query_vec
-  LIMIT 100
-),
-keyword_results AS (
-  SELECT paper_id, chunk_index,
-         ts_rank(to_tsvector('english', text),
-                 plainto_tsquery('english', $query_text)) AS score,
-         ROW_NUMBER() OVER (
-           ORDER BY ts_rank(to_tsvector('english', text),
-                            plainto_tsquery('english', $query_text)) DESC
-         ) AS rank
-  FROM paper_chunks
-  WHERE to_tsvector('english', text) @@ plainto_tsquery('english', $query_text)
-  LIMIT 100
-)
-SELECT
-  COALESCE(v.paper_id, k.paper_id) AS paper_id,
-  COALESCE(v.chunk_index, k.chunk_index) AS chunk_index,
-  (1.0/(60 + COALESCE(v.rank, 101)) +
-   1.0/(60 + COALESCE(k.rank, 101))) AS rrf_score
-FROM vector_results v
-FULL OUTER JOIN keyword_results k
-  ON v.paper_id = k.paper_id AND v.chunk_index = k.chunk_index
-ORDER BY rrf_score DESC
-LIMIT 20;
+```rust
+// Hybrid search query pattern via LanceDB
+let mut stream = chunks_table
+    .search(query_vector)
+    .limit(100)
+    .execute()
+    .await?;
+// In-memory or LanceDB-native FTS filter is applied combining RRF scores.
 ```
 
 ---
@@ -1181,66 +1190,22 @@ LIMIT 20;
 
 ### MVP Configuration
 
-**Primary:** SciSpacy `en_core_sci_lg` + `en_ner_bc5cdr_md`
+**Primary:** `TrieNer` (Native Rust Aho-Corasick Automaton)
 
-| Model | Entity types | F1 (BC5CDR) | Deployment |
+| Component | Entity types | Speed | Deployment |
 |---|---|---|---|
-| `en_core_sci_lg` | General biomedical: disease, chemical, gene, protein, cell line, species, DNA, RNA | ~85% | Docker Python |
-| `en_ner_bc5cdr_md` | Chemical + Disease (BC5CDR corpus) | ~88% chem, ~85% dis | Docker Python |
-| Combined pipeline | Run both; merge overlapping spans preferring higher-confidence model | — | Docker Python |
+| `TrieNer` Core | General biomedical: disease, chemical, gene, protein, cell line | 10M+ chars/sec | Native Rust (`ferrumyx-ner`) |
+| `EntityLoader` | HGNC / MeSH / ChEMBL | Auto-downloads | Native Rust |
 
-**Why SciSpacy for MVP:**
-- Lightweight (en_core_sci_lg ~580MB vs BERN2 ~4GB+)
-- Deterministic, no GPU required
-- Apache 2.0 license
-- Mature Python API, IronClaw Docker tool wraps trivially
-- Sufficient precision for gene/mutation/disease entity extraction
+**Why TrieNer for MVP:**
+- 100% Native Rust execution (no Python/Docker overhead)
+- O(n) guaranteed matching speed via Aho-Corasick algorithmic properties
+- Extremely lightweight (~5MB memory footprint)
+- Mature dictionary-based extraction is highly precise for known ontology IDs (HGNC, MeSH)
 
-### High-Recall Mode: BERN2
+### High-Recall Mode: Future LLM Integration
 
-BERN2 (Biomedical Entity Recognition and Normalisation 2) is a neural NER+linking system covering 9 entity types with normalization to standard ontologies.
-
-| Property | Value |
-|---|---|
-| Entity types | Gene, disease, drug, mutation, species, cell line, cell type, DNA, RNA |
-| Normalization | NCBI Gene ID, OMIM, MeSH, DrugBank, dbSNP |
-| Architecture | BioBERT-based sequence labeler + entity linker |
-| Compute | ~6GB VRAM (GPU); ~45s/doc on CPU |
-| Deployment | Docker container via official image |
-| API | REST (local): POST /plain with {"text": "..."} |
-| Ferrumyx use | Activated for high-value papers (citation count > 50, or direct match to target gene) |
-
-**BERN2 output example:**
-```json
-{
-  "annotations": [
-    {
-      "mention": "KRAS G12D",
-      "obj": "mutation",
-      "norm_ids": ["rs121913529"],
-      "start": 45,
-      "end": 54,
-      "score": 0.97
-    },
-    {
-      "mention": "pancreatic cancer",
-      "obj": "disease",
-      "norm_ids": ["MESH:D010190"],
-      "start": 73,
-      "end": 90,
-      "score": 0.94
-    }
-  ]
-}
-```
-
-### Build vs Integrate vs Wrap
-
-| Component | Decision | Rationale |
-|---|---|---|
-| SciSpacy NER | **Wrap** (Docker Python IronClaw tool) | Mature library; no benefit to re-implementing |
-| BERN2 NER | **Integrate** (REST client in Rust WASM tool) | Deploy as Docker service; call via HTTP |
-| Entity normalisation (genes) | **Build** | Map SciSpacy gene mentions to HGNC IDs using custom lookup table seeded from HGNC REST API |
+Future versions plan to integrate local LLM-based extraction (e.g., using Ollama structured output) for discovering truly novel entities outside of mapped ontology databases, combined with `TrieNer` acting as a fast first-pass filter.
 | Entity normalisation (mutations) | **Build** | HGVS notation normalisation using Rust hgvs crate + custom regex for informal notations (G12D → p.Gly12Asp) |
 | Entity normalisation (diseases) | **Integrate** | OLS (Ontology Lookup Service) REST API for MeSH/OMIM lookups |
 | Custom oncology gazetteer | **Build** | Curated list of KRAS/RAS pathway members, common oncology abbreviations; used as pre-filter |
@@ -1248,24 +1213,22 @@ BERN2 (Biomedical Entity Recognition and Normalisation 2) is a neural NER+linkin
 
 ### NER Result Schema
 
-```sql
-CREATE TABLE entity_mentions (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  chunk_id      UUID REFERENCES paper_chunks(id),
-  paper_id      UUID REFERENCES papers(id),
-  mention_text  TEXT NOT NULL,
-  entity_type   TEXT NOT NULL,  -- gene|mutation|disease|drug|cell_line|pathway
-  norm_id       TEXT,           -- HGNC:1097, MESH:D010190, rs121913529
-  norm_source   TEXT,           -- HGNC|MESH|OMIM|DBSNP|CHEMBL
-  confidence    FLOAT,
-  char_start    INTEGER,
-  char_end      INTEGER,
-  model_source  TEXT,           -- scispacy|bern2|gazetteer
-  created_at    TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX ON entity_mentions (paper_id);
-CREATE INDEX ON entity_mentions (norm_id);
-CREATE INDEX ON entity_mentions (entity_type, norm_id);
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityMention {
+    pub id: uuid::Uuid,
+    pub chunk_id: uuid::Uuid,
+    pub paper_id: uuid::Uuid,
+    pub mention_text: String,
+    pub entity_type: String,     // 'gene'|'mutation'|'disease'|'drug'|'cell_line'|'pathway'
+    pub norm_id: Option<String>, // 'HGNC:1097', 'MESH:D010190', 'rs121913529'
+    pub norm_source: Option<String>, // 'HGNC'|'MESH'|'OMIM'|'DBSNP'|'CHEMBL'
+    pub confidence: Option<f32>,
+    pub char_start: Option<i64>,
+    pub char_end: Option<i64>,
+    pub model_source: Option<String>, // 'scispacy'|'bern2'|'gazetteer'|'trie_ner'
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
 ```
 
 ---
@@ -1304,32 +1267,7 @@ When a duplicate is detected across sources, the canonical record is updated to 
 
 ---
 
-## 2.11 Phase 2 Build vs Integrate vs Wrap Summary
-
-| Component | Decision | Notes |
-|---|---|---|
-| PubMed/NCBI E-utilities client | **Build** (Rust WASM tool) | Simple HTTP; well-documented API |
-| Europe PMC REST client | **Build** (Rust WASM tool) | Same pattern as PubMed |
-| bioRxiv/medRxiv client | **Build** (Rust WASM tool) | Simple JSON REST |
-| arXiv Atom XML client | **Build** (Rust WASM tool) | `quick-xml` crate |
-| ClinicalTrials.gov v2 client | **Build** (Rust WASM tool) | JSON REST |
-| CrossRef REST client | **Build** (Rust WASM tool) | DOI resolution |
-| Semantic Scholar client | **Build** (Rust WASM tool) | API key injected at host boundary |
-| Unpaywall client | **Build** (Rust WASM tool) | OA detection |
-| DOI resolution logic | **Build** (Rust, host layer) | Jaro-Winkler title matching |
-| PMC XML parser | **Build** (Rust, `quick-xml`) | Section extraction, citation links |
-| Ferrules PDF parser | **Build** (Rust, lopdf) | Fast Rust-native text extraction |
-| Chunking logic | **Build** (Rust, host layer) | Section-aware, token-counted |
-| Embedding service | **Integrate** + wrap (Docker Python) | HuggingFace `sentence-transformers` |
-| SciSpacy NER | **Wrap** (Docker Python IronClaw tool) | Do not re-implement |
-| BERN2 NER | **Integrate** (Docker service + Rust REST client) | Deploy separately; call via HTTP |
-| HGNC gene normalisation | **Build** (Rust lookup table, seeded from HGNC REST) | Map gene mentions → HGNC IDs |
-| HGVS mutation normalisation | **Build** (Rust, regex + `hgvs` crate) | Normalise informal notations |
-| Disease normalisation (OLS) | **Integrate** (Rust WASM REST client → OLS API) | MeSH/OMIM lookups |
-| Deduplication (DOI + SimHash) | **Build** (Rust, host layer) | SimHash via `simhash` crate |
-| pgvector storage | **Integrate** (IronClaw existing DB) | Add Ferrumyx schema on top |
-
-in both PubMed and Europe PMC). Deduplication runs at ingestion time, before any downstream processing.
+Deduplication runs at ingestion time, before any downstream processing.
 
 ### Deduplication Algorithm (Ordered by Priority)
 
@@ -1375,9 +1313,9 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 | Semantic Scholar client | **Build** (Rust, WASM tool) | REST; SPECTER2 embeddings bonus |
 | Unpaywall client | **Build** (Rust, WASM tool) | DOI OA lookup |
 | PDF parser | **Build** (Rust, lopdf) | Ferrules - fast, Rust-native text extraction |
-| BiomedBERT embeddings | **Integrate** (Docker Python, HuggingFace) | Pre-trained; no fine-tuning needed for MVP |
-| SciSpacy NER | **Integrate** (Docker Python) | Mature biomedical NLP library |
-| BERN2 NER | **Integrate** (Docker, REST) | Neural NER+linking; deploy as service |
+| BiomedBERT embeddings | **Build** (Rust, Candle) | HuggingFace models run natively via Candle framework |
+| TrieNer NER | **Build** (Rust, Aho-Corasick) | 100% native Rust memory-safe fast NER |
+| BERN2 Fallback | **Scrapped** | Local PyTorch ensemble is too heavy and violates 100% Rust architecture goals. Relying entirely on native `TrieNer`. |
 | Entity normalisation (genes) | **Build** (Rust) | Custom HGNC lookup table + hgvs crate |
 | Entity normalisation (mutations) | **Build** (Rust) | HGVS regex + variant notation normaliser |
 | Entity normalisation (diseases) | **Integrate** (OLS REST API) | MeSH/OMIM lookup via EBI OLS |
@@ -1393,136 +1331,146 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 
 ```sql
 -- Gene / Protein
-CREATE TABLE ent_genes (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hgnc_id         TEXT UNIQUE,          -- HGNC:1097
-    symbol          TEXT NOT NULL,        -- KRAS
-    name            TEXT,                 -- KRAS proto-oncogene, GTPase
-    uniprot_id      TEXT,                 -- P01116
-    ensembl_id      TEXT,                 -- ENSG00000133703
-    entrez_id       TEXT,                 -- 3845
-    gene_biotype    TEXT,                 -- protein_coding
-    chromosome      TEXT,                 -- 12
-    strand          SMALLINT,             -- 1 or -1
-    aliases         TEXT[],
-    oncogene_flag   BOOLEAN DEFAULT FALSE,
-    tsg_flag        BOOLEAN DEFAULT FALSE, -- tumour suppressor
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+```rust
+// Gene / Protein
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntGene {
+    pub id: uuid::Uuid,
+    pub hgnc_id: Option<String>,
+    pub symbol: String,
+    pub name: Option<String>,
+    pub uniprot_id: Option<String>,
+    pub ensembl_id: Option<String>,
+    pub entrez_id: Option<String>,
+    pub gene_biotype: Option<String>,
+    pub chromosome: Option<String>,
+    pub strand: Option<i16>,
+    pub aliases: Option<Vec<String>>,
+    pub oncogene_flag: bool,
+    pub tsg_flag: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Mutation
-CREATE TABLE ent_mutations (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    gene_id         UUID REFERENCES ent_genes(id),
-    hgvs_p          TEXT,    -- p.Gly12Asp
-    hgvs_c          TEXT,    -- c.35G>A
-    rs_id           TEXT,    -- rs121913529
-    aa_ref          TEXT,    -- G
-    aa_alt          TEXT,    -- D
-    aa_position     INTEGER, -- 12
-    oncogenicity    TEXT,    -- 'Oncogenic'|'Likely Oncogenic'|'VUS'|'Benign'
-    hotspot_flag    BOOLEAN DEFAULT FALSE,
-    vaf_context     TEXT,    -- 'somatic'|'germline'|'unknown'
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (gene_id, hgvs_p)
-);
+// Mutation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntMutation {
+    pub id: uuid::Uuid,
+    pub gene_id: uuid::Uuid,
+    pub hgvs_p: Option<String>,
+    pub hgvs_c: Option<String>,
+    pub rs_id: Option<String>,
+    pub aa_ref: Option<String>,
+    pub aa_alt: Option<String>,
+    pub aa_position: Option<i32>,
+    pub oncogenicity: Option<String>,
+    pub hotspot_flag: bool,
+    pub vaf_context: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Cancer Type (OncoTree)
-CREATE TABLE ent_cancer_types (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    oncotree_code   TEXT UNIQUE,   -- PAAD
-    oncotree_name   TEXT,          -- Pancreatic Adenocarcinoma
-    icd_o3_code     TEXT,          -- 8500/3
-    tissue          TEXT,          -- Pancreas
-    parent_code     TEXT,          -- PANCREAS
-    level           INTEGER,       -- depth in OncoTree hierarchy
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Cancer Type (OncoTree)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntCancerType {
+    pub id: uuid::Uuid,
+    pub oncotree_code: Option<String>,
+    pub oncotree_name: Option<String>,
+    pub icd_o3_code: Option<String>,
+    pub tissue: Option<String>,
+    pub parent_code: Option<String>,
+    pub level: Option<i32>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Pathway
-CREATE TABLE ent_pathways (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    kegg_id         TEXT,          -- hsa04010
-    reactome_id     TEXT,          -- R-HSA-5673001
-    go_term         TEXT,          -- GO:0007265
-    name            TEXT NOT NULL,
-    gene_members    TEXT[],        -- array of HGNC symbols
-    source          TEXT,          -- 'KEGG'|'Reactome'|'GO'
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Pathway
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntPathway {
+    pub id: uuid::Uuid,
+    pub kegg_id: Option<String>,
+    pub reactome_id: Option<String>,
+    pub go_term: Option<String>,
+    pub name: String,
+    pub gene_members: Option<Vec<String>>, // Array of HGNC symbols
+    pub source: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Clinical Evidence
-CREATE TABLE ent_clinical_evidence (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nct_id          TEXT,          -- NCT04330664
-    pmid            TEXT,
-    doi             TEXT,
-    phase           TEXT,          -- 'Phase 1'|'Phase 2'|'Phase 3'|'Phase 4'|'Approved'
-    intervention    TEXT,          -- drug name
-    target_gene_id  UUID REFERENCES ent_genes(id),
-    cancer_id       UUID REFERENCES ent_cancer_types(id),
-    primary_endpoint TEXT,
-    outcome         TEXT,          -- 'positive'|'negative'|'inconclusive'|'ongoing'
-    evidence_grade  TEXT,          -- ESMO A/B/C or ASCO high/medium/low
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Clinical Evidence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntClinicalEvidence {
+    pub id: uuid::Uuid,
+    pub nct_id: Option<String>,
+    pub pmid: Option<String>,
+    pub doi: Option<String>,
+    pub phase: Option<String>,
+    pub intervention: Option<String>,
+    pub target_gene_id: uuid::Uuid,
+    pub cancer_id: uuid::Uuid,
+    pub primary_endpoint: Option<String>,
+    pub outcome: Option<String>,
+    pub evidence_grade: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Inhibitor / Compound
-CREATE TABLE ent_compounds (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    chembl_id       TEXT UNIQUE,
-    name            TEXT,
-    smiles          TEXT,
-    inchi_key       TEXT UNIQUE,
-    moa             TEXT,          -- mechanism of action
-    patent_status   TEXT,          -- 'patented'|'generic'|'unpatented'
-    max_phase       INTEGER,       -- 0-4 (4 = approved)
-    target_gene_ids UUID[],        -- array of gene entity IDs
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Compounds / Inhibitors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntCompound {
+    pub id: uuid::Uuid,
+    pub chembl_id: Option<String>,
+    pub name: Option<String>,
+    pub smiles: Option<String>,
+    pub inchi_key: Option<String>,
+    pub moa: Option<String>,
+    pub patent_status: Option<String>,
+    pub max_phase: Option<i32>,
+    pub target_gene_ids: Option<Vec<uuid::Uuid>>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
 
--- Structural Availability
-CREATE TABLE ent_structures (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    gene_id         UUID REFERENCES ent_genes(id),
-    pdb_ids         TEXT[],        -- ['4OBE', '6OIM', ...]
-    best_resolution FLOAT,         -- Angstrom, lowest = best
-    exp_method      TEXT,          -- 'X-ray'|'Cryo-EM'|'NMR'
-    af_accession    TEXT,          -- AlphaFold UniProt accession
-    af_plddt_mean   FLOAT,         -- mean pLDDT across residues
-    af_plddt_active FLOAT,         -- pLDDT at predicted active site
-    has_pdb         BOOLEAN DEFAULT FALSE,
-    has_alphafold   BOOLEAN DEFAULT FALSE,
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
+// Structural Availability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntStructure {
+    pub id: uuid::Uuid,
+    pub gene_id: uuid::Uuid,
+    pub pdb_ids: Option<Vec<String>>,
+    pub best_resolution: Option<f32>,
+    pub exp_method: Option<String>,
+    pub af_accession: Option<String>,
+    pub af_plddt_mean: Option<f32>,
+    pub af_plddt_active: Option<f32>,
+    pub has_pdb: bool,
+    pub has_alphafold: bool,
+    pub updated_at: chrono::DateTime<chrono::Utc>
+}
 
--- Druggability Score
-CREATE TABLE ent_druggability (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    structure_id    UUID REFERENCES ent_structures(id),
-    fpocket_score   FLOAT,
-    fpocket_volume  FLOAT,         -- Angstrom^3
-    fpocket_pocket_count INTEGER,
-    dogsitescorer   FLOAT,         -- 0-1
-    overall_assessment TEXT,       -- 'druggable'|'difficult'|'undruggable'
-    assessed_at     TIMESTAMPTZ DEFAULT NOW()
-);
+// Druggability Score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntDruggability {
+    pub id: uuid::Uuid,
+    pub structure_id: uuid::Uuid,
+    pub fpocket_score: Option<f32>,
+    pub fpocket_volume: Option<f32>,
+    pub fpocket_pocket_count: Option<i32>,
+    pub dogsitescorer: Option<f32>,
+    pub overall_assessment: Option<String>,
+    pub assessed_at: chrono::DateTime<chrono::Utc>
+}
 
--- Synthetic Lethality
-CREATE TABLE ent_synthetic_lethality (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    gene1_id        UUID REFERENCES ent_genes(id),
-    gene2_id        UUID REFERENCES ent_genes(id),
-    cancer_id       UUID REFERENCES ent_cancer_types(id),
-    evidence_type   TEXT,          -- 'CRISPR_screen'|'RNAi'|'computational'|'clinical'
-    source_db       TEXT,          -- 'SynLethDB'|'ISLE'|'DepMap'
-    screen_id       TEXT,          -- internal CRISPR screen identifier
-    effect_size     FLOAT,         -- e.g. CERES delta
-    confidence      FLOAT,
-    pmid            TEXT,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (gene1_id, gene2_id, cancer_id, source_db)
-);
+// Synthetic Lethality
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntSyntheticLethality {
+    pub id: uuid::Uuid,
+    pub gene1_id: uuid::Uuid,
+    pub gene2_id: uuid::Uuid,
+    pub cancer_id: uuid::Uuid,
+    pub evidence_type: Option<String>,
+    pub source_db: Option<String>,
+    pub screen_id: Option<String>,
+    pub effect_size: Option<f32>,
+    pub confidence: Option<f32>,
+    pub pmid: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>
+}
+```
 ```
 
 ## 3.2 Confidence Scoring Model
@@ -1933,20 +1881,14 @@ OUTPUT FIELDS (per candidate):
 
 | Tool | Function | Language | Deployment | License |
 |---|---|---|---|---|
-| PDB REST API client | Structure retrieval by PDB ID / UniProt | Rust | WASM | Open |
-| AlphaFold DB API client | Predicted structure retrieval | Rust | WASM | CC BY 4.0 |
-| fpocket | Binding pocket detection | C binary | Docker | BSD |
-| AutoDock Vina | Molecular docking | C++ binary | Docker | Apache 2.0 |
-| Gnina | CNN-scored docking (Vina-based) | C++ binary | Docker | MIT |
-| RDKit | Molecule manipulation, SMILES, properties | Python | Docker | BSD |
-| DeepPurpose | Binding affinity prediction (DTI) | Python | Docker | MIT |
-| ADMET-AI | ADMET property prediction | Python | Docker | MIT |
-| Reinvent4 | Generative molecule optimisation (optional, Month 7+) | Python | Docker | Apache 2.0 |
+| PDB REST API client | Structure retrieval by PDB ID | Rust | Native (`FetchStructureTool`) | Open |
+| fpocket wrapper | Binding pocket detection | Rust / C binary | Native (`DetectPocketsTool`) | BSD |
+| AutoDock Vina wrapper | Molecular docking | Rust / C++ binary | Native (`DockMoleculeTool`) | Apache 2.0 |
+| AlphaFold DB API client (Future) | Predicted structure retrieval | Rust | Native | CC BY 4.0 |
+| RDKit / ADMET (Future) | Molecule manipulation, properties | Rust | Native Extensions | BSD/MIT |
 
-**WASM vs Docker rationale:**
-- WASM: stateless HTTP API calls (PDB, AlphaFold); low compute; no binary dependencies
-- Docker: compute-intensive binaries (fpocket, Vina) or large Python ML stacks (RDKit, DeepPurpose)
-- All Docker containers: network-isolated, resource-limited (2 CPU / 4GB RAM cap), job-directory mounts only
+**Rust Native wrappers:**
+- The MVP relies on fast native Rust wrappers executing trusted local binaries (`fpocket` and `vina`). This limits overhead compared to Docker isolation and fits the local processing paradigm of Ferrumyx.
 
 ## 5.2 IronClaw Tool Orchestration Sequence
 
@@ -1986,7 +1928,7 @@ OUTPUT FIELDS (per candidate):
                ▼
 ┌──────────────────────────────┐
 │  STEP 4: Ligand Preparation  │
-│  Tool: rdkit_ops (Docker)    │
+│  Tool: rdkit_ops (Rust Native│
 │  a) Retrieve known binders   │
 │     from ChEMBL (seeds)      │
 │  b) Generate scaffold variant│
@@ -1999,7 +1941,7 @@ OUTPUT FIELDS (per candidate):
                ▼
 ┌──────────────────────────────┐
 │  STEP 5: Molecular Docking   │
-│  Tool: vina_dock (Docker)    │
+│  Tool: vina_dock (Rust Bin)  │
 │  Input: protein .pdbqt +     │
 │         ligand .sdf batch    │
 │  Output: docking poses +     │
@@ -2011,7 +1953,7 @@ OUTPUT FIELDS (per candidate):
                ▼
 ┌──────────────────────────────┐
 │  STEP 6: ADMET Prediction    │
-│  Tool: admet_predict (Docker)│
+│  Tool: admet_predict (Rust)  │
 │  Input: SMILES of top docked │
 │         molecules            │
 │  Output: absorption, tox,    │
@@ -2642,22 +2584,13 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | Unpaywall client | Build | Rust | WASM | Open | OA detection |
 | PMC XML parser | Build | Rust | Native | Open | quick-xml; section-aware |
 | Ferrules PDF parser | Build | Rust | Native | Open | lopdf-based text extraction |
-| BiomedBERT / PubMedBERT | Integrate | Python | Docker | Apache 2.0 | HuggingFace; 768-dim embeddings |
-| SciSpacy en_core_sci_lg | Integrate | Python | Docker | MIT | General biomedical NER |
-| SciSpacy en_ner_bc5cdr_md | Integrate | Python | Docker | MIT | Chemical + disease NER |
-| BERN2 | Integrate | Python | Docker | MIT | Neural NER + entity linking |
-| Gene entity normaliser | Build | Rust | Native | — | HGNC REST + hgvs crate |
-| Mutation normaliser | Build | Rust | Native | — | HGVS regex; notation variants |
-| Disease normaliser | Integrate | REST | WASM | Open | EBI OLS API |
-| fpocket | Integrate | C | Docker | BSD | Pocket detection |
-| AutoDock Vina | Integrate | C++ | Docker | Apache 2.0 | Molecular docking |
-| Gnina | Integrate | C++ | Docker | MIT | CNN-scored docking |
-| RDKit | Integrate | Python | Docker | BSD | Molecule ops; SMILES; SA score |
-| DeepPurpose | Integrate | Python | Docker | MIT | DTI binding affinity |
-| ADMET-AI | Integrate | Python | Docker | MIT | ADMET prediction |
-| Reinvent4 | Integrate | Python | Docker | Apache 2.0 | Generative design (Month 7+) |
+| BiomedBERT / PubMedBERT | Build | Rust | Native | Apache 2.0 | Candle; 768-dim embeddings |
+| TrieNer en_core_sci_lg | Build | Rust | Native | MIT | Fast general biomedical NER |
+| Gene entity normaliser | Build | Rust | Native | — | HGNC cache subset |
+| fpocket wrapper | Build | Rust | Native | BSD | Pocket detection runtime execution |
+| AutoDock Vina wrapper| Build | Rust | Native | Apache 2.0 | Molecular docking runtime execution |
 | pgvector | Integrate | C (PG ext) | Native | MIT | Vector similarity search |
-| IronClaw | Extend | Rust | Native | Open | Agent loop, WASM sandbox, routines |
+| IronClaw | Extend | Rust | Native | Open | Agent loop, Web UI, routines |
 
 ---
 

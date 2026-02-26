@@ -16,7 +16,7 @@
 //!   - probability: Probability gene is a dependency
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -44,11 +44,11 @@ pub struct DepMapClient {
 
 impl DepMapClient {
     pub fn new() -> Self {
-        Self { client: Client::new(), api_key: None }
+        Self { client: Client::new().unwrap(), api_key: None }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
-        Self { client: Client::new(), api_key: Some(api_key.into()) }
+        Self { client: Client::new().unwrap(), api_key: Some(api_key.into()) }
     }
 
     /// Fetch gene dependency scores for a specific gene across cancer types.

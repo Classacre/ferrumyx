@@ -127,7 +127,7 @@ impl LlmBackend for OllamaBackend {
             "max_tokens":  req.max_tokens.unwrap_or(4096),
             "temperature": req.temperature.unwrap_or(0.1),
         });
-        let resp = self.client.post(&url).json(&body).send().await?;
+        let resp = self.client.request(reqwest::Method::POST, &url).json(&body).send().await?;
         let json = check_response_status(resp).await?;
         Ok(parse_openai_response(&json, &self.model))
     }
@@ -137,7 +137,7 @@ impl LlmBackend for OllamaBackend {
         let mut out = Vec::new();
         for text in texts {
             let body = serde_json::json!({"model": &self.model, "prompt": text});
-            let resp = self.client.post(&url).json(&body).send().await?;
+            let resp = self.client.request(reqwest::Method::POST, &url).json(&body).send().await?;
             let json = check_response_status(resp).await?;
             let vec: Vec<f32> = serde_json::from_value(json["embedding"].clone())?;
             out.push(vec);
@@ -270,7 +270,7 @@ impl LlmBackend for OpenAiCompatibleBackend {
             "max_tokens":  req.max_tokens.unwrap_or(4096),
             "temperature": req.temperature.unwrap_or(0.1),
         });
-        let resp = self.auth(self.client.post(&url)).json(&body).send().await?;
+        let resp = self.auth(self.client.request(reqwest::Method::POST, &url)).json(&body).send().await?;
         let json = check_response_status(resp).await?;
         Ok(parse_openai_response(&json, &self.model))
     }
@@ -279,7 +279,7 @@ impl LlmBackend for OpenAiCompatibleBackend {
         let emb_model = self.embedding_model.as_deref().unwrap_or(&self.model);
         let url = format!("{}/v1/embeddings", self.base_url.trim_end_matches('/'));
         let body = serde_json::json!({"model": emb_model, "input": texts});
-        let resp = self.auth(self.client.post(&url)).json(&body).send().await?;
+        let resp = self.auth(self.client.request(reqwest::Method::POST, &url)).json(&body).send().await?;
         let json = check_response_status(resp).await?;
         let embeddings: Vec<Vec<f32>> = json["data"]
             .as_array()
@@ -440,7 +440,7 @@ impl LlmBackend for GeminiBackend {
             });
         }
 
-        let resp = self.client.post(&url).json(&body).send().await?;
+        let resp = self.client.request(reqwest::Method::POST, &url).json(&body).send().await?;
         let json = check_response_status(resp).await?;
 
         let content = json["candidates"][0]["content"]["parts"][0]["text"]
@@ -473,7 +473,7 @@ impl LlmBackend for GeminiBackend {
         })).collect();
 
         let body = serde_json::json!({ "requests": requests });
-        let resp = self.client.post(&url).json(&body).send().await?;
+        let resp = self.client.request(reqwest::Method::POST, &url).json(&body).send().await?;
         let json = check_response_status(resp).await?;
 
         let embeddings: Vec<Vec<f32>> = json["embeddings"]

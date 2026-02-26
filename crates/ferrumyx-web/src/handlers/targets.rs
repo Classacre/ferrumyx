@@ -121,46 +121,46 @@ pub async fn targets_page(
     let total: i64 = 0;
 
     let rows_html: String = if rows.is_empty() {
-        r#"<tr><td colspan="7" class="text-center text-muted py-5">
-            No targets scored yet for this cancer type.<br>
-            <a href="/ingestion" class="btn btn-primary mt-2">Start Ingestion</a>
+        r#"<tr><td colspan="8" class="text-center text-muted">
+            No targets scored yet for this cancer type.<br><br>
+            <a href="/ingestion" class="btn btn-primary">Initialize Ingestion Pipeline</a>
         </td></tr>"#.to_string()
     } else {
         rows.iter().enumerate().map(|(i, (gene, cancer_code, score, conf_adj, tier, version))| {
             let rank = page * _per_page + i as i64 + 1;
             let tier_badge = match tier.as_deref() {
-                Some("primary")   => r#"<span class="badge bg-success">Primary</span>"#,
-                Some("secondary") => r#"<span class="badge bg-warning text-dark">Secondary</span>"#,
-                _                 => r#"<span class="badge bg-secondary">—</span>"#,
+                Some("primary")   => r#"<span class="badge badge-success">Primary</span>"#,
+                Some("secondary") => r#"<span class="badge badge-warning">Secondary</span>"#,
+                _                 => r#"<span class="badge badge-outline">—</span>"#,
             };
             let bar = (score * 100.0) as u32;
+            let bar_class = if *score > 0.7 { "success" } else if *score > 0.5 { "warning" } else { "danger" };
             format!(r#"
             <tr>
-                <td class="text-muted">{}</td>
-                <td><a href="/targets?gene={}&cancer={}" class="gene-link fw-bold">{}</a></td>
-                <td><span class="badge badge-cancer">{}</span></td>
+                <td class="text-muted rank-badge">#{}</td>
+                <td><a href="/targets?gene={}&cancer={}" style="font-weight:700;">{}</a></td>
+                <td><span class="badge badge-outline">{}</span></td>
                 <td>
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="progress flex-grow-1" style="height:6px">
-                            <div class="progress-bar bg-primary" style="width:{}%"></div>
+                    <div class="d-flex align-center gap-3">
+                        <div class="progress-track" style="width: 100px;">
+                            <div class="progress-bar {}" style="width:{}%"></div>
                         </div>
-                        <code>{:.4}</code>
+                        <span class="score-value">{:.4}</span>
                     </div>
                 </td>
-                <td><code class="text-warning">{:.4}</code></td>
+                <td><span style="color:var(--warning); font-family:'Inter',sans-serif; font-weight:600;">{:.4}</span></td>
                 <td>{}</td>
-                <td class="text-muted small">v{}</td>
+                <td class="text-muted text-center">v{}</td>
                 <td>
-                    <div class="btn-group btn-group-sm">
-                        <a href="/targets?gene={}&cancer={}" class="btn btn-outline-primary">Detail</a>
-                        <a href="/molecules?gene={}" class="btn btn-outline-secondary">Dock</a>
-                        <a href="/kg?gene={}" class="btn btn-outline-info">KG</a>
+                    <div class="d-flex gap-2">
+                        <a href="/targets?gene={}&cancer={}" class="btn btn-outline btn-sm">Insights</a>
+                        <a href="/molecules?gene={}" class="btn btn-outline btn-sm">Dock</a>
                     </div>
                 </td>
             </tr>"#,
             rank, gene, cancer_code, gene, cancer_code,
-            bar, score, conf_adj.unwrap_or(0.0), tier_badge, version,
-            gene, cancer_code, gene, gene)
+            bar_class, bar, score, conf_adj.unwrap_or(0.0), tier_badge, version,
+            gene, cancer_code, gene)
         }).collect()
     };
 
@@ -176,11 +176,11 @@ pub async fn targets_page(
     } else { String::new() };
 
     Html(format!(r#"<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ferrumyx — Target Rankings</title>
+    <title>Targets — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
@@ -188,38 +188,41 @@ pub async fn targets_page(
 <main class="main-content">
     <div class="page-header">
         <div>
-            <h1 class="page-title">🎯 Target Rankings</h1>
-            <p class="text-muted">Scored targets for {} — sorted by composite score</p>
+            <h1 class="page-title">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                Therapeutic Targets
+            </h1>
+            <p class="text-muted">Computed priority scores for {} candidates</p>
         </div>
-        <div class="d-flex gap-2">
-            <form method="GET" class="d-flex gap-2">
-                <select name="cancer" class="form-select form-select-sm" style="width:150px">
+        <div class="d-flex gap-3">
+            <form method="GET" class="d-flex gap-3 align-center">
+                <select name="cancer" class="form-control" style="width:180px; padding: 0.5rem 1rem;">
                     <option value="PAAD" {}>PAAD (Pancreatic)</option>
                     <option value="NSCLC" {}>NSCLC (Lung)</option>
                     <option value="BRCA" {}>BRCA (Breast)</option>
                     <option value="COAD" {}>COAD (Colon)</option>
                 </select>
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+                <button type="submit" class="btn btn-primary">Filter</button>
             </form>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h6 class="mb-0">Scored Targets</h6>
-            <span class="badge bg-secondary">{} total</span>
+        <div class="card-header">
+            <h5 class="mb-0">Priority Target Rankings</h5>
+            <span class="badge badge-outline">{} verified</span>
         </div>
-        <div class="card-body p-0">
-            <table class="table table-dark table-hover mb-0">
+        <div class="table-container">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Gene</th>
-                        <th>Cancer</th>
-                        <th>Composite Score</th>
+                        <th>Rank</th>
+                        <th>Gene Target</th>
+                        <th>Indication</th>
+                        <th>Priority Score</th>
                         <th>Confidence Adj</th>
                         <th>Tier</th>
-                        <th>Ver</th>
+                        <th class="text-center">Pipeline</th>
                         <th>Actions</th>
                     </tr>
                 </thead>

@@ -77,6 +77,11 @@ impl Database {
             self.create_kg_facts_table().await?;
         }
         
+        // Create kg_conflicts table if it doesn't exist
+        if !self.table_exists(schema::TABLE_KG_CONFLICTS).await? {
+            self.create_kg_conflicts_table().await?;
+        }
+        
         Ok(())
     }
     
@@ -227,6 +232,29 @@ impl Database {
         
         self.conn
             .create_table(schema::TABLE_KG_FACTS, empty_iter)
+            .execute()
+            .await?;
+        
+        Ok(())
+    }
+    
+    /// Create the kg_conflicts table.
+    async fn create_kg_conflicts_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("fact_a_id", DataType::Utf8, false),
+            Field::new("fact_b_id", DataType::Utf8, false),
+            Field::new("conflict_type", DataType::Utf8, false),
+            Field::new("net_confidence", DataType::Float32, false),
+            Field::new("resolution", DataType::Utf8, false),
+            Field::new("detected_at", DataType::Utf8, false),
+        ].into();
+        
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        
+        self.conn
+            .create_table(schema::TABLE_KG_CONFLICTS, empty_iter)
             .execute()
             .await?;
         

@@ -9,7 +9,7 @@
 #   4. Set embedding.backend = "openai" and embedding.api_key
 
 [database]
-url            = "postgresql://ferrumyx:ferrumyx_dev@localhost:5432/ferrumyx"
+url            = "./data/lancedb"
 max_connections = 10
 min_connections = 2
 

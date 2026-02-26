@@ -37,6 +37,42 @@ pub fn check_duplicate(
     DedupResult::New
 }
 
+/// Stage 3: Fuzzy title match (tertiary).
+/// Checks if incoming paper closely matches any existing paper's title (Jaro-Winkler >= 0.92)
+/// AND the first author's surname matches.
+pub fn check_fuzzy_duplicate<'a, I>(
+    incoming: &PaperMetadata,
+    existing_papers: I,
+) -> DedupResult 
+where
+    I: IntoIterator<Item = &'a PaperMetadata>,
+{
+    let incoming_title = incoming.title.to_lowercase();
+    let incoming_author = get_first_author_surname(incoming);
+
+    for paper in existing_papers {
+        let title_sim = strsim::jaro_winkler(&incoming_title, &paper.title.to_lowercase());
+        
+        if title_sim >= 0.92 {
+            let existing_author = get_first_author_surname(paper);
+            if incoming_author == existing_author && !incoming_author.is_empty() {
+                return DedupResult::ProbableDuplicate { 
+                    method: "fuzzy_title_author".to_string(), 
+                    similarity: title_sim 
+                };
+            }
+        }
+    }
+    
+    DedupResult::New
+}
+
+fn get_first_author_surname(paper: &PaperMetadata) -> String {
+    paper.authors.first()
+        .map(|a| a.name.split_whitespace().last().unwrap_or("").to_lowercase())
+        .unwrap_or_default()
+}
+
 /// Compute a simple 64-bit SimHash of text for approximate deduplication.
 /// Production implementation should use a proper SimHash library.
 /// This is a simplified version for bootstrapping.
@@ -138,6 +174,34 @@ mod tests {
         let dist = hamming_distance(simhash(t1), simhash(t2));
         assert!(dist > 10, "Expected large hamming distance, got {dist}");
     }
+
+    #[test]
+    fn test_fuzzy_duplicate_match() {
+        let p1 = PaperMetadata {
+            doi: None, pmid: None, pmcid: None,
+            title: "The role of KRAS in pancreatic cancer".to_string(),
+            abstract_text: None,
+            authors: vec![crate::models::Author { name: "John Doe".to_string(), affiliation: None, orcid: None }],
+            journal: None, pub_date: None, source: crate::models::IngestionSource::PubMed, open_access: false, full_text_url: None,
+        };
+        let p2 = PaperMetadata {
+            doi: None, pmid: None, pmcid: None,
+            title: "The roles of KRAS in pancreatic cancer".to_string(),
+            abstract_text: None,
+            authors: vec![crate::models::Author { name: "Jane Doe".to_string(), affiliation: None, orcid: None }],
+            journal: None, pub_date: None, source: crate::models::IngestionSource::PubMed, open_access: false, full_text_url: None,
+        };
+        
+        let res = check_fuzzy_duplicate(&p1, vec![&p2]);
+        match res {
+            DedupResult::ProbableDuplicate { method, similarity } => {
+                assert_eq!(method, "fuzzy_title_author");
+                assert!(similarity >= 0.92);
+            },
+            _ => panic!("Expected ProbableDuplicate"),
+        }
+    }
+
 
     #[test]
     fn test_simhash_within_i64_range() {

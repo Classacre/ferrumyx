@@ -16,7 +16,7 @@
 //!   - activity: IC50, Ki, etc. with assay details
 
 use async_trait::async_trait;
-use reqwest::Client;
+use ferrumyx_common::sandbox::SandboxClient as Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -69,7 +69,7 @@ pub struct ChemblClient {
 
 impl ChemblClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self { client: Client::new().unwrap() }
     }
 
     /// Fetch compound by ChEMBL ID.
@@ -80,7 +80,7 @@ impl ChemblClient {
         debug!(chembl_id = chembl_id, "Fetching ChEMBL compound");
         
         let resp = self.client
-            .get(&url)
+            .get(&url)?
             .send()
             .await?;
 
@@ -136,7 +136,7 @@ impl ChemblClient {
         debug!(chembl_id = chembl_id, "Fetching ChEMBL target");
         
         let resp = self.client
-            .get(&url)
+            .get(&url)?
             .send()
             .await?;
 
@@ -172,7 +172,7 @@ impl ChemblClient {
         debug!(gene = gene_symbol, "Searching ChEMBL targets");
         
         let resp = self.client
-            .get(&url)
+            .get(&url)?
             .query(&[("q", gene_symbol)])
             .send()
             .await?;
@@ -227,7 +227,7 @@ impl ChemblClient {
         }
 
         let resp = self.client
-            .get(&url)
+            .get(&url)?
             .query(&params)
             .send()
             .await?;
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn test_chembl_client_new() {
         let client = ChemblClient::new();
-        assert!(client.client.get("https://example.com").build().is_ok());
+        assert!(client.client.get("https://example.com").unwrap().build().is_ok());
     }
 
     #[test]

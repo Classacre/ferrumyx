@@ -257,6 +257,36 @@ impl EntityMention {
 }
 
 // =============================================================================
+// Knowledge Graph Conflicts Schema
+// =============================================================================
+
+/// Conflict between two KG facts
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KgConflict {
+    pub id: uuid::Uuid,
+    pub fact_a_id: uuid::Uuid,
+    pub fact_b_id: uuid::Uuid,
+    pub conflict_type: String,
+    pub net_confidence: f32,
+    pub resolution: String,
+    pub detected_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl KgConflict {
+    pub fn new(fact_a_id: uuid::Uuid, fact_b_id: uuid::Uuid, conflict_type: String, net_confidence: f32, resolution: String) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            fact_a_id,
+            fact_b_id,
+            conflict_type,
+            net_confidence,
+            resolution,
+            detected_at: chrono::Utc::now(),
+        }
+    }
+}
+
+// =============================================================================
 // Table Names
 // =============================================================================
 
@@ -265,3 +295,4 @@ pub const TABLE_CHUNKS: &str = "chunks";
 pub const TABLE_ENTITIES: &str = "entities";
 pub const TABLE_KG_FACTS: &str = "kg_facts";
 pub const TABLE_ENTITY_MENTIONS: &str = "entity_mentions";
+pub const TABLE_KG_CONFLICTS: &str = "kg_conflicts";

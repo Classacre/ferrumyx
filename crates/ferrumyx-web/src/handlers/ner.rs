@@ -137,10 +137,10 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
             format!(
                 r#"<tr><td><span class="badge {}">{}</span></td><td>{}</td><td>{:.2}</td></tr>"#,
                 match e.entity_type.as_str() {
-                    "Gene" => "bg-success",
-                    "Disease" => "bg-danger",
-                    "Chemical" => "bg-primary",
-                    _ => "bg-secondary",
+                    "Gene" => "badge-success",
+                    "Disease" => "badge-danger",
+                    "Chemical" => "badge-primary",
+                    _ => "badge-outline",
                 },
                 e.entity_type, e.text, e.confidence
             )
@@ -148,15 +148,19 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
         
         format!(
             r#"
-            <div class="result-section">
-                <h4>Highlighted Text</h4>
-                <div class="highlighted-text">{}</div>
+            <div class="result-section card mt-4">
+                <div class="card-header">Recognized Entities Timeline</div>
+                <div class="card-body">
+                    <div class="highlighted-text">{}</div>
+                </div>
                 
-                <h4>Entities Found ({}):</h4>
-                <table class="table table-sm">
-                    <thead><tr><th>Type</th><th>Text</th><th>Confidence</th></tr></thead>
-                    <tbody>{}</tbody>
-                </table>
+                <div class="card-header mt-4 text-muted border-top border-glass" style="font-size:0.9rem;">Entity Extraction Catalog ({} items):</div>
+                <div class="table-container p-0">
+                    <table class="table">
+                        <thead><tr><th>Classification</th><th>Recognized Substring</th><th>Model Confidence</th></tr></thead>
+                        <tbody>{}</tbody>
+                    </table>
+                </div>
             </div>
             "#,
             highlighted, r.entities.len(), entity_list
@@ -164,64 +168,78 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     }).unwrap_or_default();
     
     format!(
-        r##"
-<!DOCTYPE html>
-<html>
+        r##"<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Ferrumyx — NER Demo</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NER Engine — Ferrumyx</title>
+    <link rel="stylesheet" href="/static/css/main.css">
     <style>
-        body {{ padding: 2rem; background: #f8f9fa; }}
-        .container {{ max-width: 1200px; }}
-        .stats-card {{ background: white; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .input-section {{ background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .result-section {{ background: white; border-radius: 8px; padding: 1.5rem; margin-top: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
         .highlighted-text {{ 
-            background: #f8f9fa; 
-            padding: 1rem; 
-            border-radius: 4px; 
-            line-height: 1.8;
-            font-size: 1.1rem;
+            background: var(--bg-surface); 
+            padding: 1.5rem; 
+            border-radius: 8px; 
+            line-height: 2.2;
+            font-size: 1.05rem;
+            color: var(--text-main);
+            border: 1px solid var(--border-glass);
+            font-family: 'Inter', sans-serif;
         }}
-        .entity-gene {{ background: #d4edda; padding: 2px 4px; border-radius: 3px; font-weight: bold; }}
-        .entity-disease {{ background: #f8d7da; padding: 2px 4px; border-radius: 3px; font-weight: bold; }}
-        .entity-chemical {{ background: #cce5ff; padding: 2px 4px; border-radius: 3px; font-weight: bold; }}
-        .entity-other {{ background: #e2e3e5; padding: 2px 4px; border-radius: 3px; }}
-        textarea {{ font-family: monospace; }}
+        .entity-gene {{ background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 2px 6px; border-radius: 6px; font-weight: 600; border: 1px solid rgba(16, 185, 129, 0.4); }}
+        .entity-disease {{ background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 2px 6px; border-radius: 6px; font-weight: 600; border: 1px solid rgba(239, 68, 68, 0.4); }}
+        .entity-chemical {{ background: rgba(59, 130, 246, 0.2); color: #3b82f6; padding: 2px 6px; border-radius: 6px; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.4); }}
+        .entity-other {{ background: rgba(156, 163, 175, 0.2); color: #9ca3af; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(156, 163, 175, 0.4); }}
+        textarea {{ font-family: 'Outfit', sans-serif; font-size: 1.1rem; }}
+        .example-btn {{ background: var(--bg-surface); border: 1px solid var(--border-glass); color: var(--text-muted); cursor: pointer; border-radius: 6px; padding: 0.5rem; transition: var(--transition-fast); text-align: left; width: 100%; }}
+        .example-btn:hover {{ border-color: var(--brand-blue); color: var(--text-main); }}
     </style>
 </head>
 <body>
     {}
-    <div class="container">
-        <h2>🔍 Named Entity Recognition Demo</h2>
-        <p class="text-muted">Extract genes, diseases, and chemicals using dictionary-based NER</p>
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    Named Entity Recognition Engine
+                </h1>
+                <p class="text-muted">High-performance extraction of gene, disease, and chemical entities from unstructured scientific literature</p>
+            </div>
+        </div>
         
-        <div class="row">
-            <div class="col-md-3">
-                <div class="stats-card">
-                    <h5>Database Stats</h5>
-                    <div class="d-flex justify-content-between"><span>Genes:</span> <strong>{}</strong></div>
-                    <div class="d-flex justify-content-between"><span>Diseases:</span> <strong>{}</strong></div>
-                    <div class="d-flex justify-content-between"><span>Chemicals:</span> <strong>{}</strong></div>
-                    <div class="d-flex justify-content-between"><span>Patterns:</span> <strong>{}</strong></div>
+        <div class="grid-2 align-start" style="grid-template-columns: 300px 1fr; gap: 2rem;">
+            <div class="d-flex flex-column gap-3">
+                <div class="card">
+                    <div class="card-header text-muted">Knowledge Base Stats</div>
+                    <div class="card-body d-flex flex-column gap-2" style="font-size: 0.95rem;">
+                        <div class="d-flex justify-between"><span>Gene Vocabulary:</span> <strong style="color:var(--text-main)">{}</strong></div>
+                        <div class="d-flex justify-between"><span>Disease Tokens:</span> <strong style="color:var(--text-main)">{}</strong></div>
+                        <div class="d-flex justify-between"><span>Chemical Graphs:</span> <strong style="color:var(--text-main)">{}</strong></div>
+                        <div class="d-flex justify-between mt-2 pt-2 border-top border-glass"><span>Total Pre-computed Patterns:</span> <strong class="text-gradient">{}</strong></div>
+                    </div>
                 </div>
                 
-                <div class="stats-card">
-                    <h5>Example Texts</h5>
-                    <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="setExample(0)">EGFR + NSCLC</button>
-                    <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="setExample(1)">KRAS + PDAC</button>
-                    <button class="btn btn-sm btn-outline-primary w-100" onclick="setExample(2)">BRCA + Ovarian</button>
+                <div class="card">
+                    <div class="card-header text-muted">Example Corpi</div>
+                    <div class="card-body d-flex flex-column gap-2 p-3">
+                        <button class="example-btn" onclick="setExample(0)">EGFR + NSCLC Dynamics</button>
+                        <button class="example-btn" onclick="setExample(1)">KRAS + PDAC Progression</button>
+                        <button class="example-btn" onclick="setExample(2)">BRCA + PARP Inhibitors</button>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-9">
-                <div class="input-section">
-                    <form method="POST" action="/ner/extract">
-                        <div class="mb-3">
-                            <label class="form-label">Input Text</label>
-                            <textarea name="text" id="textInput" class="form-control" rows="6" placeholder="Enter biomedical text to extract entities...">{}</textarea>
+            <div class="d-flex flex-column">
+                <div class="card input-section">
+                    <form method="POST" action="/ner/extract" class="d-flex flex-column gap-3">
+                        <div>
+                            <label class="form-label" style="font-size: 1.1rem; color: var(--text-main);">Input Document Stream</label>
+                            <textarea name="text" id="textInput" class="form-control mt-2" rows="6" placeholder="Enter biomedical text to initiate entity extraction sequence...">{}</textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary">🔍 Extract Entities</button>
+                        <div class="d-flex justify-end">
+                            <button type="submit" class="btn btn-primary px-4 py-2">Execute Extraction Algorithm</button>
+                        </div>
                     </form>
                 </div>
                 
@@ -230,8 +248,9 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                 {}
             </div>
         </div>
-    </div>
+    </main>
     
+    <script src="/static/js/main.js"></script>
     <script>
         const examples = [
             "EGFR T790M mutations confer resistance to gefitinib and erlotinib in non-small cell lung cancer patients. Osimertinib is a third-generation EGFR TKI effective against T790M-positive NSCLC.",
@@ -244,8 +263,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
         }}
     </script>
 </body>
-</html>
-        "##,
+</html>"##,
         NAV_HTML,
         stats.gene_count,
         stats.disease_count,
