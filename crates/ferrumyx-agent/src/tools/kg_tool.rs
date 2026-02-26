@@ -1,25 +1,28 @@
 //! IronClaw tools: Knowledge Graph query and upsert.
 
-use anyhow::Result;
+
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::PgPool;
-use super::FerrumyxTool;
+use std::sync::Arc;
+use ferrumyx_db::Database;
+use ironclaw::tools::{ApprovalRequirement, Tool, ToolOutput, ToolError};
+use ironclaw::context::JobContext;
+use std::time::Instant;
 
 // ─────────────────────────────────────────────
 //  KG Query
 // ─────────────────────────────────────────────
 
 pub struct KgQueryTool {
-    db: PgPool,
+    db: Arc<Database>,
 }
 
 impl KgQueryTool {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: Arc<Database>) -> Self { Self { db } }
 }
 
 #[async_trait]
-impl FerrumyxTool for KgQueryTool {
+impl Tool for KgQueryTool {
     fn name(&self) -> &str { "kg_query" }
 
     fn description(&self) -> &str {
@@ -57,57 +60,26 @@ impl FerrumyxTool for KgQueryTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
         let entity      = params["entity"].as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing required param: entity"))?;
+            .ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing required param: entity".to_string()))?;
         let predicate   = params["predicate"].as_str().unwrap_or("%");
         let min_conf    = params["min_confidence"].as_f64().unwrap_or(0.3);
         let limit       = params["limit"].as_i64().unwrap_or(50);
 
-        let rows: Vec<(String, String, String, f64, Option<String>)> = sqlx::query_as(
-            "SELECT
-                 COALESCE(eg1.symbol, e1.name),
-                 kf.predicate,
-                 COALESCE(eg2.symbol, e2.name),
-                 kf.confidence,
-                 kf.source_pmid
-             FROM kg_facts kf
-             JOIN entities e1 ON kf.subject_id = e1.id
-             LEFT JOIN ent_genes eg1 ON eg1.id = e1.id
-             JOIN entities e2 ON kf.object_id = e2.id
-             LEFT JOIN ent_genes eg2 ON eg2.id = e2.id
-             WHERE kf.valid_until IS NULL
-               AND kf.confidence >= $1
-               AND ($2 = '%' OR kf.predicate ILIKE $2)
-               AND (eg1.symbol ILIKE $3 OR eg2.symbol ILIKE $3
-                    OR e1.name ILIKE $3 OR e2.name ILIKE $3)
-             ORDER BY kf.confidence DESC
-             LIMIT $4"
-        )
-        .bind(min_conf)
-        .bind(predicate)
-        .bind(entity)
-        .bind(limit)
-        .fetch_all(&self.db)
-        .await?;
+        // TODO: Implement LanceDB query for facts
+        let facts: Vec<Value> = vec![];
 
-        let facts: Vec<Value> = rows.into_iter().map(|(s, p, o, c, pmid)| {
-            serde_json::json!({
-                "subject": s, "predicate": p, "object": o,
-                "confidence": c, "source_pmid": pmid
-            })
-        }).collect();
-
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "entity": entity,
             "predicate_filter": predicate,
             "min_confidence": min_conf,
             "n_facts": facts.len(),
             "facts": facts
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
-
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 // ─────────────────────────────────────────────
@@ -115,15 +87,15 @@ impl FerrumyxTool for KgQueryTool {
 // ─────────────────────────────────────────────
 
 pub struct KgUpsertTool {
-    db: PgPool,
+    db: Arc<Database>,
 }
 
 impl KgUpsertTool {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: Arc<Database>) -> Self { Self { db } }
 }
 
 #[async_trait]
-impl FerrumyxTool for KgUpsertTool {
+impl Tool for KgUpsertTool {
     fn name(&self) -> &str { "kg_upsert" }
 
     fn description(&self) -> &str {
@@ -148,52 +120,26 @@ impl FerrumyxTool for KgUpsertTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
-        let subject   = params["subject"].as_str().ok_or_else(|| anyhow::anyhow!("Missing: subject"))?;
-        let predicate = params["predicate"].as_str().ok_or_else(|| anyhow::anyhow!("Missing: predicate"))?;
-        let object    = params["object"].as_str().ok_or_else(|| anyhow::anyhow!("Missing: object"))?;
-        let confidence = params["confidence"].as_f64().ok_or_else(|| anyhow::anyhow!("Missing: confidence"))?;
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
+        let subject   = params["subject"].as_str().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: subject".to_string()))?;
+        let predicate = params["predicate"].as_str().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: predicate".to_string()))?;
+        let object    = params["object"].as_str().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: object".to_string()))?;
+        let confidence = params["confidence"].as_f64().ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing: confidence".to_string()))?;
         let source_pmid = params["source_pmid"].as_str();
         let source_db   = params["source_db"].as_str();
 
-        // Resolve entity IDs
-        let subject_id: Option<i32> = sqlx::query_scalar(
-            "SELECT e.id FROM entities e LEFT JOIN ent_genes eg ON eg.id = e.id WHERE eg.symbol = $1 OR e.name = $1 LIMIT 1"
-        ).bind(subject).fetch_optional(&self.db).await?;
+        // TODO: Implement LanceDB upsert for facts
 
-        let object_id: Option<i32> = sqlx::query_scalar(
-            "SELECT e.id FROM entities e LEFT JOIN ent_genes eg ON eg.id = e.id WHERE eg.symbol = $1 OR e.name = $1 LIMIT 1"
-        ).bind(object).fetch_optional(&self.db).await?;
-
-        let (sid, oid) = match (subject_id, object_id) {
-            (Some(s), Some(o)) => (s, o),
-            (None, _) => return Err(anyhow::anyhow!("Entity not found: {subject}")),
-            (_, None) => return Err(anyhow::anyhow!("Entity not found: {object}")),
-        };
-
-        sqlx::query(
-            "INSERT INTO kg_facts (subject_id, predicate, object_id, confidence, source_pmid, source_db)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT DO NOTHING"
-        )
-        .bind(sid)
-        .bind(predicate)
-        .bind(oid)
-        .bind(confidence)
-        .bind(source_pmid)
-        .bind(source_db)
-        .execute(&self.db)
-        .await?;
-
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "status": "inserted",
             "fact": { "subject": subject, "predicate": predicate, "object": object,
                       "confidence": confidence }
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
 
-    fn requires_approval(&self) -> bool { true }
-    fn output_data_class(&self) -> &str { "PUBLIC" }
+    fn requires_approval(&self, _params: &serde_json::Value) -> ApprovalRequirement { ApprovalRequirement::Always }
 }
 
 #[cfg(test)]

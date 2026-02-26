@@ -12,11 +12,14 @@ path = "src/main.rs"
 [dependencies]
 ferrumyx-common     = { path = "../ferrumyx-common" }
 ferrumyx-ingestion  = { path = "../ferrumyx-ingestion" }
-ferrumyx-kg         = { path = "../ferrumyx-kg" }
-ferrumyx-ranker     = { path = "../ferrumyx-ranker" }
+ferrumyx-kg = { path = "../ferrumyx-kg" }
+ferrumyx-ranker = { path = "../ferrumyx-ranker" }
+ferrumyx-molecules = { path = "../ferrumyx-molecules" }
 ferrumyx-llm        = { path = "../ferrumyx-llm" }
 ferrumyx-web        = { path = "../ferrumyx-web" }
 ferrumyx-ner        = { path = "../ferrumyx-ner" }
+ironclaw            = { path = "../../../ironclaw", default-features = false }
+rig-core            = "0.30"
 axum                = { version = "0.8", features = ["ws", "macros"] }
 anyhow.workspace = true
 tokio.workspace = true
@@ -24,7 +27,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
 toml            = { version = "0.8" }
 async-trait     = "0.1"
 reqwest         = { version = "0.12", features = ["json"] }
+ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }

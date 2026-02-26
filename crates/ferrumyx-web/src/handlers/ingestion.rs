@@ -55,6 +55,7 @@ pub async fn ingestion_run(
         sources,
         pubmed_api_key: None,
         embedding_cfg:  None,
+        enable_scihub_fallback: false,
     };
 
     // Emit SSE start event immediately

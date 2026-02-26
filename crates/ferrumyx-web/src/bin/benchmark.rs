@@ -19,8 +19,9 @@ async fn main() -> anyhow::Result<()> {
     let mut job = IngestionJob::default();
     job.enable_scihub_fallback = true;
     job.gene = "BRCA1".to_string();
+    job.mutation = None; // Important: Clear the default G12D mutation restriction
     job.cancer_type = "ovarian cancer".to_string();
-    job.max_results = 5; // A bit more for realistic benchmarking
+    job.max_results = 20; // Enough to test the pipeline
     job.sources = vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc];
     
     let repo = Arc::new(IngestionRepository::new(db.clone()));
@@ -33,8 +34,36 @@ async fn main() -> anyhow::Result<()> {
     println!("Ingestion (+ NER) took: {:.2?} (Inserted {} papers out of {} found)", start_ing.elapsed(), result.papers_inserted, result.papers_found);
     
     let start_kg = Instant::now();
+    
+    // Simulate KG Extraction Phase:
+    // Read chunks from DB, extract facts, and write them back
+    let chunk_repo = ferrumyx_db::chunks::ChunkRepository::new(db.clone());
+    let kg_repo = ferrumyx_db::kg_facts::KgFactRepository::new(db.clone());
+    
+    let chunks = chunk_repo.list(0, 1000).await.unwrap_or_default();
+    let mut db_facts = Vec::new();
+    let dummy_uuid = uuid::Uuid::new_v4();
+    
+    for chunk in chunks {
+        let extracted = ferrumyx_kg::extraction::build_facts("BRCA1", &chunk.content);
+        for fact in extracted {
+            db_facts.push(ferrumyx_db::schema::KgFact::new(
+                chunk.paper_id,
+                dummy_uuid, // Not fully resolved in extraction yet
+                fact.subject,
+                fact.fact_type, // e.g. gene_cancer, gene_mutation
+                dummy_uuid,
+                fact.object,
+            ));
+        }
+    }
+    
+    if !db_facts.is_empty() {
+        let _ = kg_repo.insert_batch(&db_facts).await;
+    }
+
     let scored_targets = compute_target_scores(db.clone()).await.unwrap_or(0);
-    println!("KG Fact Scoring computation took: {:.2?} (Scored {} targets)", start_kg.elapsed(), scored_targets);
+    println!("KG Fact Extraction & Scoring took: {:.2?} (Scored {} targets, extracted {} facts)", start_kg.elapsed(), scored_targets, db_facts.len());
     
     let top_gene = "P38398"; // BRCA1 Uniprot ID
     
@@ -42,7 +71,12 @@ async fn main() -> anyhow::Result<()> {
     // Molecules Pipeline
     let pipeline = MoleculesPipeline::new(".kilocode/cache");
     match pipeline.run(top_gene).await {
-        Ok(res) => println!("Molecules Pipeline (Fetch PDB, Pocket, Ligand, Vina, Scoring) took: {:.2?} (Generated {} molecules)", start_mol.elapsed(), res.len()),
+        Ok(res) => {
+            println!("Molecules Pipeline (Fetch PDB, Pocket, Ligand, Vina, Scoring) took: {:.2?} (Generated {} molecules)", start_mol.elapsed(), res.len());
+            for (i, m) in res.iter().enumerate() {
+                println!("  Molecule {}: SMILES={}, Score={:.4}", i+1, m.molecule.smiles, m.composite_score);
+            }
+        },
         Err(e) => println!("Molecules Pipeline Error: {}", e),
     }
 

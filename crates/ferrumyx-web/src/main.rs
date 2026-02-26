@@ -23,9 +23,9 @@ async fn main() -> anyhow::Result<()> {
     let app = ferrumyx_web::router::build_router(state);
 
     // Bind to port
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
     info!("🚀 Server listening on http://{}", addr);
-    info!("📱 Open your browser and navigate to http://localhost:3000");
+    info!("📱 Open your browser and navigate to http://localhost:3001");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

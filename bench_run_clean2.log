@@ -1,0 +1,527 @@
+warning: unused import: `Path`
+  --> crates\ferrumyx-depmap\src\lib.rs:41:17
+   |
+41 | use std::path::{Path, PathBuf};
+   |                 ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `warn`
+  --> crates\ferrumyx-depmap\src\lib.rs:45:28
+   |
+45 | use tracing::{info, debug, warn};
+   |                            ^^^^
+
+warning: variable does not need to be mutable
+   --> crates\ferrumyx-depmap\src\lib.rs:348:17
+    |
+348 |             let mut scores: Vec<f64> = cell_lines
+    |                 ----^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-depmap` (lib) generated 3 warnings (run `cargo fix --lib -p ferrumyx-depmap` to apply 3 suggestions)
+warning: unused import: `std::collections::HashMap`
+  --> crates\ferrumyx-ner\src\trie_ner.rs:15:5
+   |
+15 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `debug`
+  --> crates\ferrumyx-ner\src\entity_loader.rs:16:21
+   |
+16 | use tracing::{info, debug};
+   |                     ^^^^^
+
+warning: unused import: `HashMap`
+  --> crates\ferrumyx-ner\src\entity_db.rs:11:24
+   |
+11 | use std::collections::{HashMap, HashSet};
+   |                        ^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+  --> crates\ferrumyx-ner\src\entity_db.rs:12:5
+   |
+12 | use std::sync::Arc;
+   |     ^^^^^^^^^^^^^^
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:12:7
+   |
+12 | #[cfg(feature = "db")]
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:15:7
+   |
+15 | #[cfg(feature = "db")]
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:19:7
+   |
+19 | #[cfg(feature = "db")]
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:25:11
+   |
+25 | #[cfg(not(feature = "db"))]
+   |           ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:28:11
+   |
+28 | #[cfg(not(feature = "db"))]
+   |           ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:75:7
+   |
+75 | #[cfg(feature = "db")]
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+   --> crates\ferrumyx-ner\src\entity_aggregator.rs:479:7
+    |
+479 | #[cfg(feature = "db")]
+    |       ^^^^^^^^^^^^^^
+    |
+    = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+    = help: consider adding `db` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:45:11
+   |
+45 |     #[cfg(feature = "db")]
+   |           ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:47:15
+   |
+47 |     #[cfg(not(feature = "db"))]
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:49:11
+   |
+49 |     #[cfg(feature = "db")]
+   |           ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:51:15
+   |
+51 |     #[cfg(not(feature = "db"))]
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:53:11
+   |
+53 |     #[cfg(feature = "db")]
+   |           ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `db`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:55:15
+   |
+55 |     #[cfg(not(feature = "db"))]
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `parallel`, and `rayon`
+   = help: consider adding `db` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-ner\src\entity_aggregator.rs:8:5
+  |
+8 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-ner\src\entity_aggregator.rs:9:5
+  |
+9 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `tracing::info`
+  --> crates\ferrumyx-ner\src\entity_aggregator.rs:10:5
+   |
+10 | use tracing::info;
+   |     ^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> crates\ferrumyx-ner\src\entity_loader.rs:286:13
+    |
+286 |         let mut by_icd10 = HashMap::new();
+    |             ----^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `current_element` is never read
+   --> crates\ferrumyx-ner\src\trie_ner.rs:401:35
+    |
+401 |         let mut current_element = String::new();
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `current_element` is never read
+   --> crates\ferrumyx-ner\src\entity_loader.rs:291:35
+    |
+291 |         let mut current_element = String::new();
+    |                                   ^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: unused variable: `mesh_name`
+   --> crates\ferrumyx-ner\src\entity_db.rs:327:20
+    |
+327 |         for (name, mesh_name, aliases, category) in cancers {
+    |                    ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_mesh_name`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `label_for_type` is never used
+   --> crates\ferrumyx-ner\src\trie_ner.rs:188:8
+    |
+ 48 | impl TrieNer {
+    | ------------ associated function in this implementation
+...
+188 |     fn label_for_type(entity_type: &EntityType) -> String {
+    |        ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `by_uniprot` is never read
+  --> crates\ferrumyx-ner\src\entity_loader.rs:34:5
+   |
+29 | pub struct GeneDatabase {
+   |            ------------ field in this struct
+...
+34 |     by_uniprot: HashMap<String, GeneEntry>, // by UniProt
+   |     ^^^^^^^^^^
+
+warning: field `by_icd10` is never read
+  --> crates\ferrumyx-ner\src\entity_loader.rs:54:5
+   |
+51 | pub struct DiseaseDatabase {
+   |            --------------- field in this struct
+...
+54 |     by_icd10: HashMap<String, DiseaseEntry>, // by ICD-10
+   |     ^^^^^^^^
+
+warning: field `by_cas` is never read
+  --> crates\ferrumyx-ner\src\entity_loader.rs:84:5
+   |
+81 | pub struct ChemicalDatabase {
+   |            ---------------- field in this struct
+...
+84 |     by_cas: HashMap<String, ChemicalEntry>,   // by CAS number
+   |     ^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> crates\ferrumyx-ranker\src\depmap_provider.rs:7:5
+  |
+7 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `gene`
+  --> crates\ferrumyx-kg\src\scoring.rs:72:51
+   |
+72 | pub async fn get_gene_evidence(db: Arc<Database>, gene: &str) -> Result<GeneEvidence> {
+   |                                                   ^^^^ help: if this is intentional, prefix it with an underscore: `_gene`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `fact_repo`
+  --> crates\ferrumyx-kg\src\scoring.rs:73:9
+   |
+73 |     let fact_repo = KgFactRepository::new(db);
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fact_repo`
+
+warning: type `GeneEvidence` is more private than the item `get_gene_evidence`
+  --> crates\ferrumyx-kg\src\scoring.rs:72:1
+   |
+72 | pub async fn get_gene_evidence(db: Arc<Database>, gene: &str) -> Result<GeneEvidence> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `get_gene_evidence` is reachable at visibility `pub`
+   |
+note: but type `GeneEvidence` is only usable at visibility `pub(self)`
+  --> crates\ferrumyx-kg\src\scoring.rs:13:1
+   |
+13 | struct GeneEvidence {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-molecules\src\scoring.rs:3:5
+  |
+3 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `debug`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:5:21
+  |
+5 | use tracing::{info, debug, warn};
+  |                     ^^^^^
+
+warning: unused import: `crate::pocket::FPocketRunner`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:8:5
+  |
+8 | use crate::pocket::FPocketRunner;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Molecule`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:9:38
+  |
+9 | use crate::ligand::{LigandGenerator, Molecule};
+  |                                      ^^^^^^^^
+
+warning: unused imports: `DockingConfig` and `VinaRunner`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:10:22
+   |
+10 | use crate::docking::{VinaRunner, DockingConfig};
+   |                      ^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused variable: `pdb_path`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:29:13
+   |
+29 |         let pdb_path = match fetcher.fetch_alphafold(uniprot_id).await {
+   |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pdb_path`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetResponse` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:54:8
+   |
+54 | struct ChemblTargetResponse {
+   |        ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetComponent` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:59:8
+   |
+59 | struct ChemblTargetComponent {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ChemblTargetData` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:64:8
+   |
+64 | struct ChemblTargetData {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: field `num_ro5_violations` is never read
+   --> crates\ferrumyx-molecules\src\ligand.rs:101:5
+    |
+ 98 | struct ChemblMoleculeProperties {
+    |        ------------------------ field in this struct
+...
+101 |     num_ro5_violations: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: `ferrumyx-ner` (lib) generated 28 warnings (run `cargo fix --lib -p ferrumyx-ner` to apply 9 suggestions)
+warning: `ferrumyx-ranker` (lib) generated 1 warning (run `cargo fix --lib -p ferrumyx-ranker` to apply 1 suggestion)
+warning: `ferrumyx-kg` (lib) generated 3 warnings (run `cargo fix --lib -p ferrumyx-kg` to apply 2 suggestions)
+warning: `ferrumyx-molecules` (lib) generated 10 warnings (run `cargo fix --lib -p ferrumyx-molecules` to apply 6 suggestions)
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:12:34
+   |
+12 | use tracing::{debug, instrument, warn};
+   |                                  ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:16:28
+   |
+16 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `EmbeddingConfig as RustEmbedConfig`
+  --> crates\ferrumyx-ingestion\src\embedding.rs:21:22
+   |
+21 | use ferrumyx_embed::{EmbeddingConfig as RustEmbedConfig};
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\biorxiv.rs:69:13
+   |
+69 |         let mut papers: Vec<PaperMetadata> = collection.iter()
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `total_samples`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:160:13
+    |
+160 |         let total_samples: usize = mutations.iter().map(|m| m.sample_count).sum();
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_samples`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `gene_symbol`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:44
+    |
+168 |     pub async fn is_driver_mutation(&self, gene_symbol: &str, protein_change: &str) -> anyhow::Result<bool> {
+    |                                            ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_gene_symbol`
+
+warning: unused variable: `protein_change`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:63
+    |
+168 |     pub async fn is_driver_mutation(&self, gene_symbol: &str, protein_change: &str) -> anyhow::Result<bool> {
+    |                                                               ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_protein_change`
+
+warning: constant `DEPMAP_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:26:7
+   |
+26 | const DEPMAP_API_URL: &str = "https://depmap.org/portal/api";
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:41:5
+   |
+40 | pub struct DepMapClient {
+   |            ------------ fields in this struct
+41 |     client: Client,
+   |     ^^^^^^
+42 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+warning: field `source_files` is never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:44:5
+   |
+34 | pub struct DepMapCache {
+   |            ----------- field in this struct
+...
+44 |     source_files: Vec<PathBuf>,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `DepMapCache` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `COSMIC_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:29:7
+   |
+29 | const COSMIC_API_URL: &str = "https://cancer.sanger.ac.uk/cosmic/api";
+   |       ^^^^^^^^^^^^^^
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:89:5
+   |
+88 | pub struct CosmicClient {
+   |            ------------ fields in this struct
+89 |     client: Client,
+   |     ^^^^^^
+90 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+warning: `ferrumyx-ingestion` (lib) generated 12 warnings (run `cargo fix --lib -p ferrumyx-ingestion` to apply 7 suggestions)
+warning: unused import: `Path`
+ --> crates\ferrumyx-web\src\handlers\ranker.rs:4:29
+  |
+4 |     extract::{State, Query, Path},
+  |                             ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `entities`
+  --> crates\ferrumyx-web\src\handlers\query.rs:47:9
+   |
+47 |     let entities = entity_repo.list(0, 100).await.unwrap_or_default();
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_entities`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `state`
+  --> crates\ferrumyx-web\src\handlers\depmap.rs:46:11
+   |
+46 |     State(state): State<SharedState>,
+   |           ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+
+warning: unused variable: `state`
+  --> crates\ferrumyx-web\src\handlers\depmap.rs:69:11
+   |
+69 |     State(state): State<SharedState>,
+   |           ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+
+warning: unused variable: `gene`
+  --> crates\ferrumyx-web\src\handlers\depmap.rs:72:9
+   |
+72 |     let gene = filter.gene.as_deref().unwrap_or("KRAS");
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_gene`
+
+warning: unused variable: `state`
+  --> crates\ferrumyx-web\src\handlers\ranker.rs:60:11
+   |
+60 |     State(state): State<SharedState>,
+   |           ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+
+warning: `ferrumyx-web` (lib) generated 6 warnings (run `cargo fix --lib -p ferrumyx-web` to apply 6 suggestions)
+   Compiling ferrumyx-web v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-web)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.28s
+     Running `target\debug\benchmark.exe`
+=== Starting Benchmark ===
+Ingestion (+ NER) took: 4.57s (Inserted 0 papers out of 40 found)
+KG Fact Extraction & Scoring took: 745.50┬╡s (Scored 0 targets, extracted 0 facts)
+Molecules Pipeline (Fetch PDB, Pocket, Ligand, Vina, Scoring) took: 1.53s (Generated 1 molecules)
+  Molecule 1: SMILES=CC(=O)OC1=CC=CC=C1C(=O)O, Score=7.0000
+Total workflow took: 6.11s

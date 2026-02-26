@@ -17,13 +17,15 @@ use crate::handlers::{
     query::{query_page, query_submit},
     targets::{targets_page, api_targets, api_target_detail},
     ingestion::{ingestion_page, ingestion_run},
-    molecules::molecules_page,
+    molecules::{molecules_page, api_molecules_run},
     kg::{kg_page, api_kg_facts, api_kg_stats},
     metrics::metrics_page,
     system::system_page,
     search::hybrid_search,
     ner::{ner_page, ner_extract, api_ner_stats, api_ner_extract},
     depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
+    ranker::{ranker_page, api_ranker_score, api_ranker_top, api_ranker_stats},
+    settings::settings_page,
 };
 use crate::sse::sse_handler;
 
@@ -45,6 +47,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/audit",      get(system_page)) // alias for now
         .route("/ner",        get(ner_page).post(ner_extract))
         .route("/depmap",     get(depmap_page))
+        .route("/ranker",     get(ranker_page))
+        .route("/settings",   get(settings_page))
 
         // SSE streaming
         .route("/api/events", get(sse_handler))
@@ -57,8 +61,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/search",        get(hybrid_search))
         .route("/api/ner/stats",     get(api_ner_stats))
         .route("/api/ner/extract",   post(api_ner_extract))
+        .route("/api/molecules/run", post(api_molecules_run))
         .route("/api/depmap/gene",   get(api_depmap_gene))
         .route("/api/depmap/celllines", get(api_depmap_celllines))
+        .route("/api/ranker/score",  get(api_ranker_score))
+        .route("/api/ranker/top",    get(api_ranker_top))
+        .route("/api/ranker/stats",  get(api_ranker_stats))
 
         // Static files
         .nest_service("/static", ServeDir::new("static"))

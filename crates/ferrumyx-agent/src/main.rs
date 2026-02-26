@@ -143,26 +143,11 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Connect to PostgreSQL
-    info!("Connecting to PostgreSQL...");
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.database.max_connections)
-        .min_connections(config.database.min_connections)
-        .connect(&config.database.url)
-        .await
-        .map_err(|e| anyhow::anyhow!(
-            "DB connection failed: {e}\nIs PostgreSQL running?\nTry: cd docker && docker compose up -d"
-        ))?;
-
-    info!("✅ PostgreSQL connected.");
-
-    // Run pending migrations
-    info!("Running schema migrations...");
-    sqlx::migrate!("../../migrations")
-        .run(&pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
-    info!("✅ Migrations complete.");
+    // Connect to LanceDB
+    info!("Connecting to LanceDB...");
+    let db = ferrumyx_db::Database::open(&config.database.url).await?;
+    let db = std::sync::Arc::new(db);
+    info!("✅ LanceDB connected.");
 
     // Build LLM router from config
     let llm_backends = build_llm_backends(&config);
@@ -170,12 +155,66 @@ async fn main() -> anyhow::Result<()> {
     info!("✅ LLM router ready: {} backends registered.", n_backends);
 
     // Register Ferrumyx tools
-    let tool_registry = tools::build_default_registry(pool.clone());
-    info!("✅ Tool registry ready: {} tools registered.", tool_registry.len());
-    let _ = (tool_registry, llm_backends); // Will be stored in AppState in a later phase
+    let tool_registry = tools::build_default_registry(db.clone());
+    info!("✅ Tool registry ready");
+    // Initialize IronClaw Agent with Ollama (if configured)
+    if let Some(ref ollama_cfg) = config.llm.ollama {
+        info!("🤖 Initializing IronClaw Agent with Ollama model: {}", ollama_cfg.model);
+        
+        let client = rig::providers::ollama::Client::builder()
+            .base_url(&ollama_cfg.base_url)
+            .api_key(rig::client::Nothing)
+            .build()
+            .expect("Failed to build Ollama client");
+            
+        let model = client.completion_model(&ollama_cfg.model);
+        let ironclaw_llm = std::sync::Arc::new(ironclaw::llm::RigAdapter::new(model, &ollama_cfg.model));
+        
+        let deps = ironclaw::agent::AgentDeps {
+            store: None,
+            llm: ironclaw_llm,
+            cheap_llm: None,
+            safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(ironclaw::config::SafetyConfig::default())),
+            tools: tool_registry.clone(),
+            workspace: None,
+            extension_manager: None,
+            skill_registry: None,
+            skill_catalog: None,
+            skills_config: ironclaw::config::SkillsConfig::default(),
+            hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
+            cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
+        };
+
+        let channels = std::sync::Arc::new(ironclaw::channels::ChannelManager::new());
+        let repl = ironclaw::channels::ReplChannel::new();
+        channels.add(Box::new(repl)).await;
+
+        let mut agent_config = ironclaw::config::AgentConfig::default();
+        agent_config.name = "Ferrumyx Drug Discovery Agent".to_string();
+        agent_config.instructions = "You are Ferrumyx, an autonomous oncology drug discovery agent. Use your tools to search Literature, query the Knowledge Graph, fetch structures, detect pockets, and run docking simulations to find proper drug candidates.".to_string();
+
+        let agent = ironclaw::agent::Agent::new(
+            agent_config,
+            deps,
+            channels,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        tokio::spawn(async move {
+            if let Err(e) = agent.run().await {
+                tracing::error!("Agent loop exited with error: {}", e);
+            }
+        });
+    } else {
+        tracing::warn!("Ollama is not configured in ferrumyx.toml, IronClaw agent loop will not start.");
+    }
 
     // Build app state and router
-    let state = ferrumyx_web::state::AppState::new(pool);
+    let state = ferrumyx_web::state::AppState::new(db);
     let router = ferrumyx_web::router::build_router(state);
 
     // Start web server

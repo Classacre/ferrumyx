@@ -20,9 +20,11 @@ aho-corasick = "1"
 reqwest = { version = "0.12", features = ["rustls-tls", "blocking"], default-features = false }
 quick-xml = "0.36"
 uuid = { version = "1", features = ["v4"] }
+rayon = { version = "1.10", optional = true }
 
 [features]
-default = []
+default = ["parallel"]
+parallel = ["rayon"]
 
 [[example]]
 name = "egfr_nsclc_pipeline"

@@ -43,7 +43,7 @@ pub async fn depmap_page(State(_state): State<SharedState>) -> Html<String> {
 
 /// GET /api/depmap/gene/{gene} — Get DepMap stats for a gene
 pub async fn api_depmap_gene(
-    State(state): State<SharedState>,
+    State(_state): State<SharedState>,
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
     let gene = filter.gene.as_deref().unwrap_or("KRAS");
@@ -66,10 +66,10 @@ pub async fn api_depmap_gene(
 
 /// GET /api/depmap/celllines — Get cell line data
 pub async fn api_depmap_celllines(
-    State(state): State<SharedState>,
+    State(_state): State<SharedState>,
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
-    let gene = filter.gene.as_deref().unwrap_or("KRAS");
+    let _gene = filter.gene.as_deref().unwrap_or("KRAS");
     
     // Mock data for now - would query from database
     let cell_lines = vec![

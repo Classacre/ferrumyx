@@ -1,9 +1,29 @@
 //! Molecule pipeline viewer — docking results and candidate molecules.
 
-use axum::{extract::{State, Query}, response::Html};
+use axum::{extract::{State, Query}, response::Html, Json};
 use serde::Deserialize;
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
+use ferrumyx_molecules::pipeline::MoleculesPipeline;
+
+#[derive(Deserialize)]
+pub struct MolRunParams {
+    pub uniprot_id: String,
+}
+
+pub async fn api_molecules_run(
+    State(_state): State<SharedState>,
+    axum::extract::Json(payload): axum::extract::Json<MolRunParams>,
+) -> Json<serde_json::Value> {
+    let pipeline = MoleculesPipeline::new(".kilocode/cache");
+    match pipeline.run(&payload.uniprot_id).await {
+        Ok(results) => Json(serde_json::json!({ "status": "success", "results": results })),
+        Err(e) => {
+            let err: anyhow::Error = e.into();
+            Json(serde_json::json!({ "status": "error", "error": err.to_string() }))
+        }
+    }
+}
 
 #[derive(Deserialize, Default)]
 pub struct MolFilter { pub gene: Option<String> }

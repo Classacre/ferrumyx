@@ -11,3 +11,5 @@ pub mod system;
 pub mod search;
 pub mod ner;
 pub mod depmap;
+pub mod ranker;
+pub mod settings;

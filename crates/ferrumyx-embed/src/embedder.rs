@@ -301,9 +301,9 @@ impl BiomedBertEmbedder {
             .zip(token_type_ids_vec.iter_mut())
         {
             let pad_len = max_len - ids.len();
-            ids.extend(std::iter::repeat(0).take(pad_len));
-            mask.extend(std::iter::repeat(0).take(pad_len));
-            type_ids.extend(std::iter::repeat(0).take(pad_len));
+            ids.extend(std::iter::repeat_n(0, pad_len));
+            mask.extend(std::iter::repeat_n(0, pad_len));
+            type_ids.extend(std::iter::repeat_n(0, pad_len));
         }
 
         // Create tensors - attention_mask needs to be F32 for broadcasting operations

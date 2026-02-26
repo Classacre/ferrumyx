@@ -242,8 +242,8 @@ mod tests {
         let confidence = 0.85;
 
         let (composite, adjusted) = compute_composite_score(&normed, &weights, penalty, confidence);
-        assert!(composite >= 0.0 && composite <= 1.0);
-        assert!(adjusted >= 0.0 && adjusted <= 1.0);
+        assert!((0.0..=1.0).contains(&composite));
+        assert!((0.0..=1.0).contains(&adjusted));
         assert!(adjusted <= composite);
     }
 

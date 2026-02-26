@@ -1,21 +1,24 @@
 //! IronClaw tool: target scoring and shortlisting.
 
-use anyhow::Result;
+
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::PgPool;
-use super::FerrumyxTool;
+use std::sync::Arc;
+use ferrumyx_db::Database;
+use ironclaw::tools::{Tool, ToolOutput, ToolError};
+use ironclaw::context::JobContext;
+use std::time::Instant;
 
 pub struct ScoreTargetsTool {
-    db: PgPool,
+    db: Arc<Database>,
 }
 
 impl ScoreTargetsTool {
-    pub fn new(db: PgPool) -> Self { Self { db } }
+    pub fn new(db: Arc<Database>) -> Self { Self { db } }
 }
 
 #[async_trait]
-impl FerrumyxTool for ScoreTargetsTool {
+impl Tool for ScoreTargetsTool {
     fn name(&self) -> &str { "score_targets" }
 
     fn description(&self) -> &str {
@@ -49,7 +52,8 @@ impl FerrumyxTool for ScoreTargetsTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
         let cancer_code = params["cancer_code"].as_str().unwrap_or("PAAD");
         let min_facts   = params["min_kg_facts"].as_u64().unwrap_or(3) as i64;
         let profile     = params["weight_profile"].as_str().unwrap_or("default");
@@ -63,28 +67,15 @@ impl FerrumyxTool for ScoreTargetsTool {
         );
 
         // Count eligible gene–cancer pairs
-        let eligible: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT kf.subject_id)
-             FROM kg_facts kf
-             JOIN entities ce ON kf.object_id = ce.id
-             JOIN ent_cancer_types ect ON ect.id = ce.id
-             WHERE ect.oncotree_code = $1
-               AND kf.valid_until IS NULL
-             GROUP BY kf.subject_id
-             HAVING COUNT(*) >= $2"
-        )
-        .bind(cancer_code)
-        .bind(min_facts)
-        .fetch_one(&self.db)
-        .await
-        .unwrap_or(0);
+        // TODO: Implement LanceDB query for eligible pairs
+        let eligible: i64 = 0;
 
         tracing::info!(tool = "score_targets", eligible, "Eligible gene-cancer pairs found");
 
         // TODO(phase1-m2): Wire in ferrumyx_ranker::TargetRanker::score_all(cancer_code, &self.db)
         // For now return the count; full scoring will INSERT rows into target_scores.
 
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "status": "queued",
             "cancer_code": cancer_code,
             "eligible_pairs": eligible,
@@ -93,11 +84,9 @@ impl FerrumyxTool for ScoreTargetsTool {
                 "Scoring job queued for {eligible} gene-cancer pairs in {cancer_code}. \
                  Results will appear in target_scores."
             )
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
-
-    fn requires_approval(&self) -> bool { false }
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 #[cfg(test)]

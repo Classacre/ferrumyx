@@ -13,6 +13,7 @@ ferrumyx-kg        = { path = "../ferrumyx-kg" }
 ferrumyx-ingestion = { path = "../ferrumyx-ingestion" }
 ferrumyx-ner       = { path = "../ferrumyx-ner" }
 ferrumyx-depmap    = { path = "../ferrumyx-depmap" }
+ferrumyx-molecules = { path = "../ferrumyx-molecules" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true

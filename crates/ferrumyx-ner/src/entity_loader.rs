@@ -628,6 +628,7 @@ mod tests {
     use super::*;
     
     #[tokio::test]
+    #[ignore] // Ignored because it downloads large files
     async fn test_database_loading() {
         let db = BiomedicalDatabase::load().await.expect("Failed to load");
         

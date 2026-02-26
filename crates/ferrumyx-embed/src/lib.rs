@@ -10,7 +10,7 @@
 //! - L2-normalized embeddings for cosine similarity
 //!
 //! # Example
-//! ```rust
+//! ```rust,no_run
 //! use ferrumyx_embed::{BiomedBertEmbedder, EmbeddingConfig};
 //!
 //! #[tokio::main]

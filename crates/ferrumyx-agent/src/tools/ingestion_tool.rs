@@ -4,32 +4,34 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::PgPool;
 use std::sync::Arc;
+use ferrumyx_db::Database;
 
 use ferrumyx_ingestion::pipeline::{
     IngestionJob, IngestionSourceSpec, run_ingestion, build_query,
 };
-use ferrumyx_ingestion::pg_repository::PgIngestionRepository;
+use ferrumyx_ingestion::repository::IngestionRepository;
 
-use super::FerrumyxTool;
+use ironclaw::tools::{Tool, ToolOutput, ToolError};
+use ironclaw::context::JobContext;
+use std::time::Instant;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PubMed ingestion tool
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub struct IngestPubmedTool {
-    repo: Arc<PgIngestionRepository>,
+    repo: Arc<IngestionRepository>,
 }
 
 impl IngestPubmedTool {
-    pub fn new(db: PgPool) -> Self {
-        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    pub fn new(db: Arc<Database>) -> Self {
+        Self { repo: Arc::new(IngestionRepository::new(db)) }
     }
 }
 
 #[async_trait]
-impl FerrumyxTool for IngestPubmedTool {
+impl Tool for IngestPubmedTool {
     fn name(&self) -> &str { "ingest_pubmed" }
 
     fn description(&self) -> &str {
@@ -52,7 +54,8 @@ impl FerrumyxTool for IngestPubmedTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
         let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
         let mutation    = params["mutation"].as_str().map(String::from);
         let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
@@ -67,13 +70,14 @@ impl FerrumyxTool for IngestPubmedTool {
             sources: vec![IngestionSourceSpec::PubMed],
             pubmed_api_key: api_key,
             embedding_cfg: None,
+            enable_scihub_fallback: false,
         };
 
         tracing::info!(tool = "ingest_pubmed", query = %build_query(&job), "Running ingestion");
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "status": "complete",
             "job_id": result.job_id,
             "query": result.query,
@@ -83,11 +87,9 @@ impl FerrumyxTool for IngestPubmedTool {
             "chunks_inserted": result.chunks_inserted,
             "errors": result.errors,
             "duration_ms": result.duration_ms
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
-
-    fn requires_approval(&self) -> bool { false }
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,17 +97,17 @@ impl FerrumyxTool for IngestPubmedTool {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub struct IngestEuropePmcTool {
-    repo: Arc<PgIngestionRepository>,
+    repo: Arc<IngestionRepository>,
 }
 
 impl IngestEuropePmcTool {
-    pub fn new(db: PgPool) -> Self {
-        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    pub fn new(db: Arc<Database>) -> Self {
+        Self { repo: Arc::new(IngestionRepository::new(db)) }
     }
 }
 
 #[async_trait]
-impl FerrumyxTool for IngestEuropePmcTool {
+impl Tool for IngestEuropePmcTool {
     fn name(&self) -> &str { "ingest_europepmc" }
 
     fn description(&self) -> &str {
@@ -128,7 +130,8 @@ impl FerrumyxTool for IngestEuropePmcTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
         let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
         let mutation    = params["mutation"].as_str().map(String::from);
         let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
@@ -142,11 +145,12 @@ impl FerrumyxTool for IngestEuropePmcTool {
             sources: vec![IngestionSourceSpec::EuropePmc],
             pubmed_api_key: None,
             embedding_cfg: None,
+            enable_scihub_fallback: false,
         };
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "status": "complete",
             "job_id": result.job_id,
             "query": result.query,
@@ -156,10 +160,9 @@ impl FerrumyxTool for IngestEuropePmcTool {
             "chunks_inserted": result.chunks_inserted,
             "errors": result.errors,
             "duration_ms": result.duration_ms
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
-
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,17 +170,17 @@ impl FerrumyxTool for IngestEuropePmcTool {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub struct IngestAllSourcesTool {
-    repo: Arc<PgIngestionRepository>,
+    repo: Arc<IngestionRepository>,
 }
 
 impl IngestAllSourcesTool {
-    pub fn new(db: PgPool) -> Self {
-        Self { repo: Arc::new(PgIngestionRepository::new(db)) }
+    pub fn new(db: Arc<Database>) -> Self {
+        Self { repo: Arc::new(IngestionRepository::new(db)) }
     }
 }
 
 #[async_trait]
-impl FerrumyxTool for IngestAllSourcesTool {
+impl Tool for IngestAllSourcesTool {
     fn name(&self) -> &str { "ingest_all" }
 
     fn description(&self) -> &str {
@@ -199,7 +202,8 @@ impl FerrumyxTool for IngestAllSourcesTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start = Instant::now();
         let gene        = params["gene"].as_str().unwrap_or("KRAS").to_string();
         let mutation    = params["mutation"].as_str().map(String::from);
         let cancer_type = params["cancer_type"].as_str().unwrap_or("cancer").to_string();
@@ -214,11 +218,12 @@ impl FerrumyxTool for IngestAllSourcesTool {
             sources: vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc],
             pubmed_api_key: api_key,
             embedding_cfg: None,
+            enable_scihub_fallback: false,
         };
 
         let result = run_ingestion(job, Arc::clone(&self.repo), None).await;
 
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "status": "complete",
             "job_id": result.job_id,
             "query": result.query,
@@ -228,10 +233,9 @@ impl FerrumyxTool for IngestAllSourcesTool {
             "chunks_inserted": result.chunks_inserted,
             "errors": result.errors,
             "duration_ms": result.duration_ms
-        }))
+        });
+        Ok(ToolOutput::success(res, start.elapsed()))
     }
-
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

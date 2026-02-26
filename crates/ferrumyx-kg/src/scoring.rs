@@ -87,9 +87,9 @@ mod tests {
     #[test]
     fn test_score_bounds() {
         // Verify scores are bounded [0, 1]
-        let literature = (5.0 / 10.0).min(1.0);
-        let mutation = (2.0 / 5.0).min(1.0);
-        let cancer = (1.0 / 3.0).min(1.0);
+        let literature = (5.0_f64 / 10.0).min(1.0);
+        let mutation = (2.0_f64 / 5.0).min(1.0);
+        let cancer = (1.0_f64 / 3.0).min(1.0);
         let composite = literature * 0.3 + mutation * 0.3 + cancer * 0.4;
         assert!(composite >= 0.0 && composite <= 1.0);
     }

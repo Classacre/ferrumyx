@@ -1,10 +1,12 @@
 //! IronClaw tool: NER extraction via Rust-native Trie-based matching.
 
-use anyhow::Result;
+
 use async_trait::async_trait;
 use serde_json::Value;
-use ferrumyx_ner::{TrieNer, ExtractedEntity};
-use super::FerrumyxTool;
+use ferrumyx_ner::TrieNer;
+use ironclaw::tools::{Tool, ToolOutput, ToolError};
+use ironclaw::context::JobContext;
+use std::time::Instant;
 use std::sync::OnceLock;
 
 static NER_MODEL: OnceLock<TrieNer> = OnceLock::new();
@@ -33,7 +35,7 @@ impl NerExtractTool {
 }
 
 #[async_trait]
-impl FerrumyxTool for NerExtractTool {
+impl Tool for NerExtractTool {
     fn name(&self) -> &str { "ner_extract" }
 
     fn description(&self) -> &str {
@@ -58,9 +60,10 @@ impl FerrumyxTool for NerExtractTool {
         })
     }
 
-    async fn invoke(&self, params: Value) -> Result<Value> {
+    async fn execute(&self, params: Value, _ctx: &JobContext) -> std::result::Result<ToolOutput, ToolError> {
+        let start_time = Instant::now();
         let text = params["text"].as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing required param: text"))?;
+            .ok_or_else(|| ironclaw::tools::ToolError::InvalidParameters("Missing required param: text".to_string()))?;
         let chunk_id = params["chunk_id"].as_str();
 
         tracing::debug!(
@@ -90,14 +93,13 @@ impl FerrumyxTool for NerExtractTool {
             })
         }).collect();
 
-        Ok(serde_json::json!({
+        let res = serde_json::json!({
             "entities": entities_json,
             "n_entities": entities.len(),
             "chunk_id": chunk_id
-        }))
+        });
+        Ok(ToolOutput::success(res, start_time.elapsed()))
     }
-
-    fn output_data_class(&self) -> &str { "PUBLIC" }
 }
 
 impl Default for NerExtractTool {

@@ -11,7 +11,7 @@ members = [
     "crates/ferrumyx-embed",
     "crates/ferrumyx-ner",
     "crates/ferrumyx-depmap",
-    "crates/ferrumyx-db",
+    "crates/ferrumyx-db", "crates/ferrumyx-molecules",
 ]
 
 [workspace.package]

@@ -17,14 +17,14 @@ Ferrumyx is an autonomous R&D engine built on [IronClaw](https://github.com/near
 |-----------|--------|-------|
 | **Ingestion** | ✅ Working | PubMed API, PDF parsing, chunking |
 | **Embedding** | ✅ Working | Rust-native BiomedBERT (768-dim, Candle) |
-| **NER** | ✅ Working | Rust-native Candle token classification |
+| **NER** | ✅ Working | Rust-native Aho-Corasick trie dictionary matching |
 | **KG Building** | ✅ Working | Fact extraction, scoring computation |
 | **Deduplication** | ✅ Working | SimHash + PMID conflict resolution |
 | **Web GUI** | ✅ Working | Dashboard, ingestion form, API endpoints |
-| **Target Ranker** | 🔧 Scaffold | Multi-factor scoring ready |
-| **Molecules** | ⏳ Phase 3 | Structural analysis pipeline |
+| **Target Ranker** | ✅ Working | Multi-factor scoring with DepMap |
+| **Molecules** | ✅ Working | Structural analysis pipeline, ADMET, Ligand generation |
 
-**No Python dependencies.** All components are Rust-native.
+**No Python dependencies.** All components are Rust-native. No external database required (LanceDB embedded).
 
 ## Architecture
 
@@ -72,29 +72,35 @@ Ferrumyx (100% Rust)
 | Crate | Description | Status |
 |-------|-------------|--------|
 | `ferrumyx-embed` | BiomedBERT embeddings via Candle (768-dim) | ✅ Working |
-| `ferrumyx-ner` | Biomedical NER via Candle token classification | ✅ Working |
+| `ferrumyx-ner` | Fast biomedical NER via Aho-Corasick dictionary matching | ✅ Working |
 | `ferrumyx-ingestion` | Literature pipeline (PubMed, chunking, dedup) | ✅ Working |
 | `ferrumyx-kg` | Knowledge graph & target scoring | ✅ Working |
-| `ferrumyx-ranker` | Target prioritization with DepMap CRISPR | 🔧 Scaffold |
-| `ferrumyx-agent` | IronClaw agent with tools | ✅ Working |
-| `ferrumyx-llm` | LLM abstraction layer | ✅ Scaffold |
+| `ferrumyx-ranker` | Target prioritization with DepMap CRISPR | ✅ Working |
+| `ferrumyx-agent` | IronClaw agent with tools (Primary Event Loop) | ✅ Working |
+| `ferrumyx-llm` | LLM abstraction layer (Ollama) | ✅ Working |
 | `ferrumyx-common` | Shared utilities | ✅ Working |
 | `ferrumyx-web` | Web API & dashboard | ✅ Working |
 
 ## Quick Start
 
 ```bash
-# Start database
-cd docker && docker compose up -d postgres
+# Set Protobuf compiler path (required for LanceDB)
+# Windows:
+set PROTOC=C:\protoc\bin\protoc.exe
+# Linux/macOS:
+# export PROTOC=/usr/bin/protoc
 
-# Run migrations
-cargo sqlx migrate run
+# Windows easy start (Installs Rust, Ollama, selects model, and runs)
+.\start.ps1
 
-# Run tests
+# Linux/macOS easy start
+./start.sh
+
+# Manual run tests
 cargo test --workspace
 
-# Start web server
-cargo run --release
+# Manual start agent / web server
+cargo run --release --bin ferrumyx
 ```
 
 ## MVP Scope

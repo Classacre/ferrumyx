@@ -13,130 +13,30 @@ pub mod ingestion_tool;
 pub mod ner_tool;
 pub mod ranker_tool;
 pub mod kg_tool;
+pub mod molecules_tool;
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::Value;
-use anyhow::Result;
-use async_trait::async_trait;
+use ironclaw::tools::ToolRegistry;
 
-// ─────────────────────────────────────────────
-//  Core trait — implement for each Ferrumyx tool
-// ─────────────────────────────────────────────
-
-/// A callable Ferrumyx tool that integrates into IronClaw's agent loop.
-///
-/// # Minimal contract
-/// - `name()` must be unique across the registry (snake_case, e.g. `"ingest_pubmed"`).
-/// - `description()` is surfaced to IronClaw's planner / LLM as the tool docstring.
-/// - `parameters_schema()` returns a JSON Schema object for parameter validation.
-/// - `invoke()` receives validated JSON params and returns JSON output.
-#[async_trait]
-pub trait FerrumyxTool: Send + Sync {
-    /// Unique tool name (used as the function call identifier).
-    fn name(&self) -> &str;
-
-    /// Short description shown to the LLM planner.
-    fn description(&self) -> &str;
-
-    /// JSON Schema describing the expected input parameters.
-    fn parameters_schema(&self) -> Value;
-
-    /// Execute the tool. Returns a JSON result or an anyhow error.
-    async fn invoke(&self, params: Value) -> Result<Value>;
-
-    /// Whether this tool requires human confirmation before running.
-    /// Default: false. Override for destructive or externally-reaching tools.
-    fn requires_approval(&self) -> bool { false }
-
-    /// Data classification of the tool's output.
-    /// Tools that access patient-level data should return "CONFIDENTIAL".
-    fn output_data_class(&self) -> &str { "PUBLIC" }
-}
-
-// ─────────────────────────────────────────────
-//  Tool registry
-// ─────────────────────────────────────────────
-
-/// Central registry mapping tool names → trait objects.
-/// Build once at startup with `ToolRegistry::builder()`, then share via Arc.
-pub struct ToolRegistry {
-    tools: HashMap<String, Arc<dyn FerrumyxTool>>,
-}
-
-impl ToolRegistry {
-    /// Create an empty registry.
-    pub fn new() -> Self {
-        Self { tools: HashMap::new() }
-    }
-
-    /// Register a tool. Panics if the name is already registered.
-    pub fn register<T: FerrumyxTool + 'static>(&mut self, tool: T) {
-        let name = tool.name().to_string();
-        assert!(
-            !self.tools.contains_key(&name),
-            "Duplicate tool name: {name}"
-        );
-        self.tools.insert(name, Arc::new(tool));
-    }
-
-    /// Invoke a registered tool by name.
-    pub async fn invoke(&self, name: &str, params: Value) -> Result<Value> {
-        let tool = self.tools.get(name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown tool: {name}"))?;
-
-        tracing::info!(
-            tool = name,
-            requires_approval = tool.requires_approval(),
-            data_class = tool.output_data_class(),
-            "Invoking tool"
-        );
-
-        tool.invoke(params).await
-    }
-
-    /// List all registered tools as a JSON array (for IronClaw function manifest).
-    pub fn manifest(&self) -> Value {
-        let tools: Vec<Value> = self.tools.values().map(|t| {
-            serde_json::json!({
-                "name": t.name(),
-                "description": t.description(),
-                "parameters": t.parameters_schema(),
-                "requires_approval": t.requires_approval(),
-                "output_data_class": t.output_data_class(),
-            })
-        }).collect();
-        serde_json::json!({ "tools": tools })
-    }
-
-    /// Number of registered tools.
-    pub fn len(&self) -> usize { self.tools.len() }
-
-    /// Returns true if no tools are registered.
-    pub fn is_empty(&self) -> bool { self.tools.is_empty() }
-
-    /// Get a reference to a tool by name.
-    pub fn get(&self, name: &str) -> Option<&Arc<dyn FerrumyxTool>> {
-        self.tools.get(name)
-    }
-}
-
-impl Default for ToolRegistry {
-    fn default() -> Self { Self::new() }
-}
-
-/// Convenience function: build the default Ferrumyx tool registry.
+/// Convenience function: build the default Ferrumyx tool registry natively using IronClaw's registry.
 /// Call once at startup and store in AppState / IronClaw agent context.
-pub fn build_default_registry(db: sqlx::PgPool) -> ToolRegistry {
+pub fn build_default_registry(db: Arc<ferrumyx_db::Database>) -> ToolRegistry {
     let mut reg = ToolRegistry::new();
-    reg.register(ingestion_tool::IngestPubmedTool::new(db.clone()));
-    reg.register(ingestion_tool::IngestEuropePmcTool::new(db.clone()));
-    reg.register(ingestion_tool::IngestAllSourcesTool::new(db.clone()));
-    reg.register(ner_tool::NerExtractTool::new());
-    reg.register(ranker_tool::ScoreTargetsTool::new(db.clone()));
-    reg.register(kg_tool::KgQueryTool::new(db.clone()));
-    reg.register(kg_tool::KgUpsertTool::new(db));
-    tracing::info!("ToolRegistry ready with {} tools", reg.len());
+    reg.register(Arc::new(ingestion_tool::IngestPubmedTool::new(db.clone())));
+    reg.register(Arc::new(ingestion_tool::IngestEuropePmcTool::new(db.clone())));
+    reg.register(Arc::new(ingestion_tool::IngestAllSourcesTool::new(db.clone())));
+    reg.register(Arc::new(ner_tool::NerExtractTool::new()));
+    reg.register(Arc::new(ranker_tool::ScoreTargetsTool::new(db.clone())));
+    reg.register(Arc::new(kg_tool::KgQueryTool::new(db.clone())));
+    reg.register(Arc::new(kg_tool::KgUpsertTool::new(db)));
+    
+    // Register Molecule tools
+    let cache_dir = std::path::PathBuf::from("./data/cache");
+    reg.register(Arc::new(molecules_tool::FetchStructureTool::new(cache_dir)));
+    reg.register(Arc::new(molecules_tool::DetectPocketsTool::new(std::path::PathBuf::from("fpocket"))));
+    reg.register(Arc::new(molecules_tool::DockMoleculeTool::new(std::path::PathBuf::from("vina"))));
+
+    tracing::info!("ToolRegistry ready");
     reg
 }
 

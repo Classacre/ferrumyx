@@ -37,6 +37,8 @@ default = ["cpu"]
 cpu = []
 cuda = ["candle-core/cuda"]
 metal = ["candle-core/metal"]
+mkl = ["candle-core/mkl"]
+accelerate = ["candle-core/accelerate"]
 
 [dev-dependencies]
 tokio-test = "0.4"

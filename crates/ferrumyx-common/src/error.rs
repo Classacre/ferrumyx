@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum FerrumyxError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(String),
 
     #[error("HTTP request error: {0}")]
     Http(#[from] reqwest::Error),
@@ -23,6 +23,9 @@ pub enum FerrumyxError {
     #[error("Configuration error: {0}")]
     Config(String),
 
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -38,15 +41,6 @@ pub enum ApiError {
     BadRequest(String),
     #[error("Internal error: {0}")]
     Internal(String),
-}
-
-impl From<sqlx::Error> for ApiError {
-    fn from(err: sqlx::Error) -> Self {
-        match err {
-            sqlx::Error::RowNotFound => ApiError::NotFound("Resource not found".to_string()),
-            _ => ApiError::Internal(err.to_string()),
-        }
-    }
 }
 
 impl axum::response::IntoResponse for ApiError {

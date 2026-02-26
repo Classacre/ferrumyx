@@ -4,7 +4,7 @@
 //! to query gene dependency scores without being tightly coupled to the
 //! ingestion module's implementation.
 
-use std::sync::Arc;
+
 
 /// Trait for accessing CRISPR gene dependency data.
 ///

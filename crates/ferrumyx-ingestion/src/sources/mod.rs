@@ -9,6 +9,7 @@ pub mod depmap;
 pub mod depmap_cache;
 pub mod cosmic;
 pub mod chembl;
+pub mod scihub;
 
 use async_trait::async_trait;
 use crate::models::PaperMetadata;
@@ -18,6 +19,7 @@ pub use depmap::{DepMapClient, GeneDependency};
 pub use depmap_cache::DepMapCache;
 pub use cosmic::{CosmicClient, MutationRecord, MutationType};
 pub use chembl::{ChemblClient, CompoundRecord, TargetRecord, ActivityRecord};
+pub use scihub::SciHubClient;
 
 /// Common interface for all literature source clients.
 #[async_trait]

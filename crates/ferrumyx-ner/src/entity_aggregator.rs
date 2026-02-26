@@ -25,6 +25,20 @@ pub struct EntityAggregator {
 #[cfg(not(feature = "db"))]
 pub struct EntityAggregator;
 
+#[cfg(not(feature = "db"))]
+impl EntityAggregator {
+    /// Infer predicate from entity types.
+    pub fn infer_predicate(type_a: &str, type_b: &str) -> &'static str {
+        match (type_a, type_b) {
+            ("GENE", "DISEASE") | ("DISEASE", "GENE") => "associated_with",
+            ("CHEMICAL", "GENE") | ("GENE", "CHEMICAL") => "interacts_with",
+            ("CHEMICAL", "DISEASE") | ("DISEASE", "CHEMICAL") => "treats",
+            ("GENE", "GENE") => "interacts_with",
+            _ => "related_to",
+        }
+    }
+}
+
 /// Co-occurrence between two entities in a paper.
 #[derive(Debug, Clone)]
 pub struct EntityCooccurrence {
@@ -445,7 +459,7 @@ impl EntityAggregator {
             let evidence: i64 = row.try_get("evidence_count")?;
             let confidence: f32 = row.try_get("confidence")?;
 
-            let predicate = Self::infer_predicate(&type_a, &type_b);
+            let predicate = EntityAggregator::infer_predicate(&type_a, &type_b);
 
             rdf.push_str(&format!(
                 "kg:{} kg:{} kg:{} . # evidence={}, conf={:.2}\n",
