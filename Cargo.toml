@@ -12,6 +12,7 @@ members = [
     "crates/ferrumyx-ner",
     "crates/ferrumyx-depmap",
     "crates/ferrumyx-db", "crates/ferrumyx-molecules",
+    "crates/ironclaw"
 ]
 
 [workspace.package]

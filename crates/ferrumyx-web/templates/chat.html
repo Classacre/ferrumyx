@@ -13,8 +13,8 @@
         .chat-container {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 8rem);
-            margin-top: 1rem;
+            height: calc(100vh - 12rem);
+            margin-top: 0;
         }
 
         .chat-history {
@@ -100,39 +100,52 @@
 
 <body>
 
-    <div class="layout">
+    <div class="layout app-container">
         {NAV_HTML}
 
         <main class="main-content">
-            <div class="header">
+            <div class="page-header">
                 <div>
-                    <h1 class="font-outfit text-gradient" style="font-size:2rem; font-weight:800; margin-bottom:0.5rem">
-                        IronClaw Agent Chat</h1>
-                    <p class="text-muted font-outfit">Fully autonomous NL interface. The agent can construct pipelines,
-                        score targets, and evaluate molecules dynamically based on your instructions.</p>
+                    <h1 class="page-title">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2...z" />
+                        </svg>
+                        IronClaw Agent Chat
+                    </h1>
+                    <p class="text-muted font-outfit">Fully autonomous NL interface connected to the Ferrumyx backend.
+                    </p>
                 </div>
             </div>
 
-            <div class="chat-container">
-                <div class="chat-history" id="chatHistory">
-                    <div class="chat-message message-agent">
-                        <div class="font-outfit text-muted small mb-2 d-flex align-center gap-2">
-                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1H1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2zM4.5 14h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5zm13 0h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5z" />
-                            </svg>
-                            Ferrumyx Autonomous Agent
-                        </div>
-                        <div>Hello! I am connected to the local IronClaw deployment. What hypothesis would you like to
-                            explore today?</div>
-                    </div>
+            <div class="card">
+                <div class="card-header border-bottom">
+                    <h2 class="card-title">Live Session</h2>
                 </div>
+                <div class="card-body p-0">
+                    <div class="chat-container">
+                        <div class="chat-history" id="chatHistory" style="border: none; border-radius: 0;">
+                            <div class="chat-message message-agent">
+                                <div class="font-outfit text-muted small mb-2 d-flex align-center gap-2">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1H1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2zM4.5 14h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5zm13 0h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5z" />
+                                    </svg>
+                                    Ferrumyx Autonomous Agent
+                                </div>
+                                <div>Hello! I am connected to the local IronClaw deployment. What hypothesis would you
+                                    like to
+                                    explore today?</div>
+                            </div>
+                        </div>
 
-                <div class="chat-input-area">
-                    <textarea class="chat-input" id="chatInput"
-                        placeholder="E.g., Ingest the latest papers on KRAS G12C, evaluate the top 5 targets, and propose docking strategies."
-                        onkeydown="if(event.key === 'Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
-                    <button class="send-btn font-outfit" id="sendBtn" onclick="sendMessage()">Send</button>
+                        <div class="chat-input-area"
+                            style="padding: 1rem; background: var(--surface); border-top: 1px solid var(--border-glass); margin-top: 0; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
+                            <textarea class="chat-input" id="chatInput"
+                                placeholder="E.g., Ingest the latest papers on KRAS G12C, evaluate the top 5 targets, and propose docking strategies."
+                                onkeydown="if(event.key === 'Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
+                            <button class="send-btn font-outfit" id="sendBtn" onclick="sendMessage()">Send</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
