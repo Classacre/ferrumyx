@@ -1,13 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap');
 
+/* Base Variables (Light Mode) */
 :root {
-  /* Dynamic Brand Gradients & Colors (Light defaults) */
   --brand-cyan: hsl(190, 100%, 45%);
   --brand-blue: hsl(210, 100%, 55%);
   --brand-purple: hsl(280, 100%, 60%);
   --brand-pink: hsl(320, 100%, 55%);
 
-  /* Backgrounds & Glassmorphism */
   --bg-base: hsl(220, 20%, 98%);
   --bg-surface: hsla(0, 0%, 100%, 0.8);
   --bg-glass: hsla(220, 20%, 90%, 0.5);
@@ -16,17 +15,14 @@
   --border-glass: hsla(220, 30%, 10%, 0.1);
   --border-bright: hsla(220, 30%, 10%, 0.2);
 
-  /* Typography */
   --text-main: hsl(220, 20%, 15%);
   --text-muted: hsl(220, 10%, 40%);
   --text-ghost: hsl(220, 10%, 55%);
 
-  /* Status */
   --success: hsl(140, 70%, 40%);
   --warning: hsl(40, 90%, 45%);
   --danger: hsl(350, 80%, 50%);
 
-  /* Background Glow */
   --glow-1: hsla(280, 50%, 85%, 0.8);
   --glow-2: hsla(210, 50%, 85%, 0.8);
 
@@ -34,8 +30,36 @@
   --transition-smooth: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Base Variables (Dark Mode) */
+[data-theme="dark"] {
+  --brand-cyan: hsl(190, 100%, 50%);
+  --brand-blue: hsl(210, 100%, 60%);
+  --brand-purple: hsl(280, 100%, 65%);
+  --brand-pink: hsl(320, 100%, 60%);
+
+  --bg-base: hsl(220, 20%, 6%);
+  --bg-surface: hsla(220, 20%, 12%, 0.65);
+  --bg-glass: hsla(220, 20%, 18%, 0.3);
+  --bg-hover: hsla(220, 25%, 25%, 0.5);
+
+  --border-glass: hsla(220, 30%, 80%, 0.08);
+  --border-bright: hsla(220, 30%, 80%, 0.2);
+
+  --text-main: hsl(220, 20%, 95%);
+  --text-muted: hsl(220, 10%, 65%);
+  --text-ghost: hsl(220, 10%, 45%);
+
+  --success: hsl(140, 70%, 50%);
+  --warning: hsl(40, 90%, 55%);
+  --danger: hsl(350, 80%, 60%);
+
+  --glow-1: hsla(280, 50%, 15%, 0.4);
+  --glow-2: hsla(210, 50%, 15%, 0.4);
+}
+
+/* System Preference Fallback (when no data-theme is set) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --brand-cyan: hsl(190, 100%, 50%);
     --brand-blue: hsl(210, 100%, 60%);
     --brand-purple: hsl(280, 100%, 65%);
@@ -68,16 +92,21 @@
 
 svg {
   fill: currentColor;
+  max-width: 100%;
 }
 
+/* Global SVG constraints to prevent huge layouts when unclassed */
 svg:not([width]) {
   width: 24px;
   height: 24px;
+  max-width: 100%;
+  max-height: 100%;
   flex-shrink: 0;
 }
 
 body {
   margin: 0;
+  padding: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-base);
   background-image:
@@ -85,9 +114,15 @@ body {
     radial-gradient(ellipse at bottom right, var(--glow-2), transparent 40%);
   background-attachment: fixed;
   color: var(--text-main);
-  display: flex;
+  background: var(--bg-base);
   min-height: 100vh;
   line-height: 1.5;
+}
+
+/* Master Layout */
+.app-container {
+  display: flex;
+  min-height: 100vh;
 }
 
 /* Headings */
@@ -122,7 +157,7 @@ a:hover {
 
 /* Navigation Sidebar */
 .navbar {
-  width: 260px;
+  width: 280px;
   background: var(--bg-surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -130,21 +165,28 @@ a:hover {
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  position: fixed;
+  position: sticky;
+  top: 0;
   height: 100vh;
+  flex-shrink: 0;
+  /* Prevents sidebar from shrinking */
   z-index: 100;
 }
 
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 12px;
+  font-size: 1.25rem;
+  font-weight: 700;
   margin-bottom: 2.5rem;
+  text-decoration: none;
 }
 
-.nav-brand img {
-  width: 36px;
-  height: 36px;
+.nav-brand img,
+.nav-brand svg {
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 
@@ -154,8 +196,9 @@ a:hover {
   font-weight: 800;
   color: var(--text-main);
   letter-spacing: -0.03em;
-  background: linear-gradient(90deg, #fff, var(--text-muted));
+  background: linear-gradient(90deg, var(--text-main), var(--text-muted));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -165,10 +208,16 @@ a:hover {
   gap: 0.5rem;
 }
 
+.nav-links img,
+.nav-links svg {
+  width: 24px;
+  height: 24px;
+}
+
 .nav-links a {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 12px;
   padding: 0.75rem 1rem;
   border-radius: 8px;
   color: var(--text-muted);
@@ -177,11 +226,12 @@ a:hover {
 }
 
 .nav-links a svg {
-  width: 18px;
-  height: 18px;
-  stroke: currentColor;
-  stroke-width: 2;
-  fill: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  fill: currentColor;
+  stroke: none;
 }
 
 .nav-links a:hover,
@@ -197,10 +247,11 @@ a:hover {
 
 /* Main Content Area */
 .main-content {
-  flex-grow: 1;
-  margin-left: 260px;
+  flex: 1;
   padding: 2.5rem 3rem;
   max-width: 1400px;
+  min-width: 0;
+  /* Prevents overflow pushing */
 }
 
 .page-header {
@@ -219,11 +270,10 @@ a:hover {
 }
 
 .page-title svg {
-  width: 32px;
-  height: 32px;
-  stroke: var(--brand-purple);
-  stroke-width: 2;
-  fill: none;
+  width: 36px;
+  height: 36px;
+  fill: var(--brand-purple);
+  stroke: none;
 }
 
 .text-muted {
@@ -279,11 +329,10 @@ a:hover {
 }
 
 .btn svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  stroke-width: 2;
-  fill: none;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: none;
 }
 
 .btn-primary {
@@ -320,8 +369,8 @@ a:hover {
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fR));
+  gap: 16px;
   margin-bottom: 2rem;
 }
 
@@ -357,11 +406,10 @@ a:hover {
 }
 
 .stat-icon svg {
-  width: 28px;
-  height: 28px;
-  stroke: var(--brand-blue);
-  stroke-width: 2;
-  fill: none;
+  width: 32px;
+  height: 32px;
+  fill: var(--brand-blue);
+  stroke: none;
 }
 
 .stat-value {

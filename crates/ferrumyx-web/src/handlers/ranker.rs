@@ -319,7 +319,7 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Target Ranker Engine — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
     <style>
         .score-primary {{ color: var(--success); font-weight: 700; font-family: 'Outfit'; }}
         .score-secondary {{ color: var(--warning); font-weight: 700; font-family: 'Outfit'; }}
@@ -332,12 +332,13 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
     </style>
 </head>
 <body>
+<div class="app-container">
     {}
     <main class="main-content">
         <div class="page-header">
             <div>
                 <h1 class="page-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
                     Target Prioritization Engine
                 </h1>
                 <p class="text-muted">Multi-factor composite scoring and algorithmic shortlisting matrix</p>
@@ -423,6 +424,7 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
             </div>
         </div>
     </main>
+</div>
     <script src="/static/js/main.js"></script>
     <script>
         async function loadTopTargets(cancerType) {{

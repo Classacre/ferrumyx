@@ -174,7 +174,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>NER Engine — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
     <style>
         .highlighted-text {{ 
             background: var(--bg-surface); 
@@ -196,12 +196,13 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     </style>
 </head>
 <body>
+<div class="app-container">
     {}
     <main class="main-content">
         <div class="page-header">
             <div>
                 <h1 class="page-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                     Named Entity Recognition Engine
                 </h1>
                 <p class="text-muted">High-performance extraction of gene, disease, and chemical entities from unstructured scientific literature</p>
@@ -262,6 +263,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
             document.getElementById('textInput').value = examples[index];
         }}
     </script>
+</div>
 </body>
 </html>"##,
         NAV_HTML,

@@ -51,7 +51,7 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Metrics — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
     <style>
         .metric-card {{
             background: var(--bg-surface);
@@ -129,6 +129,7 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
         </div>
     </div>
 </main>
+</div>
 <script src="/static/js/main.js"></script>
 </body>
 </html>"#, NAV_HTML, metrics_cards, weight_rows))

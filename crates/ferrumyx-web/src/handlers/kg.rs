@@ -123,11 +123,12 @@ pub async fn kg_page(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Knowledge Graph — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
 </head>
 <body>
+<div class="app-container">
 {}
-<main class="main-content">
+<main class="main-content flex-h h-100p">
     <div class="page-header">
         <div>
             <h1 class="page-title">
@@ -168,6 +169,7 @@ pub async fn kg_page(
     </div>
 </main>
 <script src="/static/js/main.js"></script>
+</div>
 </body>
 </html>"#, NAV_HTML, gene, gene, display_facts.len(), fact_rows))
 }

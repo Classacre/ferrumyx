@@ -107,7 +107,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
     <title>DepMap Integration — Ferrumyx</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .essential {{ color: var(--danger); font-weight: bold; }}
@@ -120,6 +120,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
     </style>
 </head>
 <body>
+<div class="app-container">
     {}
     <main class="main-content">
         <div class="page-header">
@@ -239,6 +240,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
             </div>
         </div>
     </main>
+</div>
     <script src="/static/js/main.js"></script>
     <script>
         // Initialize distribution chart with glass/dark theme

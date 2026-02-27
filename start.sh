@@ -75,7 +75,7 @@ fi
 echo "Building and starting Ferrumyx Agent..."
 export RUST_LOG=info
 
-echo "Waiting for server to start, will attempt to open http://localhost:3000 in your browser..."
-(sleep 5 && if command -v xdg-open &> /dev/null; then xdg-open http://localhost:3000; elif command -v open &> /dev/null; then open http://localhost:3000; fi) &
+echo "Waiting for server to start, will attempt to open http://localhost:3001 in your browser..."
+(sleep 5 && if command -v xdg-open &> /dev/null; then xdg-open http://localhost:3001; elif command -v open &> /dev/null; then open http://localhost:3001; fi) &
 
-cargo run --release --bin ferrumyx
+cargo run --release --bin ferrumyx-web

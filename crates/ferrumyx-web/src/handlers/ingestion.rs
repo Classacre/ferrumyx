@@ -200,7 +200,7 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ingestion — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
     <style>
         .sse-live {{ display: inline-flex; align-items: center; gap: 6px; }}
         .sse-dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }}
@@ -208,12 +208,13 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
     </style>
 </head>
 <body>
+<div class="app-container">
 {}
 <main class="main-content">
     <div class="page-header">
         <div>
             <h1 class="page-title">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                <svg width="36" height="36" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                 Ingestion Pipeline
             </h1>
             <p class="text-muted">Manage knowledge ingestion from PubMed and Europe PMC</p>
@@ -224,16 +225,16 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
 
     <div class="stats-grid mt-4">
         <div class="stat-card card-hover">
-            <div class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
+            <div class="stat-icon"><svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
             <div class="stat-value text-gradient" id="papers-count">{}</div><div class="stat-label">Total Literature</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--success);">
-            <div class="stat-icon"><svg stroke="var(--success)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+            <div class="stat-icon"><svg width="32" height="32" fill="var(--success)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
             <div class="stat-value" style="color:var(--success)">{}</div><div class="stat-label">Parsed Successfully</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--warning);">
-            <div class="stat-icon"><svg stroke="var(--warning)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
+            <div class="stat-icon"><svg width="32" height="32" fill="var(--warning)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
             <div class="stat-value" style="color:var(--warning)">{}</div><div class="stat-label">Pending Queues</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--danger);">
-            <div class="stat-icon"><svg stroke="var(--danger)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
+            <div class="stat-icon"><svg width="32" height="32" fill="var(--danger)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
             <div class="stat-value" style="color:var(--danger)">{}</div><div class="stat-label">Parsing Failures</div></div>
     </div>
 
@@ -353,7 +354,7 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                 </div>
                 <div class="mt-4 pt-4" style="border-top:1px solid var(--border-glass)">
                     <button type="submit" class="btn btn-primary w-100" style="padding: 1rem; font-size: 1.1rem; justify-content:center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                         Execute Ingestion Routine
                     </button>
                     <div class="text-muted text-center mt-2 small">Results stream to the Live Activity feed mapped above in real-time via Server-Sent Events.</div>
@@ -375,6 +376,7 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
         </div>
     </div>
 </main>
+</div>
 <script src="/static/js/main.js"></script>
 </body>
 </html>"#,

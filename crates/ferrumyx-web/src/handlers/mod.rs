@@ -7,7 +7,6 @@ pub mod targets;
 pub mod molecules;
 pub mod kg;
 pub mod metrics;
-pub mod system;
 pub mod search;
 pub mod ner;
 pub mod depmap;

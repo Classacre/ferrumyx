@@ -20,7 +20,6 @@ use crate::handlers::{
     molecules::{molecules_page, api_molecules_run},
     kg::{kg_page, api_kg_facts, api_kg_stats},
     metrics::metrics_page,
-    system::system_page,
     search::hybrid_search,
     ner::{ner_page, ner_extract, api_ner_stats, api_ner_extract},
     depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
@@ -43,8 +42,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/molecules",  get(molecules_page))
         .route("/kg",         get(kg_page))
         .route("/metrics",    get(metrics_page))
-        .route("/system",     get(system_page))
-        .route("/audit",      get(system_page)) // alias for now
         .route("/ner",        get(ner_page).post(ner_extract))
         .route("/depmap",     get(depmap_page))
         .route("/ranker",     get(ranker_page))
