@@ -175,6 +175,15 @@ async fn main() -> anyhow::Result<()> {
         let model = client.completion_model(&ollama_cfg.model);
         let ironclaw_llm = std::sync::Arc::new(ironclaw::llm::RigAdapter::new(model, &ollama_cfg.model));
         
+
+        // Initialize Skills (Autonomy Upgrade)
+        let skills_dir = std::path::PathBuf::from("./data/skills");
+        std::fs::create_dir_all(&skills_dir).unwrap_or_default();
+        let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(
+            ironclaw::skills::registry::SkillRegistry::new(skills_dir)
+        ));
+        let skill_catalog = std::sync::Arc::new(ironclaw::skills::catalog::SkillCatalog::new());
+        
         let deps = ironclaw::agent::AgentDeps {
             store: None,
             llm: ironclaw_llm,
@@ -186,8 +195,8 @@ async fn main() -> anyhow::Result<()> {
             tools: tool_registry.clone(),
             workspace: None,
             extension_manager: None,
-            skill_registry: None,
-            skill_catalog: None,
+            skill_registry: Some(skill_registry.clone()),
+            skill_catalog: Some(skill_catalog.clone()),
             skills_config: ironclaw::config::SkillsConfig::default(),
             hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
             cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
@@ -196,6 +205,18 @@ async fn main() -> anyhow::Result<()> {
         let channels = std::sync::Arc::new(ironclaw::channels::ChannelManager::new());
         let repl = ironclaw::channels::ReplChannel::new();
         channels.add(Box::new(repl)).await;
+
+        let gateway_config = ironclaw::config::GatewayConfig {
+            host: "127.0.0.1".to_string(),
+            port: 3002,
+            auth_token: Some("ferrumyx-local-dev-token".to_string()),
+            user_id: "ferrumyx-web".to_string(),
+        };
+        let mut gateway = ironclaw::channels::web::GatewayChannel::new(gateway_config)
+            .with_tool_registry(tool_registry)
+            .with_skill_registry(skill_registry)
+            .with_skill_catalog(skill_catalog);
+        channels.add(Box::new(gateway)).await;
 
         let agent_config = ironclaw::config::AgentConfig {
             name: "Ferrumyx Drug Discovery Agent".to_string(),
