@@ -4,87 +4,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent Chat - Ferrumyx</title>
+    <title>Agent Chat — Ferrumyx</title>
     <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.3">
     <style>
         .chat-container {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 12rem);
-            margin-top: 0;
+            height: calc(100vh - 200px);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         .chat-history {
-            flex-grow: 1;
+            flex: 1;
             overflow-y: auto;
-            border-radius: var(--radius-lg);
-            background: var(--surface-light);
-            border: 1px solid var(--border-glass);
-            padding: 1.5rem;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 16px;
         }
 
         .chat-message {
-            max-width: 80%;
-            padding: 1rem;
-            border-radius: var(--radius-md);
-            animation: fadeIn 0.3s ease;
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 0.95rem;
         }
 
         .message-user {
             align-self: flex-end;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            color: var(--text-main);
-            border-bottom-right-radius: 4px;
+            background: rgba(88, 166, 255, 0.15);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            color: var(--text-primary);
+            border-bottom-right-radius: 2px;
         }
 
         .message-agent {
             align-self: flex-start;
-            background: var(--surface);
-            border: 1px solid var(--border-glass);
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 4px 6px var(--shadow);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-bottom-left-radius: 2px;
         }
 
         .chat-input-area {
             display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
+            gap: 12px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
         }
 
         .chat-input {
-            flex-grow: 1;
-            padding: 1rem;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-glass);
-            background: var(--surface);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
+            flex: 1;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: 10px 14px;
+            font-family: inherit;
+            font-size: 0.9rem;
             resize: none;
-            height: 60px;
+            height: 48px;
+            outline: none;
+            transition: border-color 0.2s;
         }
 
         .chat-input:focus {
-            outline: none;
-            border-color: var(--brand-blue);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+            border-color: var(--accent-blue);
         }
 
         .send-btn {
-            padding: 0 2rem;
-            border-radius: var(--radius-md);
-            background: linear-gradient(135deg, var(--brand-blue), var(--brand-purple));
-            color: white;
-            font-weight: 600;
+            background: var(--accent-blue);
+            color: #0d1117;
             border: none;
+            border-radius: 6px;
+            padding: 0 20px;
+            font-weight: 600;
             cursor: pointer;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.2s;
         }
 
         .send-btn:hover {
@@ -95,61 +99,42 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        .typing-indicator {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 
 <body>
+    {NAV_HTML}
 
-    <div class="layout app-container">
-        {NAV_HTML}
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Agent Chat</h1>
+                <p class="text-muted">Autonomous NL interface for Ferrumyx discovery workflows.</p>
+            </div>
+        </div>
 
-        <main class="main-content">
-            <div class="page-header">
-                <div>
-                    <h1 class="page-title">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2...z" />
-                        </svg>
-                        IronClaw Agent Chat
-                    </h1>
-                    <p class="text-muted font-outfit">Fully autonomous NL interface connected to the Ferrumyx backend.
-                    </p>
+        <div class="chat-container">
+            <div class="chat-history" id="chatHistory">
+                <div class="chat-message message-agent">
+                    <div class="typing-indicator">Ferrumyx Agent</div>
+                    <div>Hello! I'm synchronized with the local discovery backend. How can I help you today?</div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header border-bottom">
-                    <h2 class="card-title">Live Session</h2>
-                </div>
-                <div class="card-body p-0">
-                    <div class="chat-container">
-                        <div class="chat-history" id="chatHistory" style="border: none; border-radius: 0;">
-                            <div class="chat-message message-agent">
-                                <div class="font-outfit text-muted small mb-2 d-flex align-center gap-2">
-                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1H1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2zM4.5 14h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5zm13 0h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1c0 .28.22.5.5.5z" />
-                                    </svg>
-                                    Ferrumyx Autonomous Agent
-                                </div>
-                                <div>Hello! I am connected to the local IronClaw deployment. What hypothesis would you
-                                    like to
-                                    explore today?</div>
-                            </div>
-                        </div>
-
-                        <div class="chat-input-area"
-                            style="padding: 1rem; background: var(--surface); border-top: 1px solid var(--border-glass); margin-top: 0; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
-                            <textarea class="chat-input" id="chatInput"
-                                placeholder="E.g., Ingest the latest papers on KRAS G12C, evaluate the top 5 targets, and propose docking strategies."
-                                onkeydown="if(event.key === 'Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
-                            <button class="send-btn font-outfit" id="sendBtn" onclick="sendMessage()">Send</button>
-                        </div>
-                    </div>
-                </div>
+            <div class="chat-input-area">
+                <textarea class="chat-input" id="chatInput"
+                    placeholder="Ask about targets, molecules, or knowledge extraction..."
+                    onkeydown="if(event.key === 'Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
             </div>
-        </main>
-    </div>
+        </div>
+    </main>
 
     <script>
         const chatInput = document.getElementById('chatInput');
@@ -161,14 +146,12 @@
             const text = chatInput.value.trim();
             if (!text) return;
 
-            // Add user message to UI
             appendMessage('user', text);
             chatInput.value = '';
             sendBtn.disabled = true;
 
-            // Placeholder for agent thinking
             const thinkingId = 'thinking-' + Date.now();
-            appendMessage('agent', '<div class="typing-indicator">Agents calculating...</div>', thinkingId);
+            appendMessage('agent', 'Thinking...', thinkingId);
 
             try {
                 const res = await fetch('/api/chat', {
@@ -178,7 +161,6 @@
                 });
                 const data = await res.json();
 
-                // Remove thinking indicator
                 const thinkingEl = document.getElementById(thinkingId);
                 if (thinkingEl) thinkingEl.remove();
 
@@ -186,15 +168,15 @@
                     currentThreadId = data.thread_id;
                 }
 
-                if (data.status === 'success' || data.status === 'accepted' || data.response) {
-                    appendMessage('agent', data.response || "Task dispatched to background loop. Check metrics panel for updates.");
+                if (data.status === 'success' || data.response) {
+                    appendMessage('agent', data.response || "Task processing in background.");
                 } else {
-                    appendMessage('agent', "<span style='color:var(--danger)'>Error: " + (data.error || "Unknown error") + "</span>");
+                    appendMessage('agent', "<span style='color:var(--accent-red)'>Error: " + (data.error || "Unknown error") + "</span>");
                 }
             } catch (err) {
                 const thinkingEl = document.getElementById(thinkingId);
                 if (thinkingEl) thinkingEl.remove();
-                appendMessage('agent', "<span style='color:var(--danger)'>Network error attempting to contact Agent backend.</span>");
+                appendMessage('agent', "<span style='color:var(--accent-red)'>Network error.</span>");
             }
             sendBtn.disabled = false;
             chatInput.focus();
@@ -205,56 +187,13 @@
             div.className = 'chat-message message-' + role;
             if (id) div.id = id;
 
-            let header = '';
-            if (role === 'agent') {
-                header = `<div class="font-outfit text-muted small mb-2 d-flex align-center gap-2">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2...z"/></svg>
-                        Ferrumyx Agent
-                      </div>`;
-            } else {
-                header = `<div class="font-outfit text-muted small mb-2 text-end">You</div>`;
-            }
+            const label = role === 'agent' ? 'Ferrumyx Agent' : 'You';
+            div.innerHTML = `<div class="typing-indicator">${label}</div><div>${htmlContent}</div>`;
 
-            div.innerHTML = header + `<div>${htmlContent}</div>`;
             chatHistory.appendChild(div);
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
     </script>
-    <style>
-        .typing-indicator {
-            font-style: italic;
-            color: var(--text-muted);
-        }
-
-        .typing-indicator::after {
-            content: '.';
-            animation: dots 1.5s steps(5, end) infinite;
-        }
-
-        @keyframes dots {
-
-            0%,
-            20% {
-                color: rgba(0, 0, 0, 0);
-                text-shadow: .25em 0 0 rgba(0, 0, 0, 0), .5em 0 0 rgba(0, 0, 0, 0);
-            }
-
-            40% {
-                color: inherit;
-                text-shadow: .25em 0 0 rgba(0, 0, 0, 0), .5em 0 0 rgba(0, 0, 0, 0);
-            }
-
-            60% {
-                text-shadow: .25em 0 0 inherit, .5em 0 0 rgba(0, 0, 0, 0);
-            }
-
-            80%,
-            100% {
-                text-shadow: .25em 0 0 inherit, .5em 0 0 inherit;
-            }
-        }
-    </style>
-    <script src="/static/js/main.js"></script>
 </body>
 
 </html>

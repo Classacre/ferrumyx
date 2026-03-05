@@ -11,8 +11,9 @@ use crate::state::SharedState;
 pub async fn chat_page(State(_state): State<SharedState>) -> Html<String> {
     let html = include_str!("../../templates/chat.html");
     // Swap the nav_chat active class logically using JS or template injection,
-    // but the actual nav logic is in main.js, so just returning the raw HTML is usually fine.
-    Html(html.to_string())
+    // but the actual nav logic is in main.js, so just returning the HTML with the NAV payload works.
+    let final_html = html.replace("{NAV_HTML}", crate::handlers::dashboard::NAV_HTML);
+    Html(final_html)
 }
 
 #[derive(serde::Deserialize)]

@@ -20,11 +20,13 @@ use crate::handlers::{
     molecules::{molecules_page, api_molecules_run},
     kg::{kg_page, api_kg_facts, api_kg_stats},
     metrics::metrics_page,
+    system::system_page,
     search::hybrid_search,
     ner::{ner_page, ner_extract, api_ner_stats, api_ner_extract},
     depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
     ranker::{ranker_page, api_ranker_score, api_ranker_top, api_ranker_stats},
     settings::settings_page,
+    chat::{chat_page, chat_submit},
 };
 use crate::sse::sse_handler;
 
@@ -42,10 +44,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/molecules",  get(molecules_page))
         .route("/kg",         get(kg_page))
         .route("/metrics",    get(metrics_page))
+        .route("/system",     get(system_page))
+        .route("/audit",      get(system_page)) // alias for now
         .route("/ner",        get(ner_page).post(ner_extract))
         .route("/depmap",     get(depmap_page))
         .route("/ranker",     get(ranker_page))
         .route("/settings",   get(settings_page))
+        .route("/chat",       get(chat_page))
 
         // SSE streaming
         .route("/api/events", get(sse_handler))
@@ -64,9 +69,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ranker/score",  get(api_ranker_score))
         .route("/api/ranker/top",    get(api_ranker_top))
         .route("/api/ranker/stats",  get(api_ranker_stats))
+        .route("/api/chat",          post(chat_submit))
 
         // Static files
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", ServeDir::new(format!("{}/static", env!("CARGO_MANIFEST_DIR"))))
 
         // Middleware
         .layer(CorsLayer::permissive())

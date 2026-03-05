@@ -123,16 +123,16 @@ pub async fn kg_page(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Knowledge Graph — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.3">
 </head>
 <body>
-<div class="app-container">
 {}
-<main class="main-content flex-h h-100p">
+<main class="main-content">
     <div class="page-header">
         <div>
             <h1 class="page-title">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3v.15l-3.32 1.62A2.97 2.97 0 0 0 8 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.6 0 1.15-.18 1.61-.48l3.36 1.64c-.01.12-.04.24-.04.37 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3c-.62 0-1.18.19-1.64.5l-3.32-1.62C10.96 12.15 11 12.04 11 11.91V11.9z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3v.15l-3.32 1.62A2.97 2.97 0 0 0 8 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.6 0 1.15-.18 1.61-.48l3.36 1.64c-.01.12-.04.24-.04.37 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3c-.62 0-1.18.19-1.64.5l-3.32-1.62C10.96 12.15 11 12.04 11 11.91V11.9z"/></svg>
                 Knowledge Graph
             </h1>
             <p class="text-muted">Browse multi-modal KG facts, evidence confidence, and provenance</p>
@@ -169,7 +169,6 @@ pub async fn kg_page(
     </div>
 </main>
 <script src="/static/js/main.js"></script>
-</div>
 </body>
 </html>"#, NAV_HTML, gene, gene, display_facts.len(), fact_rows))
 }

@@ -5,7 +5,6 @@ members = [
     "crates/ferrumyx-ingestion",
     "crates/ferrumyx-kg",
     "crates/ferrumyx-ranker",
-    "crates/ferrumyx-llm",
     "crates/ferrumyx-common",
     "crates/ferrumyx-web",
     "crates/ferrumyx-embed",

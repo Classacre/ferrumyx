@@ -1,7 +1,7 @@
 //! GTEx (Genotype-Tissue Expression) REST API client.
 //! Used for fetching median gene expression in normal tissues.
 
-use ferrumyx_common::sandbox::SandboxClient as Client;
+use reqwest::Client;
 use std::collections::HashMap;
 
 const GTEX_API_URL: &str = "https://gtexportal.org/api/v2";
@@ -12,7 +12,7 @@ pub struct GtexClient {
 
 impl GtexClient {
     pub fn new() -> Self {
-        Self { client: Client::new().unwrap() }
+        Self { client: Client::new() }
     }
 
     /// Fetch median gene expression in normal tissues.
@@ -21,7 +21,7 @@ impl GtexClient {
         let url = format!("{}/expression/medianGeneExpression", GTEX_API_URL);
         
         let resp = self.client
-            .get(&url)?
+            .get(&url)
             .query(&[
                 ("gencodeId", gene_symbol),
                 ("format", "json"),

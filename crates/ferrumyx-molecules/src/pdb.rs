@@ -1,8 +1,10 @@
 //! PDB and AlphaFold structure fetching.
 
 use anyhow::Result;
-use ferrumyx_common::sandbox::SandboxClient as Client;
+use async_trait::async_trait;
+use reqwest::Client;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::fs;
 use tracing::{info, debug};
 
@@ -16,7 +18,7 @@ impl StructureFetcher {
     /// Create a new StructureFetcher with the given cache directory.
     pub fn new<P: AsRef<Path>>(cache_dir: P) -> Self {
         Self {
-            client: Client::new().unwrap(),
+            client: Client::new(),
             cache_dir: cache_dir.as_ref().to_path_buf(),
         }
     }
@@ -33,7 +35,7 @@ impl StructureFetcher {
 
         info!("Fetching PDB {} from RCSB", pdb_id);
         let url = format!("https://files.rcsb.org/download/{}", file_name);
-        let response = self.client.get(&url)?.send().await?.error_for_status()?;
+        let response = self.client.get(&url).send().await?.error_for_status()?;
         let content = response.bytes().await?;
 
         fs::create_dir_all(&self.cache_dir).await?;
@@ -54,7 +56,7 @@ impl StructureFetcher {
 
         info!("Fetching AlphaFold structure for {} from EBI", uniprot_id);
         let url = format!("https://alphafold.ebi.ac.uk/files/{}", file_name);
-        let response = self.client.get(&url)?.send().await?.error_for_status()?;
+        let response = self.client.get(&url).send().await?.error_for_status()?;
         let content = response.bytes().await?;
 
         fs::create_dir_all(&self.cache_dir).await?;

@@ -6,7 +6,7 @@
 //!
 //! Note: This is disabled by default due to the legal gray area of Sci-Hub.
 
-use ferrumyx_common::sandbox::SandboxClient as Client;
+use reqwest::Client;
 use scraper::{Html, Selector};
 use tracing::{debug, info, warn, instrument};
 use url::Url;
@@ -27,8 +27,8 @@ impl Default for SciHubClient {
 impl SciHubClient {
     pub fn new() -> Self {
         // Use a browser-like User-Agent to avoid basic blocks
-        let mut client = Client::new().expect("Failed to build SciHub client");
-        client.allow_domain("sci-hub.se");
+        let mut client = Client::new();
+
 
         Self {
             client,
@@ -50,7 +50,7 @@ impl SciHubClient {
 
         // 1. Fetch the Sci-Hub page for the identifier
         let search_url = format!("{}/{}", self.base_url, identifier);
-        let resp = self.client.get(&search_url)?.send().await?;
+        let resp = self.client.get(&search_url).send().await?;
 
         if !resp.status().is_success() {
             warn!("Sci-Hub returned status {} for {}", resp.status(), identifier);
@@ -108,7 +108,7 @@ impl SciHubClient {
         debug!("Found PDF URL: {}", parsed_url);
 
         // 4. Download the actual PDF
-        let pdf_resp = self.client.get(parsed_url.as_str())?.send().await?;
+        let pdf_resp = self.client.get(parsed_url.as_str()).send().await?;
         
         if !pdf_resp.status().is_success() {
             warn!("Failed to download PDF from resolved URL: {}", pdf_resp.status());

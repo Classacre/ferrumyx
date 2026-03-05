@@ -3,7 +3,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use ferrumyx_common::sandbox::SandboxClient as Client;
+use async_trait::async_trait;
+use reqwest::Client;
+use std::time::Duration;
 use tracing::{info, debug, warn};
 
 /// A generated or retrieved molecule.
@@ -102,11 +104,16 @@ struct ChemblMoleculeProperties {
     psa: Option<String>,
 }
 
+const CHX_API_BASE: &str = "https://www.ebi.ac.uk/chembl/api/data";
+
 impl LigandGenerator {
     /// Create a new LigandGenerator.
     pub fn new() -> Self {
         Self {
-            client: Client::new().unwrap(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
         }
     }
 
@@ -118,11 +125,8 @@ impl LigandGenerator {
         let mut results = Vec::new();
         
         // 1. Get Target ChEMBL ID from UniProt
-        let target_url = format!(
-            "https://www.ebi.ac.uk/chembl/api/data/target?target_components__accession={}&format=json",
-            target_uniprot_id
-        );
-        let resp = match self.client.get(&target_url)?.send().await {
+        let target_url = format!("{}/target.json?target_components__accession={}", CHX_API_BASE, target_uniprot_id);
+        let resp = match self.client.get(&target_url).send().await {
             Ok(r) => r,
             Err(e) => {
                 warn!("Failed to fetch target from ChEMBL: {}", e);
@@ -146,12 +150,9 @@ impl LigandGenerator {
 
         debug!("Resolved target ChEMBL ID: {}", target_chembl_id);
 
-        // 2. Fetch known mechanisms (inhibitors) for this target
-        let mech_url = format!(
-            "https://www.ebi.ac.uk/chembl/api/data/mechanism?target_chembl_id={}&format=json&limit=5",
-            target_chembl_id
-        );
-        let mech_resp = match self.client.get(&mech_url)?.send().await {
+        // Also filter out molecules that don't pass Lipinski's Rule of 5 (already pre-filtered mostly, but good to add max_phase)
+        let mech_url = format!("{}/mechanism.json?target_chembl_id={}&limit=100", CHX_API_BASE, target_chembl_id);
+        let mech_resp = match self.client.get(&mech_url).send().await {
             Ok(r) => r,
             Err(_) => return Ok(results),
         };
@@ -173,7 +174,7 @@ impl LigandGenerator {
                 mech.molecule_chembl_id
             );
             
-            if let Ok(resp) = self.client.get(&mol_url)?.send().await {
+            if let Ok(resp) = self.client.get(&mol_url).send().await {
                 if let Ok(mol_body) = resp.json::<ChemblMoleculeResponse>().await {
                     if let Some(mol_data) = mol_body.molecules.first() {
                         if let Some(structs) = &mol_data.molecule_structures {
@@ -184,9 +185,9 @@ impl LigandGenerator {
                                 m.inchi_key = structs.standard_inchi_key.clone();
                                 
                                 if let Some(props) = &mol_data.molecule_properties {
-                                    m.mw = props.full_mwt.as_ref().and_then(|s| s.parse().ok());
-                                    m.logp = props.alogp.as_ref().and_then(|s| s.parse().ok());
-                                    m.tpsa = props.psa.as_ref().and_then(|s| s.parse().ok());
+                                    m.mw = props.full_mwt.as_ref().and_then(|s| s.parse::<f64>().ok());
+                                    m.logp = props.alogp.as_ref().and_then(|s| s.parse::<f64>().ok());
+                                    m.tpsa = props.psa.as_ref().and_then(|s| s.parse::<f64>().ok());
                                 }
                                 
                                 results.push(m);

@@ -1,32 +1,18 @@
 //! Ferrumyx — Autonomous Oncology Drug Discovery Engine
 //! Entry point for the agent binary.
 
+use std::sync::Arc;
+use ironclaw::llm;
+
 mod config;
-mod tools;
+use rig::providers::openai::Client as OpenAiClient;
+use rig::providers::anthropic::Client as AnthropicClient;
+use rig::providers::gemini::Client as GeminiClient;
+use rig::client::CompletionClient;
 
-use ferrumyx_llm::router::{build_router, BackendConfig, BackendKind, RoutingPolicy};
-
-fn build_llm_backends(config: &config::Config) -> ferrumyx_llm::router::LlmRouter {
-    let policy = RoutingPolicy {
-        local_only_mode:       config.llm.mode == "local_only",
-        allow_internal_remote: false,
-        default_backend:       config.llm.default_backend.clone(),
-        local_backend:         config.llm.local_backend.clone(),
-    };
-
-    let mut backends: Vec<BackendConfig> = Vec::new();
-
-    if let Some(ref ollama) = config.llm.ollama {
-        backends.push(BackendConfig {
-            name:            "ollama".to_string(),
-            kind:            BackendKind::Ollama,
-            model:           ollama.model.clone(),
-            api_key:         None,
-            base_url:        Some(ollama.base_url.clone()),
-            embedding_model: None,
-        });
-    }
-
+/// Returns a Boxed CompletionModel to inject into the Agent.
+/// It natively maps the Ferrumyx config directly to `rig-core` LLM clients.
+fn build_completion_model(config: &config::Config) -> anyhow::Result<Arc<dyn ironclaw::llm::LlmProvider>> {
     if let Some(ref openai) = config.llm.openai {
         let key = if openai.api_key.is_empty() {
             std::env::var("FERRUMYX_OPENAI_API_KEY").unwrap_or_default()
@@ -34,16 +20,9 @@ fn build_llm_backends(config: &config::Config) -> ferrumyx_llm::router::LlmRoute
             openai.api_key.clone()
         };
         if !key.is_empty() {
-            backends.push(BackendConfig {
-                name:            "openai".to_string(),
-                kind:            BackendKind::OpenAi,
-                model:           openai.model.clone(),
-                api_key:         Some(key),
-                base_url:        None,
-                embedding_model: openai.embedding_model.clone(),
-            });
-        } else {
-            tracing::warn!("OpenAI configured but no API key found (set llm.openai.api_key or FERRUMYX_OPENAI_API_KEY)");
+            tracing::info!("Using OpenAI: {}", openai.model);
+            let client: OpenAiClient = OpenAiClient::new(&key)?;
+            return Ok(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&openai.model), &openai.model)));
         }
     }
 
@@ -54,16 +33,9 @@ fn build_llm_backends(config: &config::Config) -> ferrumyx_llm::router::LlmRoute
             anthropic.api_key.clone()
         };
         if !key.is_empty() {
-            backends.push(BackendConfig {
-                name:            "anthropic".to_string(),
-                kind:            BackendKind::Anthropic,
-                model:           anthropic.model.clone(),
-                api_key:         Some(key),
-                base_url:        None,
-                embedding_model: None,
-            });
-        } else {
-            tracing::warn!("Anthropic configured but no API key found (set llm.anthropic.api_key or FERRUMYX_ANTHROPIC_API_KEY)");
+            tracing::info!("Using Anthropic: {}", anthropic.model);
+            let client: AnthropicClient = AnthropicClient::new(&key)?;
+            return Ok(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&anthropic.model), &anthropic.model)));
         }
     }
 
@@ -74,43 +46,23 @@ fn build_llm_backends(config: &config::Config) -> ferrumyx_llm::router::LlmRoute
             gemini.api_key.clone()
         };
         if !key.is_empty() {
-            backends.push(BackendConfig {
-                name:            "gemini".to_string(),
-                kind:            BackendKind::Gemini,
-                model:           gemini.model.clone(),
-                api_key:         Some(key),
-                base_url:        None,
-                embedding_model: gemini.embedding_model.clone(),
-            });
-        } else {
-            tracing::warn!("Gemini configured but no API key found (set llm.gemini.api_key or FERRUMYX_GEMINI_API_KEY)");
+            tracing::info!("Using Gemini: {}", gemini.model);
+            let client: GeminiClient = GeminiClient::new(&key)?;
+            return Ok(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&gemini.model), &gemini.model)));
         }
     }
 
-    if let Some(ref compat) = config.llm.openai_compatible {
-        let key = if compat.api_key.is_empty() {
-            std::env::var("FERRUMYX_COMPAT_API_KEY").ok()
-        } else {
-            Some(compat.api_key.clone())
-        };
-        backends.push(BackendConfig {
-            name:            "openai_compatible".to_string(),
-            kind:            BackendKind::OpenAiCompatible,
-            model:           compat.model.clone(),
-            api_key:         key,
-            base_url:        Some(compat.base_url.clone()),
-            embedding_model: compat.embedding_model.clone(),
-        });
+    if let Some(ref ollama) = config.llm.ollama {
+        // Fallback to local Ollama (OpenAI compatible API)
+        tracing::info!("Using Local Ollama: {}", ollama.model);
+        let client: OpenAiClient = OpenAiClient::builder()
+            .base_url(&format!("{}/v1", ollama.base_url))
+            .api_key("ollama")
+            .build()?;
+        return Ok(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&ollama.model), &ollama.model)));
     }
 
-    if backends.is_empty() {
-        tracing::warn!(
-            "No LLM backends configured! Add at least one provider to ferrumyx.toml. \
-             NER extraction and KG summarisation will be unavailable."
-        );
-    }
-
-    build_router(backends, policy)
+    anyhow::bail!("No LLM providers were successfully configured in ferrumyx.toml")
 }
 
 use tracing::info;
@@ -153,106 +105,79 @@ async fn main() -> anyhow::Result<()> {
     let kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
     info!("✅ KG event-driven scoring queue initialized.");
 
-    // Build LLM router from config
-    let llm_backends = build_llm_backends(&config);
-    let n_backends = llm_backends.registered_backends().len();
-    info!("✅ LLM router ready: {} backends registered.", n_backends);
+    // Build LLM client
+    let ironclaw_llm = build_completion_model(&config)?;
 
-    // Register Ferrumyx tools
-    let tool_registry = tools::build_default_registry(db.clone());
-    info!("✅ Tool registry ready");
-    // Initialize IronClaw Agent with Ollama (if configured)
-    if let Some(ref ollama_cfg) = config.llm.ollama {
-        info!("🤖 Initializing IronClaw Agent with Ollama model: {}", ollama_cfg.model);
-        
-        let client: rig::providers::ollama::Client = rig::providers::ollama::Client::builder()
-            .base_url(&ollama_cfg.base_url)
-            .api_key(rig::client::Nothing)
-            .build()
-            .expect("Failed to build Ollama client");
-            
-        use rig::client::CompletionClient;
-        let model = client.completion_model(&ollama_cfg.model);
-        let ironclaw_llm = std::sync::Arc::new(ironclaw::llm::RigAdapter::new(model, &ollama_cfg.model));
-        
+    // Build Tool Registry
+    let tool_registry = Arc::new(ironclaw::tools::ToolRegistry::new());
 
-        // Initialize Skills (Autonomy Upgrade)
-        let skills_dir = std::path::PathBuf::from("./data/skills");
-        std::fs::create_dir_all(&skills_dir).unwrap_or_default();
-        let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(
-            ironclaw::skills::registry::SkillRegistry::new(skills_dir)
-        ));
-        let skill_catalog = std::sync::Arc::new(ironclaw::skills::catalog::SkillCatalog::new());
-        
-        let deps = ironclaw::agent::AgentDeps {
-            store: None,
-            llm: ironclaw_llm,
-            cheap_llm: None,
-            safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(&ironclaw::config::SafetyConfig {
-                max_output_length: 100_000,
-                injection_check_enabled: true,
-            })),
-            tools: tool_registry.clone(),
-            workspace: None,
-            extension_manager: None,
-            skill_registry: Some(skill_registry.clone()),
-            skill_catalog: Some(skill_catalog.clone()),
-            skills_config: ironclaw::config::SkillsConfig::default(),
-            hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
-            cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
-        };
+    // Build Skill Registry
+    let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(
+        ironclaw::skills::registry::SkillRegistry::new(std::path::PathBuf::from("./data/skills"))
+    ));
+    let skill_catalog = std::sync::Arc::new(ironclaw::skills::catalog::SkillCatalog::new());
 
-        let channels = std::sync::Arc::new(ironclaw::channels::ChannelManager::new());
-        let repl = ironclaw::channels::ReplChannel::new();
-        channels.add(Box::new(repl)).await;
+    let deps = ironclaw::agent::AgentDeps {
+        store: None,
+        llm: ironclaw_llm.clone(),
+        cheap_llm: None,
+        safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(&ironclaw::config::SafetyConfig {
+            max_output_length: 100_000,
+            injection_check_enabled: true,
+        })),
+        tools: tool_registry.clone(),
+        workspace: None,
+        extension_manager: None,
+        skill_registry: Some(skill_registry.clone()),
+        skill_catalog: Some(skill_catalog.clone()),
+        skills_config: ironclaw::config::SkillsConfig::default(),
+        hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
+        cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
+    };
 
-        let gateway_config = ironclaw::config::GatewayConfig {
-            host: "127.0.0.1".to_string(),
-            port: 3002,
-            auth_token: Some("ferrumyx-local-dev-token".to_string()),
-            user_id: "ferrumyx-web".to_string(),
-        };
-        let mut gateway = ironclaw::channels::web::GatewayChannel::new(gateway_config)
-            .with_tool_registry(tool_registry)
-            .with_skill_registry(skill_registry)
-            .with_skill_catalog(skill_catalog);
-        channels.add(Box::new(gateway)).await;
+    let mut channels = ironclaw::channels::ChannelManager::new();
+    channels.add(Box::new(ironclaw::channels::ReplChannel::new())).await;
 
-        let agent_config = ironclaw::config::AgentConfig {
-            name: "Ferrumyx Drug Discovery Agent".to_string(),
-            max_parallel_jobs: 1,
-            job_timeout: std::time::Duration::from_secs(3600),
-            stuck_threshold: std::time::Duration::from_secs(300),
-            repair_check_interval: std::time::Duration::from_secs(60),
-            max_repair_attempts: 3,
-            use_planning: true,
-            session_idle_timeout: std::time::Duration::from_secs(86400),
-            allow_local_tools: true,
-            max_cost_per_day_cents: None,
-            max_actions_per_hour: None,
-            max_tool_iterations: 50,
-            auto_approve_tools: true,
-        };
+    let gw_config = ironclaw::config::GatewayConfig {
+        host: "127.0.0.1".to_string(),
+        port: 3002,
+        user_id: "User".to_string(),
+        auth_token: Some("ferrumyx-local-dev-token".to_string()),
+    };
+    channels.add(Box::new(ironclaw::channels::GatewayChannel::new(gw_config))).await;
 
-        let agent = ironclaw::agent::Agent::new(
-            agent_config,
-            deps,
-            channels,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+    let agent_config = ironclaw::config::AgentConfig {
+        name: "Ferrumyx Drug Discovery Agent".to_string(),
+        max_parallel_jobs: 1,
+        job_timeout: std::time::Duration::from_secs(3600),
+        stuck_threshold: std::time::Duration::from_secs(300),
+        repair_check_interval: std::time::Duration::from_secs(60),
+        max_repair_attempts: 3,
+        use_planning: true,
+        session_idle_timeout: std::time::Duration::from_secs(86400),
+        allow_local_tools: true,
+        max_cost_per_day_cents: None,
+        max_actions_per_hour: None,
+        max_tool_iterations: 50,
+        auto_approve_tools: true,
+    };
 
-        tokio::spawn(async move {
-            if let Err(e) = agent.run().await {
-                tracing::error!("Agent loop exited with error: {}", e);
-            }
-        });
-    } else {
-        tracing::warn!("Ollama is not configured in ferrumyx.toml, IronClaw agent loop will not start.");
-    }
+    let agent = ironclaw::agent::Agent::new(
+        agent_config,
+        deps,
+        Arc::new(channels),
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+
+    tokio::spawn(async move {
+        if let Err(e) = agent.run().await {
+            tracing::error!("Agent loop exited with error: {}", e);
+        }
+    });
 
     // Build app state and router
     let state = ferrumyx_web::state::AppState::new(db);

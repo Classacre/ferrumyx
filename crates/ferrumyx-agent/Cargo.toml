@@ -15,7 +15,6 @@ ferrumyx-ingestion  = { path = "../ferrumyx-ingestion" }
 ferrumyx-kg = { path = "../ferrumyx-kg" }
 ferrumyx-ranker = { path = "../ferrumyx-ranker" }
 ferrumyx-molecules = { path = "../ferrumyx-molecules" }
-ferrumyx-llm        = { path = "../ferrumyx-llm" }
 ferrumyx-web        = { path = "../ferrumyx-web" }
 ferrumyx-ner        = { path = "../ferrumyx-ner" }
 ironclaw            = { path = "../ironclaw", default-features = false }

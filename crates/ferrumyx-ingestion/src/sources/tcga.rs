@@ -1,7 +1,7 @@
 //! TCGA (The Cancer Genome Atlas) REST API client via GDC.
 //! Used for fetching survival correlation data for gene/cancer pairs.
 
-use ferrumyx_common::sandbox::SandboxClient as Client;
+use reqwest::Client;
 
 const GDC_API_URL: &str = "https://api.gdc.cancer.gov";
 
@@ -11,7 +11,7 @@ pub struct TcgaClient {
 
 impl TcgaClient {
     pub fn new() -> Self {
-        Self { client: Client::new().unwrap() }
+        Self { client: Client::new() }
     }
 
     /// Fetch survival correlation (dummy implementation wrapping a GDC search).
@@ -21,7 +21,7 @@ impl TcgaClient {
         let url = format!("{}/projects/{}", GDC_API_URL, project_id);
         
         let resp = self.client
-            .get(&url)?
+            .get(&url)
             .send()
             .await?;
 

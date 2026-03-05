@@ -107,7 +107,8 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
     <title>DepMap Integration — Ferrumyx</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.3">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .essential {{ color: var(--danger); font-weight: bold; }}
@@ -120,13 +121,12 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
     </style>
 </head>
 <body>
-<div class="app-container">
     {}
     <main class="main-content">
         <div class="page-header">
             <div>
                 <h1 class="page-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                     DepMap CRISPR Integration
                 </h1>
                 <p class="text-muted">CRISPR-Cas9 dependency score analytics and cell line viability profiles via Broad Institute DepMap</p>
@@ -139,7 +139,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                 <div class="card-body p-0">
                     <form id="geneForm" class="mb-4">
                         <div class="search-container">
-                            <input type="text" id="geneInput" class="form-control" style="flex:1" placeholder="Gene symbol (e.g., KRAS)" value="KRAS">
+                            <input type="text" id="geneInput" class="form-control" style="flex:1" placeholder="Gene symbol (e.g., KRAS)">
                             <button class="btn btn-primary" type="submit">Analyze</button>
                         </div>
                     </form>
@@ -154,23 +154,23 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
             </div>
             
             <div class="card h-100">
-                <div class="card-header border-bottom border-glass pb-3">Essentiality Matrix: <span id="geneName" class="text-gradient" style="font-weight:700">KRAS</span></div>
+                <div class="card-header border-bottom border-glass pb-3">Essentiality Matrix: <span id="geneName" class="text-gradient" style="font-weight:700">—</span></div>
                 <div class="card-body d-flex align-center justify-center p-0">
                     <div class="ceres-grid w-100">
                         <div>
-                            <div class="ceres-val" style="color:var(--brand-blue)" id="meanCeres">-0.85</div>
+                            <div class="ceres-val" style="color:var(--brand-blue)" id="meanCeres">—</div>
                             <div class="ceres-label">Mean CERES</div>
                         </div>
                         <div style="border-left: 1px solid var(--border-glass); padding-left: 1rem;">
-                            <div class="ceres-val text-muted" style="color:var(--text-main) !important" id="cellLines">42</div>
+                            <div class="ceres-val text-muted" style="color:var(--text-main) !important" id="cellLines">—</div>
                             <div class="ceres-label">Cell Lines Processed</div>
                         </div>
                         <div style="border-left: 1px solid var(--border-glass); padding-left: 1rem;">
-                            <div class="ceres-val essential" id="essentialCount">38</div>
+                            <div class="ceres-val essential" id="essentialCount">—</div>
                             <div class="ceres-label">Globally Essential</div>
                         </div>
                         <div style="border-left: 1px solid var(--border-glass); padding-left: 1rem;">
-                            <div class="ceres-val selective" id="selectiveCount">3</div>
+                            <div class="ceres-val selective" id="selectiveCount">—</div>
                             <div class="ceres-label">Context Selective</div>
                         </div>
                     </div>
@@ -201,24 +201,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                             </tr>
                         </thead>
                         <tbody id="cellLineTable">
-                            <tr>
-                                <td>A549</td>
-                                <td>Lung Adenocarcinoma</td>
-                                <td class="essential">-1.23</td>
-                                <td><span class="badge badge-danger">Essential Threshold</span></td>
-                            </tr>
-                            <tr>
-                                <td>H358</td>
-                                <td>Lung Adenocarcinoma</td>
-                                <td class="essential">-1.15</td>
-                                <td><span class="badge badge-danger">Essential Threshold</span></td>
-                            </tr>
-                            <tr>
-                                <td>PANC1</td>
-                                <td>Pancreatic Adenocarcinoma</td>
-                                <td class="essential">-1.45</td>
-                                <td><span class="badge badge-danger">Essential Threshold</span></td>
-                            </tr>
+                            <tr><td colspan="4" class="text-center text-muted py-4">No DepMap metrics ingested yet. Please populate downstream cell line data.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -240,7 +223,6 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
             </div>
         </div>
     </main>
-</div>
     <script src="/static/js/main.js"></script>
     <script>
         // Initialize distribution chart with glass/dark theme
@@ -253,7 +235,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                 labels: ['<-1.5', '-1.5 to -1.0', '-1.0 to -0.5', '-0.5 to 0', '>0'],
                 datasets: [{{
                     label: 'Cell Line Volume',
-                    data: [12, 26, 3, 1, 0],
+                    data: [0, 0, 0, 0, 0],
                     backgroundColor: [
                         'rgba(239, 68, 68, 0.8)', 
                         'rgba(239, 68, 68, 0.6)', 

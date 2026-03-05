@@ -51,7 +51,8 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Metrics — Ferrumyx</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=1.0.1">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css?v=1.0.3">
     <style>
         .metric-card {{
             background: var(--bg-surface);
@@ -85,7 +86,7 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
     <div class="page-header">
         <div>
             <h1 class="page-title">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
                 Self-Improvement Metrics
             </h1>
             <p class="text-muted">Feedback loop performance — explicit, measurable signals only</p>
@@ -129,7 +130,6 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
         </div>
     </div>
 </main>
-</div>
 <script src="/static/js/main.js"></script>
 </body>
 </html>"#, NAV_HTML, metrics_cards, weight_rows))
