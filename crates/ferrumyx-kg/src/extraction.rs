@@ -78,9 +78,8 @@ pub struct MutationMention {
     pub protein_change: Option<String>,
 }
 
-/// A knowledge graph fact extracted from text.
 #[derive(Debug, Clone)]
-pub struct KgFact {
+pub struct ExtractedFact {
     pub fact_type: String,
     pub subject: String,
     pub object: String,
@@ -91,12 +90,12 @@ pub struct KgFact {
 pub fn build_facts(
     gene_symbol: &str,
     text: &str,
-) -> Vec<KgFact> {
+) -> Vec<ExtractedFact> {
     let mut facts = Vec::new();
     
     // Gene-Cancer relationship
     if let Some(cancer) = extract_cancer_type(text) {
-        facts.push(KgFact {
+        facts.push(ExtractedFact {
             fact_type: "gene_cancer".to_string(),
             subject: gene_symbol.to_uppercase(),
             object: cancer,
@@ -107,7 +106,7 @@ pub fn build_facts(
     // Gene-Mutation relationships
     for mutation in extract_mutations(text) {
         if let Some(protein_change) = mutation.protein_change {
-            facts.push(KgFact {
+            facts.push(ExtractedFact {
                 fact_type: "gene_mutation".to_string(),
                 subject: gene_symbol.to_uppercase(),
                 object: protein_change,

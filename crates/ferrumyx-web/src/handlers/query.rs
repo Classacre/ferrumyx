@@ -1,35 +1,10 @@
 //! Scientific query interface — NL query → ranked target output.
 
 use axum::{extract::State, response::Html, Form};
-use serde::{Deserialize, Serialize};
+use ferrumyx_ranker::TargetQueryEngine;
+use ferrumyx_common::query::{QueryRequest, QueryResult};
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
-use ferrumyx_db::entities::EntityRepository;
-use ferrumyx_db::kg_facts::KgFactRepository;
-
-#[derive(Deserialize)]
-pub struct QueryForm {
-    pub query_text: String,
-    pub cancer_code: Option<String>,
-    pub gene: Option<String>,
-    pub mutation: Option<String>,
-    pub min_structural: Option<f64>,
-    pub max_inhibitors: Option<i32>,
-    pub min_confidence: Option<f64>,
-    pub relationship: Option<String>,
-    pub max_results: Option<usize>,
-}
-
-#[derive(Serialize)]
-pub struct QueryResult {
-    pub rank: usize,
-    pub gene_symbol: String,
-    pub cancer_code: String,
-    pub composite_score: f64,
-    pub confidence_adj: f64,
-    pub shortlist_tier: String,
-    pub flags: Vec<String>,
-}
 
 pub async fn query_page(State(_state): State<SharedState>) -> Html<String> {
     Html(render_query_page(None))
@@ -37,37 +12,13 @@ pub async fn query_page(State(_state): State<SharedState>) -> Html<String> {
 
 pub async fn query_submit(
     State(state): State<SharedState>,
-    Form(form): Form<QueryForm>,
+    Form(form): Form<QueryRequest>,
 ) -> Html<String> {
-    // Use repositories to query data
-    let entity_repo = EntityRepository::new(state.db.clone());
-    let kg_repo = KgFactRepository::new(state.db.clone());
-    
-    // Get entities and facts for basic scoring
-    let entities = entity_repo.list(0, 100).await.unwrap_or_default();
-    let facts = kg_repo.list(0, 100).await.unwrap_or_default();
-    
-    // Build simple results from KG facts
-    let gene_filter = form.gene.as_deref().unwrap_or("");
-    let max_results = form.max_results.unwrap_or(20);
-    
-    let results: Vec<QueryResult> = facts
-        .iter()
-        .filter(|f| gene_filter.is_empty() || f.subject_name.contains(gene_filter))
-        .enumerate()
-        .take(max_results)
-        .map(|(i, f)| QueryResult {
-            rank: i + 1,
-            gene_symbol: f.subject_name.clone(),
-            cancer_code: form.cancer_code.clone().unwrap_or_else(|| "PAAD".to_string()),
-            composite_score: f.confidence.map(|c| c as f64).unwrap_or(0.5),
-            confidence_adj: f.confidence.map(|c| c as f64).unwrap_or(0.5),
-            shortlist_tier: "secondary".to_string(),
-            flags: vec![],
-        })
-        .collect();
+    let engine = TargetQueryEngine::new(state.db.clone());
+    let query_text = form.query_text.clone();
+    let results = engine.execute_query(form).await.unwrap_or_default();
 
-    Html(render_query_page(Some((&form.query_text, results))))
+    Html(render_query_page(Some((&query_text, results))))
 }
 
 fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {

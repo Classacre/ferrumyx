@@ -1,12 +1,5 @@
 //! ferrumyx-ingestion — Literature ingestion pipeline.
-//! Covers Phase 2 of ARCHITECTURE.md:
-//! - Paper discovery (PubMed, Europe PMC, bioRxiv, etc.)
-//! - DOI resolution
-//! - Full-text retrieval
-//! - PDF parsing (Ferrules - fast Rust-native)
-//! - Section-aware chunking
-//! - Embedding pipeline
-//! - Deduplication
+//! Covers Phase 2 of ARCHITECTURE.md.
 
 pub mod sources;
 pub mod chunker;
@@ -16,7 +9,10 @@ pub mod models;
 pub mod normalise;
 pub mod repository;
 pub mod pipeline;
+pub mod embed;
 pub mod embedding;
+
+pub use embed::embedder::BiomedBertEmbedder;
 
 // Re-export for backwards compatibility
 pub use repository::IngestionRepository;

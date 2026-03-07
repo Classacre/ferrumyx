@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
-use ferrumyx_ner::trie_ner::TrieNer;
+use ferrumyx_kg::ner::TrieNer;
 
 #[derive(Deserialize)]
 pub struct NerForm {

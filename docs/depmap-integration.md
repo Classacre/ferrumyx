@@ -82,8 +82,8 @@ DepMap provides two access methods:
 
 ```
 crates/ferrumyx-ingestion/src/sources/
-├── depmap.rs              # Existing stub → expand with real implementation
-└── depmap_cache.rs        # NEW: Local cache manager
+├── src/sources/depmap.rs
+├── src/sources/depmap_cache.rs
 
 crates/ferrumyx-ranker/src/
 ├── depmap_provider.rs     # NEW: Trait for dependency data access

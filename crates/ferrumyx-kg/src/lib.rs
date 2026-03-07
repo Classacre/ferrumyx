@@ -6,7 +6,8 @@ pub mod conflict;
 pub mod update;
 pub mod extraction;
 pub mod scoring;
+pub mod ner;
 
-pub use extraction::{KgFact, build_facts, extract_cancer_type, extract_mutations};
+pub use extraction::{ExtractedFact, build_facts, extract_cancer_type, extract_mutations};
 pub use scoring::compute_target_scores;
 pub use repository::KgRepository;

@@ -17,8 +17,8 @@ use reqwest::Client;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-#[cfg(feature = "rust-embed")]
-use ferrumyx_embed::{EmbeddingConfig as RustEmbedConfig};
+// Internal embedder module
+use crate::embed::{EmbeddingConfig as RustEmbedConfig};
 
 use crate::repository::IngestionRepository;
 
@@ -192,50 +192,39 @@ impl EmbeddingClient {
     // ── Rust Native (Candle BiomedBERT) ─────────────────────────────────────
     // Pure Rust inference - no Python, no Docker service needed!
 
-    #[cfg(feature = "rust-embed")]
     async fn embed_rust_native(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         use std::sync::Arc;
         use tokio::sync::Mutex;
-        use ferrumyx_embed::{BiomedBertEmbedder, EmbeddingConfig as RustEmbedConfig};
         
         // Get or initialize the embedder (lazy static for reuse)
-        static EMBEDDER: std::sync::OnceLock<Arc<Mutex<BiomedBertEmbedder>>> = std::sync::OnceLock::new();
+        static EMBEDDER: std::sync::OnceLock<Arc<Mutex<crate::embed::BiomedBertEmbedder>>> = std::sync::OnceLock::new();
         
+        // Create config from our embedding config
+        let config = RustEmbedConfig {
+            model_id: self.cfg.model.clone(),
+            batch_size: self.cfg.batch_size,
+            max_length: 512,
+            normalize: true,
+            pooling: crate::embed::PoolingStrategy::Mean,
+            use_gpu: false, 
+            cache_size: 1000,
+            cache_dir: None,
+        };
+
         let embedder = EMBEDDER.get_or_init(|| {
-            // Create config from our embedding config
-            let config = RustEmbedConfig {
-                model_id: self.cfg.model.clone(),
-                batch_size: self.cfg.batch_size,
-                max_length: 512,
-                normalize: true,
-                pooling: ferrumyx_embed::PoolingStrategy::Mean,
-                use_gpu: false, // CPU for now, can be configured
-                cache_size: 1000,
-                cache_dir: None,
-            };
-            
             // We need to block on initialization since OnceLock is sync
             let embedder = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    BiomedBertEmbedder::new(config).await
+                    crate::embed::BiomedBertEmbedder::new(config).await
                         .expect("Failed to initialize Rust embedder")
                 })
             });
-            
             Arc::new(Mutex::new(embedder))
         });
         
         let embedder_guard = embedder.lock().await;
         embedder_guard.embed(texts).await
             .map_err(|e| anyhow::anyhow!("Rust embedding failed: {}", e))
-    }
-
-    #[cfg(not(feature = "rust-embed"))]
-    async fn embed_rust_native(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(anyhow::anyhow!(
-            "RustNative backend requires 'rust-embed' feature. \
-             Enable it in Cargo.toml or use another backend."
-        ))
     }
 }
 
@@ -318,14 +307,6 @@ fn l2_norm(v: &[f32]) -> f32 {
 }
 
 // ── Hybrid search (FTS + vector RRF) — IronClaw-aligned ──────────────────────
-//
-// IronClaw pattern (ironclaw/src/workspace/search.rs):
-//   1. FTS:    SELECT ... ts_rank_cd(...) ORDER BY rank LIMIT N
-//   2. Vector: SELECT ... 1 - (embedding <=> query_vec) ORDER BY dist LIMIT N
-//   3. RRF:    score(d) = Σ 1/(k + rank(d)) across methods
-//   4. Normalise to [0,1], sort descending, truncate to limit
-//
-// Ferrumyx adds a cancer_type / gene filter on top.
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -364,7 +345,6 @@ impl Default for HybridSearchConfig {
 }
 
 /// Hybrid search over paper_chunks: FTS + vector → RRF fusion.
-/// Uses LanceDB for vector search and full-text search.
 pub async fn hybrid_search(
     repo:         &IngestionRepository,
     query_text:   &str,
@@ -378,15 +358,11 @@ pub async fn hybrid_search(
     let mut vector_rows: Vec<(Uuid, Uuid, String, i64)> = vec![];
 
     // 1. Full-text search via LanceDB
-    // Note: LanceDB doesn't have built-in FTS, so we do a simple content search
-    // For production, consider integrating with a dedicated FTS engine like Tantivy
     if cfg.use_fts {
         let chunk_repo = ChunkRepository::new(repo.db());
-        // Simple contains search - in production, use Tantivy for proper FTS
         let all_chunks = chunk_repo.list(0, cfg.pre_fusion_limit).await
             .context("FTS query failed")?;
         
-        // Filter chunks that contain the query text (case-insensitive)
         let query_lower = query_text.to_lowercase();
         let mut matches: Vec<_> = all_chunks
             .into_iter()
@@ -417,7 +393,7 @@ pub async fn hybrid_search(
         }
     }
 
-    // 3. RRF fusion (same algorithm as IronClaw's reciprocal_rank_fusion)
+    // 3. RRF fusion
     let k = cfg.rrf_k as f32;
     let mut scores: HashMap<Uuid, (Uuid, String, f32, Option<u32>, Option<u32>)>
         = HashMap::new();
@@ -448,18 +424,8 @@ pub async fn hybrid_search(
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     results.truncate(cfg.limit);
 
-    debug!(
-        query = query_text,
-        fts_hits = fts_rows.len(),
-        vector_hits = vector_rows.len(),
-        fused = results.len(),
-        "Hybrid search complete"
-    );
-
     Ok(results)
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -474,13 +440,12 @@ mod tests {
     #[test]
     fn test_l2_norm_zero_is_safe() {
         let v = vec![0.0f32, 0.0f32];
-        assert!(l2_norm(&v) > 0.0);  // returns 1e-10, not 0
+        assert!(l2_norm(&v) > 0.0);
     }
 
     #[test]
     fn test_default_config_uses_rust_native() {
         let cfg = EmbeddingConfig::default();
         assert_eq!(cfg.backend, EmbeddingBackend::RustNative);
-        assert_eq!(cfg.dim, 768);
     }
 }

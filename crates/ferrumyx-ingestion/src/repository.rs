@@ -76,7 +76,6 @@ impl IngestionRepository {
             .as_deref()
             .map(|t| compute_simhash(t));
 
-        // No existing paper found, insert new one
         let paper = Paper {
             id: Uuid::new_v4(),
             doi: meta.doi.clone(),
@@ -84,6 +83,7 @@ impl IngestionRepository {
             title: meta.title.clone(),
             abstract_text: meta.abstract_text.clone(),
             full_text: None,
+            raw_json: None,
             source: meta.source.as_str().to_string(),
             source_id: meta.pmcid.clone(),
             published_at: meta.pub_date.map(|d| {
@@ -103,8 +103,11 @@ impl IngestionRepository {
             issue: None,
             pages: None,
             parse_status: "pending".to_string(),
+            open_access: meta.open_access,
+            retrieval_tier: None,
             ingested_at: chrono::Utc::now(),
             abstract_simhash: simhash,
+            published_version_doi: None,
         };
         
         let paper_id = paper.id;
@@ -145,8 +148,10 @@ impl IngestionRepository {
             id: Uuid::new_v4(),
             paper_id: chunk.paper_id,
             chunk_index: chunk.chunk_index as i64,
+            token_count: chunk.token_count as i32,
             content: chunk.content.clone(),
             embedding: None, // Will be filled by embedding service
+            embedding_large: None,
             section: chunk.section_heading.clone(),
             page: chunk.page_number.map(|p| p as i64),
             created_at: chrono::Utc::now(),
@@ -168,8 +173,10 @@ impl IngestionRepository {
             id: Uuid::new_v4(),
             paper_id: chunk.paper_id,
             chunk_index: chunk.chunk_index as i64,
+            token_count: chunk.token_count as i32,
             content: chunk.content.clone(),
             embedding: None,
+            embedding_large: None,
             section: chunk.section_heading.clone(),
             page: chunk.page_number.map(|p| p as i64),
             created_at: chrono::Utc::now(),

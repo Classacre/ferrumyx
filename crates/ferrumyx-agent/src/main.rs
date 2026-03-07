@@ -5,6 +5,7 @@ use std::sync::Arc;
 use ironclaw::llm;
 
 mod config;
+mod tools;
 use rig::providers::openai::Client as OpenAiClient;
 use rig::providers::anthropic::Client as AnthropicClient;
 use rig::providers::gemini::Client as GeminiClient;
@@ -110,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Build Tool Registry
     let tool_registry = Arc::new(ironclaw::tools::ToolRegistry::new());
+    tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(db.clone())));
 
     // Build Skill Registry
     let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(

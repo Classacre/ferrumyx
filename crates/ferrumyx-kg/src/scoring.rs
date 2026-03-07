@@ -10,14 +10,14 @@ use std::collections::HashMap;
 
 /// Gene evidence aggregation for scoring.
 #[derive(Debug, Default)]
-struct GeneEvidence {
+pub struct GeneEvidence {
     cancer_evidence: u32,
     mutation_evidence: u32,
     total_evidence: u32,
 }
 
 /// Compute target scores for all genes.
-pub async fn compute_target_scores(db: Arc<Database>) -> Result<u32> {
+pub async fn compute_target_scores(db: Arc<Database>) -> anyhow::Result<u32> {
     let fact_repo = KgFactRepository::new(db.clone());
     
     // Get all facts and aggregate by subject (gene)
@@ -69,8 +69,8 @@ pub async fn compute_target_scores(db: Arc<Database>) -> Result<u32> {
 }
 
 /// Get gene evidence statistics.
-pub async fn get_gene_evidence(db: Arc<Database>, gene: &str) -> Result<GeneEvidence> {
-    let fact_repo = KgFactRepository::new(db);
+pub async fn get_gene_evidence(db: Arc<Database>, _gene: &str) -> anyhow::Result<GeneEvidence> {
+    let _fact_repo = KgFactRepository::new(db);
     
     // Find all facts where this gene is the subject
     // Note: This requires the gene to be a UUID in the current schema

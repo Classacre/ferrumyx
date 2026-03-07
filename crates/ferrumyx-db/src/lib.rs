@@ -37,16 +37,18 @@ pub mod chunks;
 pub mod entities;
 pub mod kg_facts;
 pub mod entity_mentions;
+pub mod kg_conflicts;
 
 pub use database::{Database, DatabaseStats};
 pub use error::{DbError, Result};
 pub use schema::{
     Paper, Chunk, Entity, KgFact, EntityMention,
-    EntityType, EMBEDDING_DIM,
-    TABLE_PAPERS, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_KG_FACTS, TABLE_ENTITY_MENTIONS,
+    EntityType, EMBEDDING_DIM, KgConflict,
+    TABLE_PAPERS, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_KG_FACTS, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS
 };
 pub use papers::PaperRepository;
 pub use chunks::ChunkRepository;
 pub use entities::EntityRepository;
 pub use kg_facts::KgFactRepository;
 pub use entity_mentions::EntityMentionRepository;
+pub use kg_conflicts::KgConflictRepository;

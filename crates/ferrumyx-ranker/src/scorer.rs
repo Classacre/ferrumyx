@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use ferrumyx_common::query::{TargetMetrics, TargetScoreResult};
 use crate::weights::WeightVector;
 use crate::depmap_provider::DepMapProvider;
 use crate::tcga_provider::TcgaProvider;
@@ -140,6 +141,85 @@ pub enum ShortlistTier {
     Primary,
     Secondary,
     Excluded,
+}
+
+pub struct PrioritizationEngine;
+
+impl PrioritizationEngine {
+    pub fn calculate_scores(cohort: &[(Uuid, TargetMetrics)]) -> std::collections::HashMap<Uuid, TargetScoreResult> {
+        let n = cohort.len() as f64;
+        let mut results = std::collections::HashMap::new();
+
+        if cohort.is_empty() {
+            return results;
+        }
+
+        let mutation_freq_ranks = Self::rank_cohort(cohort, |m| m.mutation_freq);
+        let survival_corr_ranks = Self::rank_cohort(cohort, |m| m.survival_correlation);
+        let expr_spec_ranks = Self::rank_cohort(cohort, |m| m.expression_specificity);
+        let lit_novelty_ranks = Self::rank_cohort(cohort, |m| m.literature_novelty_velocity);
+
+        for (id, metrics) in cohort {
+            let n1 = mutation_freq_ranks.get(id).unwrap_or(&0.0) / n;
+            let n3 = survival_corr_ranks.get(id).unwrap_or(&0.0) / n;
+            let n4 = expr_spec_ranks.get(id).unwrap_or(&0.0) / n;
+            let n9 = lit_novelty_ranks.get(id).unwrap_or(&0.0) / n;
+            
+            let ceres_normalized = (metrics.crispr_dependency + 2.0) / 2.0;
+            let n2 = 1.0 - ceres_normalized.clamp(0.0, 1.0);
+
+            let pdb_cov = (metrics.pdb_structure_count as f64 / 5.0).min(1.0);
+            let n5 = if metrics.pdb_structure_count > 0 {
+                0.40 * pdb_cov + 0.25 * metrics.fpocket_best_score.clamp(0.0, 1.0)
+            } else {
+                0.35 * (metrics.af_plddt_mean / 100.0) + 0.25 * metrics.fpocket_best_score.clamp(0.0, 1.0)
+            };
+
+            let n6 = metrics.fpocket_best_score.clamp(0.0, 1.0);
+            let n7 = 1.0 / (1.0 + metrics.chembl_inhibitor_count as f64);
+            let n8 = 1.0 / (1.0 + metrics.reactome_escape_pathway_count as f64);
+
+            let mut penalty = 0.0;
+            if metrics.chembl_inhibitor_count > 50 { penalty += 0.15; }
+            if metrics.expression_specificity < 1.5 { penalty += 0.10; }
+            if metrics.pdb_structure_count == 0 && metrics.af_plddt_mean < 50.0 { penalty += 0.08; }
+
+            let mut composite = (
+                0.20 * n1 + 0.18 * n2 + 0.15 * n3 + 0.12 * n4 + 0.12 * n5 + 0.08 * n6 + 0.07 * n7 + 0.05 * n8 + 0.03 * n9
+            ) - penalty;
+
+            composite = composite.clamp(0.0, 1.0);
+
+            results.insert(*id, TargetScoreResult {
+                n1_mutation_freq: n1,
+                n2_crispr_dependency: n2,
+                n3_survival_correlation: n3,
+                n4_expression_specificity: n4,
+                n5_structural_tractability: n5,
+                n6_pocket_detectability: n6,
+                n7_novelty_score: n7,
+                n8_pathway_independence: n8,
+                n9_literature_novelty: n9,
+                penalty,
+                composite_score: composite,
+                is_disputed: false,
+            });
+        }
+
+        results
+    }
+
+    fn rank_cohort<F>(cohort: &[(Uuid, TargetMetrics)], key_fn: F) -> std::collections::HashMap<Uuid, f64> 
+    where F: Fn(&TargetMetrics) -> f64 {
+        let mut sortable: Vec<(&Uuid, f64)> = cohort.iter().map(|(id, m)| (id, key_fn(m))).collect();
+        sortable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        let mut ranks = std::collections::HashMap::new();
+        for (i, (id, _)) in sortable.iter().enumerate() {
+            ranks.insert(**id, (i + 1) as f64);
+        }
+        ranks
+    }
 }
 
 pub fn determine_shortlist_tier(

@@ -183,21 +183,19 @@ User Config (YAML/Web)
 
 Instead of re-ingesting for each target:
 
-1. **Global Knowledge Graph** — Store ALL papers, entities, facts
+1. **Global Knowledge Graph** — Store ALL papers, entities, facts in LanceDB
 2. **Target-Specific Views** — Filter by gene/cancer when scoring
 3. **Incremental Updates** — Only fetch new papers since last run
 4. **Cached Embeddings** — Reuse vectors across targets
 
-```sql
--- Papers are stored once, queried many times
-SELECT * FROM papers 
-WHERE to_tsvector(content) @@ plainto_tsquery('KRAS G12D pancreatic');
-
--- Entity mentions link papers to targets
-SELECT p.* FROM papers p
-JOIN entity_mentions em ON p.id = em.paper_id
-JOIN entities e ON em.entity_id = e.id
-WHERE e.canonical_id = 'KRAS' AND e.entity_type = 'gene';
+```rust
+// Papers are stored once in LanceDB, queried many times using hybrid search
+let query = table
+    .search(query_vector)
+    .where("gene_canonical_id = 'KRAS' AND cancer_type = 'PAAD'")
+    .limit(50)
+    .execute()
+    .await?;
 ```
 
 ## Next Steps

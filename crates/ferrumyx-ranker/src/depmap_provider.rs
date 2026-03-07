@@ -87,29 +87,29 @@ impl DepMapProvider for MockDepMapProvider {
 
 // ── Adapter for DepMapClient ─────────────────────────────────────────────────
 
-/// Adapter that wraps ferrumyx_depmap::DepMapClient to implement DepMapProvider.
+/// Adapter that wraps crate::providers::depmap::DepMapClient to implement DepMapProvider.
 ///
-/// This allows the ranker to use the ferrumyx-depmap crate's client
+/// This allows the ranker to use the internal DepMap client
 /// directly for querying gene dependency scores.
 pub struct DepMapClientAdapter {
-    client: ferrumyx_depmap::DepMapClient,
+    client: crate::providers::depmap::DepMapClient,
 }
 
 impl DepMapClientAdapter {
     /// Create a new adapter wrapping a DepMapClient.
-    pub fn new(client: ferrumyx_depmap::DepMapClient) -> Self {
+    pub fn new(client: crate::providers::depmap::DepMapClient) -> Self {
         Self { client }
     }
     
     /// Create a new adapter by initializing a DepMapClient.
     /// This will download data if not already cached.
     pub async fn init() -> anyhow::Result<Self> {
-        let client = ferrumyx_depmap::DepMapClient::new().await?;
+        let client = crate::providers::depmap::DepMapClient::new().await?;
         Ok(Self { client })
     }
     
     /// Get the underlying client (for advanced usage).
-    pub fn client(&self) -> &ferrumyx_depmap::DepMapClient {
+    pub fn client(&self) -> &crate::providers::depmap::DepMapClient {
         &self.client
     }
 }

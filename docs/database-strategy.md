@@ -66,7 +66,7 @@ OmicsExpressionProteinGenes.csv  # Expression
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    POSTGRESQL + PGVECTOR                        │
+│                    Lancedb Embedded Vector DB                   │
 │                    (Single source of truth)                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
@@ -87,9 +87,9 @@ OmicsExpressionProteinGenes.csv  # Expression
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │              Pre-computed Indexes                           ││
-│  │  • HNSW for vector search (fast similarity)                 ││
-│  │  • GIN for full-text search                                 ││
-│  │  • B-tree for entity lookups                                ││
+│  │  • IVF-PQ for vector search (fast similarity)               ││
+│  │  • LanceDB native FTS                                       ││
+│  │  • Monotonic b-lining for entity lookups                    ││
 │  └─────────────────────────────────────────────────────────────┘│
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -118,29 +118,26 @@ set_last_sync_timestamp("pubmed", Utc::now());
 
 ## Performance Optimizations
 
-### 1. **Vector Index (HNSW)**
-```sql
--- Fast approximate nearest neighbor search
-CREATE INDEX ON paper_chunks 
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
-
--- Query in <100ms for millions of vectors
-SELECT * FROM paper_chunks
-ORDER BY embedding <=> query_vector
-LIMIT 20;
+### 1. **Vector Index (IVF-PQ)**
+```rust
+// Fast approximate nearest neighbor search via LanceDB
+let table = db.open_table("paper_chunks").await?;
+let query = table
+    .search(query_vector)
+    .limit(20)
+    .execute()
+    .await?;
 ```
 
-### 2. **Full-Text Search (GIN)**
-```sql
--- Fast text search with ranking
-CREATE INDEX ON paper_chunks USING GIN (ts_vector);
-
--- Combined with vector for hybrid search
-SELECT * FROM paper_chunks
-WHERE ts_vector @@ plainto_tsquery('KRAS mutation')
-ORDER BY ts_rank(ts_vector, query) DESC
-LIMIT 100;
+### 2. **Full-Text Search (LanceDB Native)**
+```rust
+// Combined with vector for hybrid search
+let query = table
+    .search(query_vector)
+    .limit(100)
+    .execute()
+    .await?;
+// RRF (Reciprocal Rank Fusion) logic handles FTS intersection
 ```
 
 ### 3. **Materialized Views for Common Queries**
@@ -225,8 +222,8 @@ pg_restore --clean --dbname=ferrumyx backup_20260222.sql.gz
 
 ## Next Steps
 
-1. ✅ Database running (PostgreSQL + pgvector)
-2. ✅ Schema migrated (21 tables)
+1. ✅ Database running (LanceDB Embedded)
+2. ✅ Schema migrated (LanceDB tables)
 3. 🔜 Create bulk ingestion script
 4. 🔜 Pre-seed core oncology data (100k papers)
 5. 🔜 Set up incremental sync jobs

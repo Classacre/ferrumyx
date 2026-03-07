@@ -18,91 +18,96 @@ By leveraging IronClaw's robust event loop, reasoning capabilities, and Tool Reg
 
 For a detailed technical breakdown of the engine's layers, reasoning loop, and state management, please refer directly to the [Architecture Document (ARCHITECTURE.md)](ARCHITECTURE.md).
 
-## Current Status (Phase 2)
+## Current Status (Phase 3: Verification & Autonomy)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Ingestion** | ✅ Working | PubMed API, PDF parsing, chunking |
-| **Embedding** | ✅ Working | Rust-native BiomedBERT (768-dim, Candle) |
-| **NER** | ✅ Working | Rust-native Aho-Corasick trie dictionary matching |
-| **KG Building** | ✅ Working | Fact extraction, scoring computation |
-| **Deduplication** | ✅ Working | SimHash + PMID conflict resolution |
-| **Web GUI** | ✅ Working | Dashboard, ingestion form, API endpoints |
-| **Target Ranker** | ✅ Working | Multi-factor scoring with DepMap |
-| **Molecules** | ✅ Working | Structural analysis pipeline, ADMET, Ligand generation |
+| **Ingestion** | ✅ Working | Unified pipeline (PubMed, PMC, BioRxiv) |
+| **NER & KG** | ✅ Working | Consolidated into `ferrumyx-kg` (Aho-Corasick) |
+| **Embedding** | ✅ Working | Pure Rust BiomedBERT (768-dim, Candle) |
+| **Ranker** | ✅ Working | Multi-factor scoring + DepMap integration |
+| **Molecular** | ✅ Working | Structural analysis & Ligand generation |
+| **Agent Loop** | ✅ Working | IronClaw-driven autonomous orchestration |
+| **Web GUI** | ✅ Working | Interactive Dashboard & KG Visualization |
 
-**No Python dependencies.** All components are Rust-native. No external database required (LanceDB embedded).
+**100% Rust.** No Python dependencies. All components are Rust-native. No external database required (LanceDB/libSQL embedded).
 
 ## Architecture
 
-```
-Ferrumyx (100% Rust)
-├── ferrumyx-db         — LanceDB embedded vector database
-├── ferrumyx-ingestion  — PDF parsing, chunking, PubMed API
-├── ferrumyx-embed      — Candle + BiomedBERT embeddings
-├── ferrumyx-ner        — Candle NER (biomedical entities)
-├── ferrumyx-kg         — Knowledge graph building & scoring
-├── ferrumyx-ranker     — Target prioritization
-├── ferrumyx-llm        — LLM abstraction layer
-├── ferrumyx-agent      — IronClaw agent with tools
-└── ferrumyx-web        — Web API & dashboard
+The system follows a reactive Agentic Architecture, where the IronClaw agent serves as the central brain, orchestrating specialized tools for literature ingestion, Knowledge Graph (KG) management, and molecular modeling.
+
+```mermaid
+graph TD
+    User([User Intent]) --> Agent[IronClaw Agent]
+    
+    subgraph "Core Agent Loop"
+        Agent <--> Tools[Tool Registry]
+        Tools <--> Ingestion[Ingestion Pipeline]
+        Tools <--> KG[Knowledge Graph]
+        Tools <--> Molecules[Molecular Engine]
+    end
+    
+    subgraph "Data Layer"
+        Ingestion --> Papers[(Papers Database)]
+        KG --> GraphData[(Graph & Scores)]
+        Molecules --> StructData[(Structural Assets)]
+    end
+    
+    subgraph "Intelligence"
+        Ingestion -- NER/LLM --> KG
+        KG -- Scoring --> Ranker[Target Prioritization]
+        Ranker -- Design --> Molecules
+    end
+    
+    Ranker --> Dashboard[Web Dashboard]
 ```
 
-## Computational Methodology and Framework
+## Computational Methodology
 
-Ferrumyx leverages a defense-in-depth, 100% Rust architecture to mitigate performance bottlenecks typically associated with large-scale scientific computation pipelines. By operating independently of external data services, we ensure computational reproducibility and data security.
+Ferrumyx leverages a defense-in-depth architecture to mitigate performance bottlenecks in large-scale scientific computation. By operating independently of external data services, we ensure computational reproducibility and data security.
 
 ### Core Algorithmic Components
 
 1. **Information Extraction Engine**
-   Employs highly optimized biomedical named entity recognition (NER) via Aho-Corasick dictionary matching across multiple taxonomic classes (Genes, Proteins, Drugs, Diseases). High-throughput ingestion queues process dense literature efficiently.
+   Optimized biomedical NER via Aho-Corasick dictionary matching and LLM-assisted relationship extraction. Processes Genes, Proteins, Chemicals, and Mutations with high precision.
 
 2. **Graph-Theoretic Knowledge Representation**
-   Extracts semantic triplets from unstructured text and constructs a local graph topology. The system uses SimHash-based deduplication algorithms to merge conflicting factual nodes and scales linearly via embedded LanceDB vector storage.
+   Semantic triplets are stored in an embedded LanceDB vector database. SimHash-based deduplication and cross-reference conflict resolution ensure KG integrity.
 
 3. **Composite Target Prioritization Matrix**
-   Implements a multi-parametric heuristic function `S(g,c)` merging independent component scalars:
-   - Structural variants and mutation frequencies
+   Implements a multi-parametric heuristic function `S(g,c)` merging:
+   - Mutation frequencies & Structural variants
    - CRISPR dependency models (DepMap)
-   - Survival correlates
+   - Survival correlates & Expression data
    - Proteomic pocket detectability
 
-4. **In Silico Pipeline Orchestration**
-   Autonomously invokes structural parsing logic, Lipinski's Rule of 5 evaluations for druglikeness (ADMET metrics), and schedules downstream molecular interactions.
+4. **IronClaw Autonomous Orchestration**
+   The system is non-human gated. Results are fed back to the IronClaw agent, which can autonomously modify parameters, create new search tools, or refine molecular optimization strategies until a viable "solution" is found.
 
-## Crates
+## Project Structure (Crates)
 
 | Crate | Description | Status |
 |-------|-------------|--------|
-| `ferrumyx-embed` | BiomedBERT embeddings via Candle (768-dim) | ✅ Working |
-| `ferrumyx-ner` | Fast biomedical NER via Aho-Corasick dictionary matching | ✅ Working |
-| `ferrumyx-ingestion` | Literature pipeline (PubMed, chunking, dedup) | ✅ Working |
-| `ferrumyx-kg` | Knowledge graph & target scoring | ✅ Working |
-| `ferrumyx-ranker` | Target prioritization with DepMap CRISPR | ✅ Working |
-| `ferrumyx-agent` | IronClaw agent with tools (Primary Event Loop) | ✅ Working |
-| `ferrumyx-llm` | LLM abstraction layer (Ollama) | ✅ Working |
-| `ferrumyx-common` | Shared utilities | ✅ Working |
-| `ferrumyx-web` | Web API & dashboard | ✅ Working |
+| `ferrumyx-agent` | IronClaw-powered Primary Event Loop & Tool Registry | ✅ Working |
+| `ironclaw` | Core autonomous agent framework & reasoning engine | ✅ Working |
+| `ferrumyx-ingestion` | Unified literature pipeline (PubMed, PDF, Embedding) | ✅ Working |
+| `ferrumyx-kg` | Knowledge Graph, NER, & Target Scoring logic | ✅ Working |
+| `ferrumyx-ranker` | Multi-factor prioritization (DepMap integration) | ✅ Working |
+| `ferrumyx-molecules` | Structural analysis, ADMET, & Ligand generation | ✅ Working |
+| `ferrumyx-db` | LanceDB & libSQL embedded database layer | ✅ Working |
+| `ferrumyx-common` | Shared types, schemas, and utility functions | ✅ Working |
+| `ferrumyx-web` | Real-time Dashboard & Interactive Visualizations | ✅ Working |
 
 ## Quick Start
 
-```bash
-# Set Protobuf compiler path (required for LanceDB)
-# Windows:
-set PROTOC=C:\protoc\bin\protoc.exe
-# Linux/macOS:
-# export PROTOC=/usr/bin/protoc
+```powershell
+# Windows: Set Protobuf path (required for LanceDB)
+$env:PROTOC = "C:\protoc\bin\protoc.exe"
 
-# Windows easy start (Installs Rust, Ollama, selects model, and runs)
+# Easy start (Installs Rust, selects models, and runs)
 .\start.ps1
 
-# Linux/macOS easy start
-./start.sh
-
-# Manual run tests
-cargo test --workspace
-
-# Manual start agent / web server
+# Manual run
 cargo run --release --bin ferrumyx
 ```
 

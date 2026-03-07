@@ -7,12 +7,14 @@ license.workspace = true
 
 [dependencies]
 ferrumyx-common = { path = "../ferrumyx-common" }
-ferrumyx-depmap = { path = "../ferrumyx-depmap" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+reqwest.workspace = true
+csv = "1"
+dirs = "5"
 uuid.workspace = true
 chrono.workspace = true
 tokio.workspace = true

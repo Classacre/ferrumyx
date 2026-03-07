@@ -7,10 +7,8 @@ members = [
     "crates/ferrumyx-ranker",
     "crates/ferrumyx-common",
     "crates/ferrumyx-web",
-    "crates/ferrumyx-embed",
-    "crates/ferrumyx-ner",
-    "crates/ferrumyx-depmap",
-    "crates/ferrumyx-db", "crates/ferrumyx-molecules",
+    "crates/ferrumyx-db",
+    "crates/ferrumyx-molecules",
     "crates/ironclaw"
 ]
 

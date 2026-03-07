@@ -53,7 +53,7 @@ pub async fn api_kg_facts(
         subject: f.subject_name.clone(),
         predicate: f.predicate.clone(),
         object: f.object_name.clone(),
-        confidence: f.confidence.map(|c| c as f64).unwrap_or(0.5),
+        confidence: f.confidence as f64,
         source: "unknown".to_string(),
         evidence_count: 1,
     }).collect();
@@ -91,29 +91,48 @@ pub async fn kg_page(
     let fact_repo = KgFactRepository::new(state.db.clone());
     let facts = fact_repo.list(0, 100).await.unwrap_or_default();
     
-    // Convert to display format
-    let display_facts: Vec<(String, String, String, f64, String)> = facts.iter().map(|f| {
-        (f.subject_name.clone(), f.predicate.clone(), f.object_name.clone(), 
-         f.confidence.map(|c| c as f64).unwrap_or(0.5), "unknown".to_string())
+    // Convert to graph data and display table format
+    let mut nodes_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut links = Vec::new();
+    let mut display_facts = Vec::new();
+
+    for f in &facts {
+        nodes_set.insert(f.subject_name.clone());
+        nodes_set.insert(f.object_name.clone());
+        
+        links.push(serde_json::json!({
+            "source": f.subject_name,
+            "target": f.object_name,
+            "label": f.predicate
+        }));
+        
+        display_facts.push((f.subject_name.clone(), f.predicate.clone(), f.object_name.clone(), "Pipeline Extraction".to_string()));
+    }
+
+    let nodes: Vec<_> = nodes_set.into_iter().map(|id| {
+        let group = if id == gene { 1 } else { 2 };
+        serde_json::json!({ "id": id, "group": group, "name": id })
     }).collect();
 
+    let graph_data = serde_json::json!({
+        "nodes": nodes,
+        "links": links
+    });
+    let graph_json = serde_json::to_string(&graph_data).unwrap_or_else(|_| "{}".to_string());
+
     let fact_rows: String = if display_facts.is_empty() {
-        format!(r#"<tr><td colspan="5" class="text-center text-muted py-4">
+        format!(r#"<tr><td colspan="4" class="text-center text-muted py-4">
             No KG facts found for <strong style="color:var(--text-main);">{}</strong>. Run the ingestion pipeline first.
         </td></tr>"#, gene)
     } else {
-        display_facts.iter().map(|(subj, pred, obj, conf, src)| {
-            let conf_class = if *conf > 0.7 { "success" }
-                             else if *conf > 0.4 { "warning" }
-                             else { "danger" };
+        display_facts.iter().map(|(subj, pred, obj, src)| {
             let pred_badge = format!(r#"<span class="badge badge-outline">{}</span>"#, pred);
             format!(r#"<tr>
                 <td style="font-weight:600; color:var(--text-main);">{}</td>
                 <td>{}</td>
                 <td style="font-weight:600; color:var(--text-main);">{}</td>
-                <td><span class="badge badge-{}">{:.3}</span></td>
                 <td class="text-muted">{}</td>
-            </tr>"#, subj, pred_badge, obj, conf_class, conf, src)
+            </tr>"#, subj, pred_badge, obj, src)
         }).collect()
     };
 
@@ -145,10 +164,19 @@ pub async fn kg_page(
         <button type="submit" class="btn btn-primary">Locate Node</button>
     </form>
 
+    <div class="card mb-4" style="padding: 0; overflow: hidden; position: relative;">
+        <div class="card-header" style="position: absolute; top: 0; left: 0; right: 0; z-index: 10; background: rgba(14, 18, 25, 0.8); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border-color);">
+            <div>Edges connected to <span class="text-gradient" style="font-weight:700">{}</span></div>
+            <span class="badge badge-outline">{} nodes</span>
+        </div>
+        <div id="graph-container" style="width: 100%; height: 600px;"></div>
+    </div>
+
+    <!-- Restored Facts Table -->
     <div class="card">
         <div class="card-header">
-            <div>Edges connected to <span class="text-gradient" style="font-weight:700">{}</span></div>
-            <span class="badge badge-outline">{} connections</span>
+            <div>Fact Details</div>
+            <span class="badge badge-outline">{} evidence connections</span>
         </div>
         <div class="table-container">
             <table class="table">
@@ -157,7 +185,6 @@ pub async fn kg_page(
                         <th>Subject Entity</th>
                         <th>Predicate Relation</th>
                         <th>Object Entity</th>
-                        <th>Trust Score</th>
                         <th>Provenance</th>
                     </tr>
                 </thead>
@@ -169,6 +196,39 @@ pub async fn kg_page(
     </div>
 </main>
 <script src="/static/js/main.js"></script>
+<script src="https://unpkg.com/force-graph"></script>
+<script>
+    const graphData = {};
+
+    const elem = document.getElementById('graph-container');
+    if (graphData.nodes && graphData.nodes.length > 0) {{
+        const Graph = ForceGraph()(elem)
+            .graphData(graphData)
+            .nodeLabel('name')
+            .nodeAutoColorBy('group')
+            .linkDirectionalArrowLength(3.5)
+            .linkDirectionalArrowRelPos(1)
+            .linkCurvature(0.25)
+            .backgroundColor('transparent')
+            .linkColor(() => 'rgba(255, 255, 255, 0.2)')
+            .linkLabel(link => `<div style="background: rgba(0,0,0,0.8); padding: 4px; border-radius: 4px; font-family: var(--font-main); font-size: 12px; color: white;">${{link.label}}</div>`)
+            .onNodeClick(node => {{
+                Graph.centerAt(node.x, node.y, 1000);
+                Graph.zoom(8, 2000);
+            }});
+            
+        // Initial zoom to fit
+        setTimeout(() => {{ Graph.zoomToFit(400, 50); }}, 500);
+
+        window.addEventListener('resize', () => {{
+            if (elem.clientWidth > 0 && elem.clientHeight > 0) {{
+                Graph.width(elem.clientWidth).height(elem.clientHeight);
+            }}
+        }});
+    }} else {{
+        elem.innerHTML = `<div style="display:flex; height:100%; align-items:center; justify-content:center; color: var(--text-muted); padding-top: 60px;">No KG facts found for <strong style="color:var(--text-main); margin-left:5px;">{}</strong>. Run the ingestion pipeline first.</div>`;
+    }}
+</script>
 </body>
-</html>"#, NAV_HTML, gene, gene, display_facts.len(), fact_rows))
+</html>"#, NAV_HTML, gene, gene, nodes.len(), display_facts.len(), fact_rows, graph_json, gene))
 }

@@ -33,7 +33,7 @@ use crate::repository::IngestionRepository;
 use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
 use crate::pdf_parser::parse_pdf_sections;
 use crate::models::SectionType;
-use ferrumyx_ner::trie_ner::TrieNer;
+use ferrumyx_kg::ner::TrieNer;
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -167,11 +167,14 @@ pub async fn run_ingestion(
 
     // Initialize NER once for the entire pipeline (loads real databases)
     info!("Initializing NER with complete biomedical databases...");
-    let ner = match tokio::task::spawn_blocking(|| TrieNer::with_complete_databases()).await.unwrap() {
+    let ner = match tokio::task::spawn_blocking(move || {
+        TrieNer::with_complete_databases()
+    }).await.unwrap() {
         Ok(ner) => ner,
         Err(e) => {
-            warn!("Failed to load complete databases, falling back to embedded subset: {}", e);
-            tokio::task::spawn_blocking(|| TrieNer::with_embedded_subset()).await.unwrap()
+            warn!("Failed to load complete databases: {e}");
+            tokio::task::spawn_blocking(move || TrieNer::with_embedded_subset()).await.unwrap()
+                .expect("Failed to load subset NER")
         }
     };
     info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);

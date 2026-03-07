@@ -83,7 +83,7 @@ impl KgRepository {
                 subject_id: fact.subject_id,
                 predicate: fact.predicate.clone(),
                 object_id: fact.object_id,
-                new_confidence: fact.confidence.unwrap_or(0.0) as f64,
+                new_confidence: fact.confidence as f64,
             };
 
             let _ = tx.send(trigger);
@@ -110,8 +110,8 @@ impl KgRepository {
                                (fact.predicate.contains("activates") && existing_fact.predicate.contains("inhibits"));
 
                 if let Some(conflict) = crate::conflict::evaluate_conflict(
-                    fact.confidence.unwrap_or(0.0) as f64, 
-                    existing_fact.confidence.unwrap_or(0.0) as f64, 
+                    fact.confidence as f64, 
+                    existing_fact.confidence as f64, 
                     opposite
                 ) {
                     let conflict_record = KgConflict::new(
