@@ -199,10 +199,9 @@ impl IngestionRepository {
     }
 
     /// Papers with a given parse_status.
-    pub async fn paper_count_by_status(&self, _status: &str) -> Result<i64> {
-        // TODO: Implement count_by_status in PaperRepository
-        // For now, return 0 as placeholder
-        Ok(0)
+    pub async fn paper_count_by_status(&self, status: &str) -> Result<i64> {
+        let paper_repo = PaperRepository::new(self.db.clone());
+        Ok(paper_repo.count_by_parse_status(status).await? as i64)
     }
 
     /// Total chunks in the database.

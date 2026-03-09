@@ -71,9 +71,36 @@ impl BiomedBertEmbedder {
     }
 
     fn select_device(config: &EmbeddingConfig) -> Result<Device> {
-        if !config.use_gpu { return Ok(Device::Cpu); }
-        #[cfg(feature = "cuda")] { if let Ok(d) = Device::new_cuda(0) { return Ok(d); } }
-        #[cfg(feature = "metal")] { if let Ok(d) = Device::new_metal(0) { return Ok(d); } }
+        if !config.use_gpu { 
+            info!("GPU usage disabled in config, using CPU.");
+            return Ok(Device::Cpu); 
+        }
+
+        #[cfg(feature = "cuda")] { 
+            match Device::new_cuda(0) {
+                Ok(d) => {
+                    info!("Successfully initialized CUDA device.");
+                    return Ok(d);
+                }
+                Err(e) => {
+                    tracing::warn!("CUDA feature is enabled but device initialization failed: {}. Falling back to CPU.", e);
+                }
+            }
+        }
+
+        #[cfg(feature = "metal")] { 
+            match Device::new_metal(0) {
+                Ok(d) => {
+                    info!("Successfully initialized Metal device.");
+                    return Ok(d);
+                }
+                Err(e) => {
+                    tracing::warn!("Metal feature is enabled but device initialization failed: {}. Falling back to CPU.", e);
+                }
+            }
+        }
+
+        info!("No GPU features enabled or GPU initialization failed. Using CPU.");
         Ok(Device::Cpu)
     }
 

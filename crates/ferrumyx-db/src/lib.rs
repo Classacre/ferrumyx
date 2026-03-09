@@ -38,13 +38,15 @@ pub mod entities;
 pub mod kg_facts;
 pub mod entity_mentions;
 pub mod kg_conflicts;
+pub mod target_scores;
+pub mod ent_stage;
 
 pub use database::{Database, DatabaseStats};
 pub use error::{DbError, Result};
 pub use schema::{
-    Paper, Chunk, Entity, KgFact, EntityMention,
+    Paper, Chunk, Entity, KgFact, EntityMention, TargetScore,
     EntityType, EMBEDDING_DIM, KgConflict,
-    TABLE_PAPERS, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_KG_FACTS, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS
+    TABLE_PAPERS, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_KG_FACTS, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS, TABLE_TARGET_SCORES
 };
 pub use papers::PaperRepository;
 pub use chunks::ChunkRepository;
@@ -52,3 +54,5 @@ pub use entities::EntityRepository;
 pub use kg_facts::KgFactRepository;
 pub use entity_mentions::EntityMentionRepository;
 pub use kg_conflicts::KgConflictRepository;
+pub use target_scores::TargetScoreRepository;
+pub use ent_stage::{EntEnrichment, EntStageRepository};

@@ -1,18 +1,24 @@
 //! Fast NER using Aho-Corasick trie for dictionary matching.
 
-use std::collections::HashMap;
 use aho_corasick::{AhoCorasick, MatchKind};
 use super::entity_types::EntityType;
 use super::hgnc::{HgncNormaliser, SymbolTier};
 use super::cancer_normaliser::{CancerNormaliser, CancerPatternKind};
 use super::hgvs::HgvsMutationNormaliser;
-use tracing::{info, warn};
+use tracing::info;
+
+#[derive(Clone, Debug, Copy)]
+enum ConfidenceClass {
+    Gene(SymbolTier),
+    Cancer(CancerPatternKind),
+    Mutation,
+}
 
 #[derive(Clone, Debug)]
 struct PatternMeta {
     pub entity_type: EntityType,
     pub text: String,
-    pub confidence: f32,
+    pub class: ConfidenceClass,
     pub requires_word_boundary: bool,
 }
 
@@ -54,19 +60,13 @@ impl TrieNer {
         // 1. Genes from HGNC
         for (sym, tier) in hgnc.all_patterns_with_tier() {
             let len = sym.len();
-            let (confidence, req_word_bound) = match (tier, len) {
-                (SymbolTier::Preferred, l) if l >= 4 => (0.97, false),
-                (SymbolTier::Preferred, 2..=3) => (0.80, true),
-                (SymbolTier::Preferred, 1) => (0.60, true),
-                (_, l) if l >= 4 => (0.82, false),
-                _ => (0.65, true),
-            };
+            let req_word_bound = len <= 3;
 
             patterns.push(sym.clone());
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::Gene,
                 text: sym,
-                confidence,
+                class: ConfidenceClass::Gene(tier),
                 requires_word_boundary: req_word_bound,
             });
         }
@@ -74,17 +74,12 @@ impl TrieNer {
         // 2. Cancer Types from OncoTree
         for (name, kind) in cancers.all_patterns_with_kind() {
             let len = name.len();
-            let confidence = match kind {
-                CancerPatternKind::Code => 0.90,
-                CancerPatternKind::Name if len >= 8 => 0.93,
-                CancerPatternKind::Name => 0.75,
-            };
 
             patterns.push(name.clone());
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::CancerType,
                 text: name,
-                confidence,
+                class: ConfidenceClass::Cancer(kind),
                 requires_word_boundary: kind == CancerPatternKind::Code || len <= 4,
             });
         }
@@ -96,7 +91,7 @@ impl TrieNer {
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::Mutation,
                 text: mut_p.clone(),
-                confidence: 0.90,
+                class: ConfidenceClass::Mutation,
                 requires_word_boundary: true,
             });
         }
@@ -145,9 +140,26 @@ impl TrieNer {
         for mat in self.automaton.find_iter(text) {
             let pattern_idx = mat.pattern().as_usize();
             let meta = &self.pattern_info[pattern_idx];
-            
-            // Apply minimum confidence threshold
-            if meta.confidence < 0.75 {
+            let matched_text = &text[mat.start()..mat.end()];
+            let matched_len = matched_text.chars().count();
+
+            let mut confidence = match meta.class {
+                ConfidenceClass::Gene(SymbolTier::Preferred) => 1.00,
+                ConfidenceClass::Gene(SymbolTier::Alias) => 0.85,
+                ConfidenceClass::Gene(SymbolTier::Previous) => 0.75,
+                ConfidenceClass::Cancer(CancerPatternKind::Code) => 1.00,
+                ConfidenceClass::Cancer(CancerPatternKind::Name) => 0.90,
+                ConfidenceClass::Mutation => 0.90,
+            };
+
+            // Penalty for short symbols unless OncoTree code.
+            let is_oncotree_code = matches!(meta.class, ConfidenceClass::Cancer(CancerPatternKind::Code));
+            if matched_len < 4 && !is_oncotree_code {
+                confidence -= 0.15;
+            }
+
+            // Apply minimum confidence threshold.
+            if confidence < 0.75 {
                 continue;
             }
 
@@ -155,7 +167,7 @@ impl TrieNer {
             let end = mat.end();
 
             // Word-boundary check for short / ambiguous symbols
-            if meta.requires_word_boundary {
+            if matched_len <= 3 || meta.requires_word_boundary {
                 let prev_char = if start > 0 { text[..start].chars().next_back() } else { None };
                 let next_char = text[end..].chars().next();
                 
@@ -169,7 +181,7 @@ impl TrieNer {
                 label: meta.entity_type,
                 start,
                 end,
-                confidence: meta.confidence,
+                confidence,
             });
         }
         entities

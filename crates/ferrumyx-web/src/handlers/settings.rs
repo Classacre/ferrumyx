@@ -1,263 +1,604 @@
 //! Settings page for configuring API keys and system preferences.
 
-use axum::{extract::State, response::Html};
-use crate::state::SharedState;
-use crate::handlers::dashboard::NAV_HTML;
+use axum::{extract::State, http::StatusCode, response::Html, Json};
+use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf};
 
-pub async fn settings_page(State(_state): State<SharedState>) -> Html<String> {
-    Html(format!(r#"<!DOCTYPE html>
+use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
+
+const SETTINGS_SCRIPT: &str = r#"
+function tabInit() {
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((x) => x.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach((x) => x.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.getElementById(btn.dataset.tab);
+      if (panel) panel.classList.add('active');
+    });
+  });
+}
+
+function setProviderState(id, hasKey) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = hasKey ? 'Configured' : 'Not Set';
+  el.style.color = hasKey ? 'var(--success)' : 'var(--text-muted)';
+}
+
+function setSyncState(id, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = ok ? 'Synced' : 'Missing';
+  el.style.color = ok ? 'var(--success)' : 'var(--warning)';
+}
+
+function byId(id) { return document.getElementById(id); }
+
+async function loadSettings() {
+  const res = await fetch('/api/settings');
+  const data = await res.json();
+
+  byId('llm_mode').value = data.llm_mode;
+  byId('llm_default_backend').value = data.llm_default_backend;
+  byId('llm_local_backend').value = data.llm_local_backend;
+  byId('ollama_base_url').value = data.ollama_base_url;
+  byId('ollama_model').value = data.ollama_model;
+  byId('openai_model').value = data.openai_model;
+  byId('anthropic_model').value = data.anthropic_model;
+  byId('gemini_model').value = data.gemini_model;
+  byId('compat_base_url').value = data.compat_base_url;
+  byId('compat_model').value = data.compat_model;
+  byId('compat_cached_chat').checked = data.compat_cached_chat;
+  byId('embedding_backend').value = data.embedding_backend;
+  byId('embedding_model').value = data.embedding_model;
+  byId('embedding_base_url').value = data.embedding_base_url;
+
+  setProviderState('openai_state', data.has_openai_key);
+  setProviderState('anthropic_state', data.has_anthropic_key);
+  setProviderState('gemini_state', data.has_gemini_key);
+  setProviderState('compat_state', data.has_compat_key);
+  setProviderState('pubmed_state', data.has_pubmed_key);
+  setProviderState('embedding_state', data.has_embedding_key);
+
+  byId('sync_backend').textContent = data.ironclaw_sync.llm_backend;
+  byId('sync_base_url').textContent = data.ironclaw_sync.llm_base_url || 'n/a';
+  byId('sync_model').textContent = data.ironclaw_sync.llm_model || 'n/a';
+  setSyncState('sync_llm_api_key', data.ironclaw_sync.has_llm_api_key);
+  setSyncState('sync_openai', data.ironclaw_sync.has_openai_key);
+  setSyncState('sync_anthropic', data.ironclaw_sync.has_anthropic_key);
+  setSyncState('sync_gemini', data.ironclaw_sync.has_gemini_key);
+  setSyncState('sync_cached_chat', data.ironclaw_sync.compat_cached_chat_enabled);
+}
+
+async function saveSettings() {
+  const btn = byId('master-save-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Saving...';
+
+  const payload = {
+    llm_mode: byId('llm_mode').value,
+    llm_default_backend: byId('llm_default_backend').value,
+    llm_local_backend: byId('llm_local_backend').value,
+    ollama_base_url: byId('ollama_base_url').value,
+    ollama_model: byId('ollama_model').value,
+    openai_model: byId('openai_model').value,
+    anthropic_model: byId('anthropic_model').value,
+    gemini_model: byId('gemini_model').value,
+    compat_base_url: byId('compat_base_url').value,
+    compat_model: byId('compat_model').value,
+    compat_cached_chat: byId('compat_cached_chat').checked,
+    embedding_backend: byId('embedding_backend').value,
+    embedding_model: byId('embedding_model').value,
+    embedding_base_url: byId('embedding_base_url').value,
+    openai_api_key: byId('openai_api_key').value || null,
+    anthropic_api_key: byId('anthropic_api_key').value || null,
+    gemini_api_key: byId('gemini_api_key').value || null,
+    compat_api_key: byId('compat_api_key').value || null,
+    pubmed_api_key: byId('pubmed_api_key').value || null,
+    embedding_api_key: byId('embedding_api_key').value || null,
+  };
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message || 'save failed');
+
+    btn.innerHTML = 'Saved';
+    btn.style.backgroundColor = 'var(--success)';
+
+    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','embedding_api_key']
+      .forEach((id) => { byId(id).value = ''; });
+
+    await loadSettings();
+  } catch (_) {
+    btn.innerHTML = 'Save Failed';
+    btn.style.backgroundColor = 'var(--danger)';
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      btn.style.backgroundColor = '';
+    }, 1400);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  tabInit();
+  loadSettings();
+});
+"#;
+
+const SETTINGS_PAGE_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Configuration Environment — Ferrumyx</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/main.css?v=1.0.3">
-    <style>
-        .settings-grid {{
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 2rem;
-            align-items: start;
-        }}
-        .settings-section {{
-            margin-bottom: 2rem;
-        }}
-        .settings-section-title {{
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.25rem;
-            color: var(--text-main);
-            margin-bottom: 1.5rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border-glass);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }}
-        .form-group {{
-            margin-bottom: 1.5rem;
-        }}
-        .form-group label {{
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-muted);
-            font-weight: 500;
-            font-size: 0.95rem;
-        }}
-        .form-control {{
-            width: 100%;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-glass);
-            color: var(--text-main);
-            border-radius: 6px;
-            font-family: 'Inter', sans-serif;
-            transition: var(--transition-fast);
-        }}
-        .form-control:focus {{
-            border-color: var(--brand-blue);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-            outline: none;
-        }}
-        .form-control:disabled {{
-            background: rgba(255,255,255,0.02);
-            color: var(--text-muted);
-            cursor: not-allowed;
-        }}
-        .help-text {{
-            font-size: 0.85rem;
-            color: rgba(156, 163, 175, 0.7);
-            margin-top: 0.4rem;
-        }}
-        .checkbox-container {{
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            cursor: pointer;
-            user-select: none;
-        }}
-        input[type="checkbox"] {{
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border: 1px solid var(--border-glass);
-            border-radius: 4px;
-            background: var(--bg-surface);
-            cursor: pointer;
-            position: relative;
-            transition: var(--transition-fast);
-        }}
-        input[type="checkbox"]:checked {{
-            background: var(--brand-blue);
-            border-color: var(--brand-blue);
-        }}
-        input[type="checkbox"]:checked::after {{
-            content: '';
-            position: absolute;
-            left: 6px;
-            top: 2px;
-            width: 6px;
-            height: 12px;
-            border: solid white;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-        }}
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings - Ferrumyx</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/main.css?v=1.0.3" />
+  <style>
+    .settings-grid { display:grid; grid-template-columns: 260px 1fr; gap:1rem; align-items:start; }
+    .tabs { background:var(--bg-card); border:1px solid var(--border-glass); border-radius:12px; padding:0.6rem; display:flex; flex-direction:column; gap:0.4rem; position:sticky; top:1rem; }
+    .tab-btn { width:100%; background:transparent; border:1px solid transparent; color:var(--text-muted); text-align:left; border-radius:10px; padding:0.65rem 0.8rem; font-weight:600; cursor:pointer; }
+    .tab-btn.active { background:rgba(59,130,246,0.12); border-color:rgba(59,130,246,0.25); color:var(--text-main); }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .settings-section-title { font-family:'Outfit',sans-serif; font-size:1.15rem; color:var(--text-main); margin-bottom:1rem; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.9rem; }
+    .form-group { margin-bottom:0.9rem; }
+    .form-group label { display:block; margin-bottom:0.35rem; color:var(--text-muted); font-weight:500; font-size:0.92rem; }
+    .form-control { width:100%; background:var(--bg-surface); border:1px solid var(--border-glass); color:var(--text-main); border-radius:8px; font-family:'Inter',sans-serif; transition:var(--transition-fast); padding:0.62rem 0.7rem; }
+    .form-control:focus { border-color:var(--brand-blue); box-shadow:0 0 0 2px rgba(59,130,246,0.2); outline:none; }
+    .help-text { font-size:0.82rem; color:rgba(156,163,175,0.75); margin-top:0.28rem; }
+    .security-note { margin-top:1rem; padding:0.85rem; border-radius:10px; border:1px solid var(--border-glass); background:rgba(15,23,42,0.45); color:var(--text-muted); font-size:0.9rem; }
+    .state-pill { display:inline-block; margin-left:0.4rem; font-size:0.75rem; border-radius:999px; border:1px solid var(--border-glass); padding:0.15rem 0.45rem; color:var(--text-muted); }
+    @media (max-width:1100px) {
+      .settings-grid { grid-template-columns:1fr; }
+      .tabs { position:static; flex-direction:row; overflow:auto; }
+      .tab-btn { min-width:180px; }
+      .form-grid { grid-template-columns:1fr; }
+    }
+  </style>
 </head>
 <body>
-{}
+__NAV__
 <main class="main-content">
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49-.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>
-                Global Settings
-            </h1>
-            <p class="text-muted">Platform configuration variables, API registry, and system optimization</p>
-        </div>
-        <button class="btn btn-primary" id="master-save-btn" onclick="saveSettings()">
-            Commit Configuration
-        </button>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Global Settings</h1>
+      <p class="text-muted">Provider configuration, API credentials, and runtime defaults.</p>
     </div>
+    <button class="btn btn-primary" id="master-save-btn" onclick="saveSettings()">Commit Configuration</button>
+  </div>
 
-    <div class="settings-grid">
-        <div>
-            <div class="card settings-section">
-                <div class="card-body p-4">
-                    <h3 class="settings-section-title">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.56c-.59-.59-1.54-.59-2.12 0-.31.31-.83.31-1.14 0-.31-.31-.31-.83 0-1.14.59-.59.59-1.54 0-2.12-.31-.31-.83-.31-1.14 0l-1.42 1.42c-.31.31-.83.31-1.14 0-.31-.31-.31-.83 0-1.14.59-.59.59-1.54 0-2.12-.31-.31-.83-.31-1.14 0-.31.31-.31.83 0 1.14-.59.59-1.54.59-2.12 0l-1.42-1.42C2.19 10.74 3.06 7.53 5.46 5.46c2.4-2.07 5.76-2.58 8.61-1.32 2.85 1.25 4.7 4.09 4.7 7.22 0 1.93-.78 3.73-2.18 5.06l-.69-.69z"/></svg>
-                        Literature Ingestion Vectors
-                    </h3>
-                    <div class="form-group">
-                        <label for="pubmed_api_key">NCBI / PubMed Entrez Directory Key</label>
-                        <input type="password" id="pubmed_api_key" class="form-control" placeholder="Entrez E-utilities token string">
-                        <div class="help-text">Enhances E-utilities bandwidth parameters from 3 to 10 queries per second structure limits.</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="scihub_url">Sci-Hub Domain Mirror URI</label>
-                        <input type="text" id="scihub_url" class="form-control" placeholder="https://sci-hub.se" value="https://sci-hub.se">
-                        <div class="help-text">Designated fallback proxy domain for retrieving gated document corpora.</div>
-                    </div>
-                    <div class="form-group mb-0">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="enable_scihub">
-                            <span style="color:var(--text-main)">Authorize Alternate Data Routing</span>
-                        </label>
-                        <div class="help-text" style="padding-left:1.75rem">Automatically query Sci-Hub nodes when conventional open-access endpoints return restricted access artifacts (HTTP 401/403).</div>
-                    </div>
-                </div>
-            </div>
+  <div class="settings-grid">
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="tab-llm">LLM Providers</button>
+      <button class="tab-btn" data-tab="tab-ingestion">Ingestion APIs</button>
+      <button class="tab-btn" data-tab="tab-embeddings">Embeddings</button>
+      <button class="tab-btn" data-tab="tab-runtime">Runtime</button>
+    </nav>
 
-            <div class="card settings-section">
-                <div class="card-body p-4">
-                    <h3 class="settings-section-title">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15L5.4 7.82l6.6 3.69 6.6-3.69L12 4.15zM5 15.91l6 3.38v-6.71L5 9.21v6.7zM19 9.21l-6 3.38v6.71l6-3.38v-6.7z"/></svg>
-                        Language Model Topologies
-                    </h3>
-                    <div class="form-group">
-                        <label for="ollama_url">Local Inference Socket (Ollama)</label>
-                        <input type="text" id="ollama_url" class="form-control" placeholder="http://127.0.0.1:11434" value="http://127.0.0.1:11434">
-                        <div class="help-text">Socket binding for on-premises generative pipelines.</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="openai_api_key">Cloud Generation Credential (OpenAI)</label>
-                        <input type="password" id="openai_api_key" class="form-control" placeholder="sk-proj-...">
-                        <div class="help-text">Credential token for remote model delegation. Leave null to enforce localized execution only.</div>
-                    </div>
-                    <div class="form-group mb-0">
-                        <label for="anthropic_api_key">Cloud Generation Credential (Anthropic)</label>
-                        <input type="password" id="anthropic_api_key" class="form-control" placeholder="sk-ant-api-...">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card settings-section">
-                <div class="card-body p-4">
-                    <h3 class="settings-section-title">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94 0 .32.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-                        System Resource Variables
-                    </h3>
-                    <div class="form-group">
-                        <label for="data_dir">Vector Embedding Directory Path</label>
-                        <input type="text" id="data_dir" class="form-control" value="[APP_ROOT]/data" disabled>
-                        <div class="help-text">Mounted filesystem path for LanceDB artifacts and binary blob caches. Requires daemon restart to migrate.</div>
-                    </div>
-                </div>
-            </div>
+    <div>
+      <section id="tab-llm" class="tab-panel active card p-4">
+        <h3 class="settings-section-title">Language Model Providers</h3>
+        <div class="form-grid">
+          <div class="form-group"><label for="llm_mode">Mode</label><select id="llm_mode" class="form-control"><option value="local_only">local_only</option><option value="prefer_local">prefer_local</option><option value="any">any</option></select></div>
+          <div class="form-group"><label for="llm_default_backend">Default Backend</label><select id="llm_default_backend" class="form-control"><option value="openai">openai</option><option value="anthropic">anthropic</option><option value="gemini">gemini</option><option value="openai_compatible">openai_compatible</option><option value="ollama">ollama</option></select></div>
+          <div class="form-group"><label for="llm_local_backend">Local Backend</label><select id="llm_local_backend" class="form-control"><option value="ollama">ollama</option><option value="openai_compatible">openai_compatible</option></select></div>
+          <div class="form-group"><label for="ollama_base_url">Ollama Base URL</label><input id="ollama_base_url" class="form-control" placeholder="http://localhost:11434" /></div>
+          <div class="form-group"><label for="ollama_model">Ollama Model</label><input id="ollama_model" class="form-control" placeholder="llama3.1:8b" /></div>
         </div>
-        
-        <div class="d-flex flex-column gap-3">
-            <div class="card">
-                <div class="card-header border-bottom border-glass pb-3">Hardware Acceleration</div>
-                <div class="card-body text-center p-4">
-                    <svg style="width:48px; height:48px; fill:var(--brand-purple); margin-bottom:1rem;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 11h-2V7a2 2 0 0 0-2-2h-4V3h-2v2h-2V3H7v2H3v6h2v2H3v6h4v2h2v-2h2v2h2v-2h4a2 2 0 0 0 2-2v-4h2v-2h-2v-2h2z"/></svg>
-                    <div id="hw-status" class="mb-3 font-outfit" style="color:var(--text-main); font-size:1.1rem;">
-                        Unoptimized CPU Node
-                    </div>
-                    <p class="text-muted small mb-4 text-start">Scans physical architecture to discover dedicated compute interfaces (CUDA, Metal, ROCm) and binds the execution layer for optimal performance.</p>
-                    <button class="btn btn-outline w-100" onclick="detectHardware()" id="btn-detect-hw">
-                        Initiate Hardware Bind
-                    </button>
-                </div>
-            </div>
-            
-            <div class="card bg-surface border-glass p-4 text-center">
-                <h4 class="font-outfit" style="font-size:1.1rem; color:var(--text-main); margin-bottom:0.5rem">System Diagnostics</h4>
-                <p class="text-muted small mb-3">All API keys are encrypted universally via AEAD utilizing machine-specific key material before persisting.</p>
-                <div class="d-flex justify-between text-muted small px-2">
-                    <span>Engine Version:</span>
-                    <span>v0.8.4</span>
-                </div>
-                <div class="d-flex justify-between text-muted small px-2 mt-1">
-                    <span>State Integrity:</span>
-                    <span style="color:var(--success)">Normal</span>
-                </div>
-            </div>
+
+        <h4 class="settings-section-title" style="margin-top:1rem;">API Providers</h4>
+        <div class="form-grid">
+          <div class="form-group"><label for="openai_model">OpenAI Model <span id="openai_state" class="state-pill">Not Set</span></label><input id="openai_model" class="form-control" placeholder="gpt-4o-mini" /></div>
+          <div class="form-group"><label for="openai_api_key">OpenAI API Key</label><input id="openai_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" /></div>
+          <div class="form-group"><label for="anthropic_model">Anthropic Model <span id="anthropic_state" class="state-pill">Not Set</span></label><input id="anthropic_model" class="form-control" placeholder="claude-sonnet-4-6" /></div>
+          <div class="form-group"><label for="anthropic_api_key">Anthropic API Key</label><input id="anthropic_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" /></div>
+          <div class="form-group"><label for="gemini_model">Gemini Model <span id="gemini_state" class="state-pill">Not Set</span></label><input id="gemini_model" class="form-control" placeholder="gemini-1.5-flash" /></div>
+          <div class="form-group"><label for="gemini_api_key">Gemini API Key</label><input id="gemini_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" /></div>
         </div>
+
+        <h4 class="settings-section-title" style="margin-top:1rem;">OpenAI-Compatible</h4>
+        <div class="form-grid">
+          <div class="form-group"><label for="compat_base_url">Compatible Base URL</label><input id="compat_base_url" class="form-control" placeholder="https://api.groq.com/openai" /></div>
+          <div class="form-group"><label for="compat_model">Compatible Model <span id="compat_state" class="state-pill">Not Set</span></label><input id="compat_model" class="form-control" placeholder="llama-3.3-70b-versatile" /></div>
+          <div class="form-group"><label for="compat_api_key">Compatible API Key</label><input id="compat_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" /></div>
+          <div class="form-group">
+            <label for="compat_cached_chat">Cached Chat (Provider Support Required)</label>
+            <input id="compat_cached_chat" type="checkbox" checked />
+            <div class="help-text">Enabled by default. Unsupported models/providers ignore caching hints safely.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-ingestion" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Ingestion API Keys</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pubmed_api_key">PubMed / Entrez API Key <span id="pubmed_state" class="state-pill">Not Set</span></label>
+            <input id="pubmed_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Used by ingestion pipeline for higher NCBI throughput.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-embeddings" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Embedding Backend</h3>
+        <div class="form-grid">
+          <div class="form-group"><label for="embedding_backend">Embedding Backend</label><select id="embedding_backend" class="form-control"><option value="rust_native">rust_native</option><option value="openai">openai</option><option value="gemini">gemini</option><option value="openai_compatible">openai_compatible</option><option value="ollama">ollama</option></select></div>
+          <div class="form-group"><label for="embedding_model">Embedding Model</label><input id="embedding_model" class="form-control" placeholder="text-embedding-3-small" /></div>
+          <div class="form-group"><label for="embedding_base_url">Embedding Base URL (compat/ollama)</label><input id="embedding_base_url" class="form-control" placeholder="http://localhost:11434" /></div>
+          <div class="form-group"><label for="embedding_api_key">Embedding API Key <span id="embedding_state" class="state-pill">Not Set</span></label><input id="embedding_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" /></div>
+        </div>
+      </section>
+
+      <section id="tab-runtime" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Runtime Notes</h3>
+        <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
+        <div class="security-note" style="margin-top:0.8rem;">
+          <strong style="color:var(--text-main);">IronClaw Sync Status</strong>
+          <div style="margin-top:0.55rem; display:grid; grid-template-columns: 230px 1fr; row-gap:0.35rem; column-gap:0.9rem;">
+            <div>LLM Backend</div><div id="sync_backend">n/a</div>
+            <div>LLM Base URL</div><div id="sync_base_url">n/a</div>
+            <div>LLM Model</div><div id="sync_model">n/a</div>
+            <div>LLM API Key</div><div id="sync_llm_api_key">Missing</div>
+            <div>OPENAI_API_KEY</div><div id="sync_openai">Missing</div>
+            <div>ANTHROPIC_API_KEY</div><div id="sync_anthropic">Missing</div>
+            <div>GEMINI_API_KEY</div><div id="sync_gemini">Missing</div>
+            <div>Compat Cached Chat</div><div id="sync_cached_chat">Missing</div>
+          </div>
+        </div>
+      </section>
     </div>
-
+  </div>
 </main>
-<script>
-    function saveSettings() {{
-        const btn = document.getElementById('master-save-btn');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = 'Synchronization Complete';
-        btn.style.backgroundColor = 'var(--success)';
-        btn.style.color = '#fff';
-        btn.style.borderColor = 'var(--success)';
-        
-        setTimeout(() => {{
-            btn.innerHTML = originalText;
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-            btn.style.borderColor = '';
-        }}, 2000);
-    }}
-
-    function detectHardware() {{
-        const btn = document.getElementById('btn-detect-hw');
-        const status = document.getElementById('hw-status');
-        
-        btn.disabled = true;
-        btn.innerHTML = '<span class="loading" style="display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-radius:50%; border-top-color:#fff; animation:spin 1s ease-in-out infinite;"></span> Analyzing...';
-        
-        setTimeout(() => {{
-            const hasCuda = true; 
-            
-            if (hasCuda) {{
-                status.innerHTML = '<span style="color:var(--brand-purple)">CUDA Pipeline Bound</span>';
-            }} else {{
-                status.innerHTML = '<span style="color:var(--text-main)">Standard CPU Bound</span>';
-            }}
-            
-            btn.disabled = false;
-            btn.innerHTML = 'Re-Initiate Bind';
-        }}, 1800);
-    }}
-</script>
-<style>
-@keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-</style>
+<script>__SCRIPT__</script>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, NAV_HTML))
+</html>
+"#;
+
+#[derive(Debug, Serialize)]
+pub struct SettingsView {
+    llm_mode: String,
+    llm_default_backend: String,
+    llm_local_backend: String,
+    ollama_base_url: String,
+    ollama_model: String,
+    openai_model: String,
+    anthropic_model: String,
+    gemini_model: String,
+    compat_base_url: String,
+    compat_model: String,
+    compat_cached_chat: bool,
+    embedding_backend: String,
+    embedding_model: String,
+    embedding_base_url: String,
+    has_openai_key: bool,
+    has_anthropic_key: bool,
+    has_gemini_key: bool,
+    has_compat_key: bool,
+    has_pubmed_key: bool,
+    has_embedding_key: bool,
+    ironclaw_sync: IronclawSyncView,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IronclawSyncView {
+    llm_backend: String,
+    llm_base_url: String,
+    llm_model: String,
+    has_llm_api_key: bool,
+    has_openai_key: bool,
+    has_anthropic_key: bool,
+    has_gemini_key: bool,
+    compat_cached_chat_enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SettingsSaveRequest {
+    llm_mode: String,
+    llm_default_backend: String,
+    llm_local_backend: String,
+    ollama_base_url: String,
+    ollama_model: String,
+    openai_model: String,
+    anthropic_model: String,
+    gemini_model: String,
+    compat_base_url: String,
+    compat_model: String,
+    #[serde(default = "default_true")]
+    compat_cached_chat: bool,
+    embedding_backend: String,
+    embedding_model: String,
+    embedding_base_url: String,
+    openai_api_key: Option<String>,
+    anthropic_api_key: Option<String>,
+    gemini_api_key: Option<String>,
+    compat_api_key: Option<String>,
+    pubmed_api_key: Option<String>,
+    embedding_api_key: Option<String>,
+}
+
+fn default_true() -> bool { true }
+
+#[derive(Debug, Serialize)]
+pub struct SaveResponse {
+    ok: bool,
+    message: String,
+}
+
+pub async fn settings_page(State(_state): State<SharedState>) -> Html<String> {
+    let page = SETTINGS_PAGE_HTML
+        .replace("__NAV__", NAV_HTML)
+        .replace("__SCRIPT__", SETTINGS_SCRIPT);
+    Html(page)
+}
+
+pub async fn settings_get(
+    State(_state): State<SharedState>,
+) -> Result<Json<SettingsView>, (StatusCode, Json<SaveResponse>)> {
+    let view = load_settings_view().map_err(internal_err)?;
+    Ok(Json(view))
+}
+
+pub async fn settings_save(
+    State(_state): State<SharedState>,
+    Json(payload): Json<SettingsSaveRequest>,
+) -> Result<Json<SaveResponse>, (StatusCode, Json<SaveResponse>)> {
+    save_settings(payload).map_err(internal_err)?;
+    Ok(Json(SaveResponse {
+        ok: true,
+        message: "Settings saved".to_string(),
+    }))
+}
+
+fn internal_err(e: anyhow::Error) -> (StatusCode, Json<SaveResponse>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(SaveResponse {
+            ok: false,
+            message: format!("settings error: {e}"),
+        }),
+    )
+}
+
+fn config_path() -> PathBuf {
+    std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"))
+}
+
+fn load_toml() -> anyhow::Result<toml::Value> {
+    let path = config_path();
+    if !path.exists() {
+        return Ok(toml::Value::Table(toml::map::Map::new()));
+    }
+    let content = fs::read_to_string(&path)?;
+    Ok(toml::from_str::<toml::Value>(&content)?)
+}
+
+fn save_toml(v: &toml::Value) -> anyhow::Result<()> {
+    let path = config_path();
+    fs::write(&path, toml::to_string_pretty(v)?)?;
+    Ok(())
+}
+
+fn table_mut<'a>(root: &'a mut toml::Value, key: &str) -> &'a mut toml::map::Map<String, toml::Value> {
+    let root_tbl = root.as_table_mut().expect("root TOML table");
+    if !root_tbl.contains_key(key) {
+        root_tbl.insert(key.to_string(), toml::Value::Table(toml::map::Map::new()));
+    }
+    root_tbl.get_mut(key).and_then(|v| v.as_table_mut()).expect("child TOML table")
+}
+
+fn nested_table_mut<'a>(
+    parent: &'a mut toml::map::Map<String, toml::Value>,
+    key: &str,
+) -> &'a mut toml::map::Map<String, toml::Value> {
+    if !parent.contains_key(key) {
+        parent.insert(key.to_string(), toml::Value::Table(toml::map::Map::new()));
+    }
+    parent.get_mut(key).and_then(|v| v.as_table_mut()).expect("nested table")
+}
+
+fn str_at(root: &toml::Value, path: &[&str], default: &str) -> String {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default.to_string(),
+        }
+    }
+    cur.as_str().unwrap_or(default).to_string()
+}
+
+fn has_nonempty(root: &toml::Value, path: &[&str]) -> bool {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return false,
+        }
+    }
+    cur.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)
+}
+
+fn bool_at(root: &toml::Value, path: &[&str], default: bool) -> bool {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_bool().unwrap_or(default)
+}
+
+fn set_str(map: &mut toml::map::Map<String, toml::Value>, key: &str, value: String) {
+    map.insert(key.to_string(), toml::Value::String(value));
+}
+
+fn maybe_set_secret(
+    map: &mut toml::map::Map<String, toml::Value>,
+    key: &str,
+    value: &Option<String>,
+) {
+    if let Some(v) = value {
+        let t = v.trim();
+        if !t.is_empty() && t != "********" {
+            set_str(map, key, t.to_string());
+        }
+    }
+}
+
+fn load_settings_view() -> anyhow::Result<SettingsView> {
+    let root = load_toml()?;
+    Ok(SettingsView {
+        llm_mode: str_at(&root, &["llm", "mode"], "any"),
+        llm_default_backend: str_at(&root, &["llm", "default_backend"], "openai"),
+        llm_local_backend: str_at(&root, &["llm", "local_backend"], "ollama"),
+        ollama_base_url: str_at(&root, &["llm", "ollama", "base_url"], "http://localhost:11434"),
+        ollama_model: str_at(&root, &["llm", "ollama", "model"], "llama3.1:8b"),
+        openai_model: str_at(&root, &["llm", "openai", "model"], "gpt-4o-mini"),
+        anthropic_model: str_at(&root, &["llm", "anthropic", "model"], "claude-haiku-4-5"),
+        gemini_model: str_at(&root, &["llm", "gemini", "model"], "gemini-1.5-flash"),
+        compat_base_url: str_at(&root, &["llm", "openai_compatible", "base_url"], "https://api.groq.com/openai"),
+        compat_model: str_at(&root, &["llm", "openai_compatible", "model"], "llama-3.3-70b-versatile"),
+        compat_cached_chat: bool_at(&root, &["llm", "openai_compatible", "cached_chat"], true),
+        embedding_backend: str_at(&root, &["embedding", "backend"], "rust_native"),
+        embedding_model: str_at(&root, &["embedding", "embedding_model"], "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"),
+        embedding_base_url: str_at(&root, &["embedding", "base_url"], ""),
+        has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"]) || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
+        has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"]) || std::env::var("FERRUMYX_ANTHROPIC_API_KEY").is_ok(),
+        has_gemini_key: has_nonempty(&root, &["llm", "gemini", "api_key"]) || std::env::var("FERRUMYX_GEMINI_API_KEY").is_ok(),
+        has_compat_key: has_nonempty(&root, &["llm", "openai_compatible", "api_key"]) || std::env::var("FERRUMYX_COMPAT_API_KEY").is_ok(),
+        has_pubmed_key: has_nonempty(&root, &["ingestion", "pubmed", "api_key"]) || std::env::var("FERRUMYX_PUBMED_API_KEY").is_ok(),
+        has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
+        ironclaw_sync: IronclawSyncView {
+            llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
+            llm_base_url: std::env::var("LLM_BASE_URL").unwrap_or_default(),
+            llm_model: std::env::var("LLM_MODEL").unwrap_or_default(),
+            has_llm_api_key: std::env::var("LLM_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+            has_openai_key: std::env::var("OPENAI_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+            has_anthropic_key: std::env::var("ANTHROPIC_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+            has_gemini_key: std::env::var("GEMINI_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+            compat_cached_chat_enabled: std::env::var("LLM_COMPAT_CACHED_CHAT")
+                .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+        },
+    })
+}
+
+fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
+    let mut root = load_toml()?;
+
+    let llm = table_mut(&mut root, "llm");
+    set_str(llm, "mode", payload.llm_mode);
+    set_str(llm, "default_backend", payload.llm_default_backend);
+    set_str(llm, "local_backend", payload.llm_local_backend);
+
+    let ollama = nested_table_mut(llm, "ollama");
+    set_str(ollama, "base_url", payload.ollama_base_url);
+    set_str(ollama, "model", payload.ollama_model);
+
+    let openai = nested_table_mut(llm, "openai");
+    set_str(openai, "model", payload.openai_model);
+    maybe_set_secret(openai, "api_key", &payload.openai_api_key);
+
+    let anthropic = nested_table_mut(llm, "anthropic");
+    set_str(anthropic, "model", payload.anthropic_model);
+    maybe_set_secret(anthropic, "api_key", &payload.anthropic_api_key);
+
+    let gemini = nested_table_mut(llm, "gemini");
+    set_str(gemini, "model", payload.gemini_model);
+    maybe_set_secret(gemini, "api_key", &payload.gemini_api_key);
+
+    let compat = nested_table_mut(llm, "openai_compatible");
+    set_str(compat, "base_url", payload.compat_base_url);
+    set_str(compat, "model", payload.compat_model);
+    compat.insert(
+        "cached_chat".to_string(),
+        toml::Value::Boolean(payload.compat_cached_chat),
+    );
+    maybe_set_secret(compat, "api_key", &payload.compat_api_key);
+
+    let ingestion = table_mut(&mut root, "ingestion");
+    let pubmed = nested_table_mut(ingestion, "pubmed");
+    maybe_set_secret(pubmed, "api_key", &payload.pubmed_api_key);
+
+    let embedding = table_mut(&mut root, "embedding");
+    set_str(embedding, "backend", payload.embedding_backend);
+    set_str(embedding, "embedding_model", payload.embedding_model);
+    if !payload.embedding_base_url.trim().is_empty() {
+        set_str(embedding, "base_url", payload.embedding_base_url);
+    }
+    maybe_set_secret(embedding, "api_key", &payload.embedding_api_key);
+
+    save_toml(&root)?;
+    apply_runtime_env_from_saved_toml(&root);
+    Ok(())
+}
+
+fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
+    let default_backend = str_at(root, &["llm", "default_backend"], "openai");
+    std::env::set_var("LLM_BACKEND", default_backend);
+
+    let ollama_base = str_at(root, &["llm", "ollama", "base_url"], "");
+    if !ollama_base.is_empty() {
+        std::env::set_var("OLLAMA_BASE_URL", ollama_base);
+    }
+    let ollama_model = str_at(root, &["llm", "ollama", "model"], "");
+    if !ollama_model.is_empty() {
+        std::env::set_var("OLLAMA_MODEL", ollama_model);
+    }
+
+    let openai_key = str_at(root, &["llm", "openai", "api_key"], "");
+    if !openai_key.is_empty() {
+        std::env::set_var("FERRUMYX_OPENAI_API_KEY", &openai_key);
+        std::env::set_var("OPENAI_API_KEY", &openai_key);
+    }
+
+    let anthropic_key = str_at(root, &["llm", "anthropic", "api_key"], "");
+    if !anthropic_key.is_empty() {
+        std::env::set_var("FERRUMYX_ANTHROPIC_API_KEY", &anthropic_key);
+        std::env::set_var("ANTHROPIC_API_KEY", &anthropic_key);
+    }
+
+    let gemini_key = str_at(root, &["llm", "gemini", "api_key"], "");
+    if !gemini_key.is_empty() {
+        std::env::set_var("FERRUMYX_GEMINI_API_KEY", &gemini_key);
+        std::env::set_var("GEMINI_API_KEY", &gemini_key);
+    }
+
+    let compat_key = str_at(root, &["llm", "openai_compatible", "api_key"], "");
+    if !compat_key.is_empty() {
+        std::env::set_var("FERRUMYX_COMPAT_API_KEY", &compat_key);
+        std::env::set_var("LLM_API_KEY", &compat_key);
+    }
+    let compat_url = str_at(root, &["llm", "openai_compatible", "base_url"], "");
+    if !compat_url.is_empty() {
+        std::env::set_var("LLM_BASE_URL", compat_url);
+    }
+    let compat_model = str_at(root, &["llm", "openai_compatible", "model"], "");
+    if !compat_model.is_empty() {
+        std::env::set_var("LLM_MODEL", compat_model);
+    }
+    let compat_cached_chat = bool_at(root, &["llm", "openai_compatible", "cached_chat"], true);
+    std::env::set_var(
+        "FERRUMYX_COMPAT_CACHED_CHAT",
+        if compat_cached_chat { "1" } else { "0" },
+    );
+    std::env::set_var(
+        "LLM_COMPAT_CACHED_CHAT",
+        if compat_cached_chat { "1" } else { "0" },
+    );
 }

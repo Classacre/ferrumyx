@@ -1,25 +1,130 @@
 //! Self-improvement metrics dashboard.
 
-use axum::{extract::State, response::Html};
-use crate::state::SharedState;
-use crate::handlers::dashboard::NAV_HTML;
+use std::collections::HashSet;
 
-pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
-    // Placeholder metrics - would need feedback_events table implementation
-    let metrics: Vec<(String, f64, String)> = Vec::new();
-    let weight_history: Vec<(String, String)> = Vec::new();
+use axum::{extract::State, response::Html};
+
+use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
+use ferrumyx_db::{
+    kg_facts::KgFactRepository,
+    target_scores::TargetScoreRepository,
+};
+
+pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
+    let fact_repo = KgFactRepository::new(state.db.clone());
+    let score_repo = TargetScoreRepository::new(state.db.clone());
+
+    let facts = fact_repo.list(0, 80_000).await.unwrap_or_default();
+    let scores = score_repo.list(0, 50_000).await.unwrap_or_default();
+
+    let fact_count = facts.len() as f64;
+    let scored_count = scores.len() as f64;
+
+    let mut gene_subjects = HashSet::new();
+    for f in &facts {
+        if is_gene_like(&f.subject_name) {
+            gene_subjects.insert(f.subject_id);
+        }
+    }
+    let gene_subject_count = gene_subjects.len() as f64;
+
+    let primary_count = scores
+        .iter()
+        .filter(|s| s.shortlist_tier.eq_ignore_ascii_case("primary"))
+        .count() as f64;
+
+    let avg_conf_adj = if scored_count > 0.0 {
+        scores.iter().map(|s| s.confidence_adjusted_score).sum::<f64>() / scored_count
+    } else {
+        0.0
+    };
+
+    let target_score_coverage = if gene_subject_count > 0.0 {
+        (scored_count / gene_subject_count).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    let primary_tier_rate = if scored_count > 0.0 {
+        (primary_count / scored_count).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    let evidence_per_target = if scored_count > 0.0 {
+        (fact_count / scored_count / 100.0).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    let conflicts = match state
+        .db
+        .connection()
+        .open_table(ferrumyx_db::schema::TABLE_KG_CONFLICTS)
+        .execute()
+        .await
+    {
+        Ok(table) => table.count_rows(None).await.unwrap_or(0) as f64,
+        Err(_) => 0.0,
+    };
+    let conflict_rate = if fact_count > 0.0 {
+        (conflicts / fact_count).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    let mut metrics: Vec<(String, f64, String)> = vec![
+        (
+            "target_score_coverage".to_string(),
+            target_score_coverage,
+            "target_scores + kg_facts".to_string(),
+        ),
+        (
+            "avg_confidence_adjusted".to_string(),
+            avg_conf_adj,
+            "target_scores".to_string(),
+        ),
+        (
+            "primary_tier_rate".to_string(),
+            primary_tier_rate,
+            "target_scores".to_string(),
+        ),
+        (
+            "evidence_density".to_string(),
+            evidence_per_target,
+            "kg_facts / target_scores".to_string(),
+        ),
+        (
+            "kg_conflict_rate".to_string(),
+            conflict_rate,
+            "kg_conflicts / kg_facts".to_string(),
+        ),
+    ];
+
+    metrics.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut weight_history: Vec<(String, String)> = scores
+        .iter()
+        .map(|s| ("auto".to_string(), s.created_at.to_rfc3339()))
+        .collect();
+    weight_history.sort_by(|a, b| b.1.cmp(&a.1));
+    weight_history.truncate(10);
 
     let metrics_cards = if metrics.is_empty() {
         r#"<div class="alert alert-info">
-            No feedback metrics collected yet. Metrics are computed weekly after the feedback_collection routine runs.
-            The first metrics will be available after ~1 week of operation with scored targets.
-        </div>"#.to_string()
+            No computed metrics yet. Metrics become available after KG facts and target scores are produced.
+        </div>"#
+            .to_string()
     } else {
-        metrics.iter().map(|(name, value, source)| {
-            let (label, target, good) = metric_meta(name);
-            let pct = (value * 100.0).min(100.0) as u32;
-            let bar_class = if good { "bg-success" } else { "bg-danger" };
-            format!(r#"
+        metrics
+            .iter()
+            .map(|(name, value, source)| {
+                let (label, target, good) = metric_meta(name);
+                let pct = (value * 100.0).min(100.0) as u32;
+                let bar_class = if good { "bg-success" } else { "bg-danger" };
+                format!(
+                    r#"
             <div class="col-md-6 col-lg-4">
                 <div class="metric-card">
                     <div class="metric-label">{}</div>
@@ -27,25 +132,34 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
                     <div class="progress mt-2" style="height:6px">
                         <div class="progress-bar {}" style="width:{}%"></div>
                     </div>
-                    <div class="d-flex justify-content-between mt-1">
+                    <div class="d-flex justify-between mt-1">
                         <small class="text-muted">Target: {}</small>
                         <small class="text-muted">Source: {}</small>
                     </div>
                 </div>
-            </div>"#, label, value, bar_class, pct, target, source)
-        }).collect()
+            </div>"#,
+                    label, value, bar_class, pct, target, source
+                )
+            })
+            .collect()
     };
 
     let weight_rows: String = if weight_history.is_empty() {
-        r#"<tr><td colspan="2" class="text-center text-muted py-3">No weight updates yet. Requires human approval.</td></tr>"#.to_string()
+        r#"<tr><td colspan="2" class="text-center text-muted py-3">No autonomous score updates recorded yet.</td></tr>"#.to_string()
     } else {
-        weight_history.iter().map(|(approver, ts)| format!(
-            r#"<tr><td class="text-muted small">{}</td><td><span class="badge bg-info text-dark">{}</span></td></tr>"#,
-            ts, approver
-        )).collect()
+        weight_history
+            .iter()
+            .map(|(approver, ts)| {
+                format!(
+                    r#"<tr><td class="text-muted small">{}</td><td><span class="badge bg-info text-dark">{}</span></td></tr>"#,
+                    ts, approver
+                )
+            })
+            .collect()
     };
 
-    Html(format!(r#"<!DOCTYPE html>
+    Html(format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -93,12 +207,11 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
         </div>
     </div>
 
-    <div class="card mb-4" style="border-left: 4px solid var(--warning);">
-        <div class="d-flex align-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <div>
-                <strong style="color:var(--text-main);">Human-gated constraint active:</strong> Weight updates require operator approval before application.
-                No automatic parameter changes. See full history for audit events.
+    <div class="card mb-4">
+        <div class="card-body d-flex align-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/><path d="M9 12h6"/></svg>
+            <div class="text-muted">
+                Autonomous feedback mode enabled: ranking updates are derived from stored evidence and score outputs.
             </div>
         </div>
     </div>
@@ -108,22 +221,28 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
 
     <div class="grid-2 mt-4">
         <div class="card h-100">
-            <div class="card-header">Metric Definitions</div>
-            <div class="card-body" style="padding: 0;">
-                <ul style="list-style: none; padding: 0; margin: 0; display:flex; flex-direction:column; gap: 1rem;">
-                    <li><strong style="color:var(--brand-blue)">recall_at_n:</strong> Top-N targets vs DrugBank approved drugs. Target: > 0.60</li>
-                    <li><strong style="color:var(--brand-blue)">docking_ic50_pearson_r:</strong> Correlation between docking scores and ChEMBL IC50. Target: > 0.45</li>
-                    <li><strong style="color:var(--brand-blue)">ranking_kendall_tau:</strong> Ranking stability week-over-week. Target: > 0.80</li>
-                    <li><strong style="color:var(--brand-blue)">literature_recall:</strong> % of CIViC-validated targets in top-50. Target: > 0.70</li>
-                    <li><strong style="color:var(--brand-blue)">false_positive_rate:</strong> Clinically invalidated targets in shortlist. Target: < 0.20</li>
-                </ul>
+            <div class="card-header d-flex align-center gap-2">
+                <span>Current Metric Values</span>
+                <span class="info-tip">i
+                    <span class="tooltip-card">
+                        <strong class="text-main">Metric Definitions</strong><br>
+                        <strong>target_score_coverage</strong>: scored targets / gene-like KG subjects.<br>
+                        <strong>avg_confidence_adjusted</strong>: mean confidence-adjusted score from target_scores.<br>
+                        <strong>primary_tier_rate</strong>: share of targets in primary tier.<br>
+                        <strong>evidence_density</strong>: KG evidence per scored target (normalized).<br>
+                        <strong>kg_conflict_rate</strong>: conflict rows relative to KG fact volume.
+                    </span>
+                </span>
+            </div>
+            <div class="card-body text-muted" style="font-size:0.92rem;">
+                Hover the info icon for definition details. This keeps the dashboard focused while preserving metric context.
             </div>
         </div>
         <div class="card h-100">
-            <div class="card-header">Weight Update History</div>
+            <div class="card-header">Score Update History</div>
             <div class="table-container p-0">
                 <table class="table mb-0">
-                    <thead><tr><th>Timestamp</th><th>Approved By Entity</th></tr></thead>
+                    <thead><tr><th>Timestamp</th><th>Update Mode</th></tr></thead>
                     <tbody>{}</tbody>
                 </table>
             </div>
@@ -132,16 +251,28 @@ pub async fn metrics_page(State(_state): State<SharedState>) -> Html<String> {
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, NAV_HTML, metrics_cards, weight_rows))
+</html>"#,
+        NAV_HTML, metrics_cards, weight_rows
+    ))
 }
 
 fn metric_meta(name: &str) -> (&'static str, &'static str, bool) {
     match name {
-        "recall_at_n"            => ("Recall@N (DrugBank)", "> 0.60", true),
-        "docking_ic50_pearson_r" => ("Docking–IC50 Pearson r", "> 0.45", true),
-        "ranking_kendall_tau"    => ("Ranking Stability (τ)", "> 0.80", true),
-        "literature_recall"      => ("Literature Recall", "> 0.70", true),
-        "false_positive_rate"    => ("False Positive Rate", "< 0.20", false),
-        _                        => ("Unknown Metric", "—", true),
+        "target_score_coverage" => ("Target Score Coverage", "> 0.50", true),
+        "avg_confidence_adjusted" => ("Avg Confidence-Adjusted Score", "> 0.40", true),
+        "primary_tier_rate" => ("Primary Tier Rate", "> 0.10", true),
+        "evidence_density" => ("Evidence Density", "> 0.20", true),
+        "kg_conflict_rate" => ("KG Conflict Rate", "< 0.20", false),
+        _ => ("Unknown Metric", "—", true),
     }
+}
+
+fn is_gene_like(name: &str) -> bool {
+    let n = name.trim();
+    if n.is_empty() || n.len() > 16 || n.contains(' ') {
+        return false;
+    }
+    n.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && n.chars().any(|c| c.is_ascii_uppercase())
 }

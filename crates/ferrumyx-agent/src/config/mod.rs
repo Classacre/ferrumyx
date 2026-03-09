@@ -52,7 +52,7 @@ pub struct LlmConfig {
 }
 
 fn default_llm_mode()       -> String { "any".to_string() }
-fn default_default_backend()-> String { "openai".to_string() }
+fn default_default_backend()-> String { "ollama".to_string() }
 fn default_local_backend()  -> String { "ollama".to_string() }
 
 /// Config for Ollama (local endpoint).
@@ -85,6 +85,10 @@ pub struct OpenAiCompatibleConfig {
     #[serde(default)]
     pub api_key: String,
     pub model: String,
+    /// Enables provider-side chat/prompt caching hints when supported.
+    /// Safe default is enabled; providers/models that do not support caching will ignore it.
+    #[serde(default = "default_true")]
+    pub cached_chat: bool,
     #[serde(default)]
     pub embedding_model: Option<String>,
 }
@@ -254,6 +258,7 @@ pub struct SecurityConfig {
 }
 
 fn bool_true()          -> bool { true }
+fn default_true()       -> bool { true }
 fn default_retention()  -> u32  { 90 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

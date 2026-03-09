@@ -18,14 +18,14 @@ use crate::handlers::{
     targets::{targets_page, api_targets, api_target_detail},
     ingestion::{ingestion_page, ingestion_run},
     molecules::{molecules_page, api_molecules_run},
-    kg::{kg_page, api_kg_facts, api_kg_stats},
+    kg::{kg_page, api_kg_facts, api_kg_stats, api_entity_suggest},
     metrics::metrics_page,
     system::system_page,
     search::hybrid_search,
     ner::{ner_page, ner_extract, api_ner_stats, api_ner_extract},
     depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
     ranker::{ranker_page, api_ranker_score, api_ranker_top, api_ranker_stats},
-    settings::settings_page,
+    settings::{settings_page, settings_get, settings_save},
     chat::{chat_page, chat_submit},
 };
 use crate::sse::sse_handler;
@@ -60,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/targets/{gene}", get(api_target_detail))
         .route("/api/kg",            get(api_kg_facts))
         .route("/api/kg/stats",      get(api_kg_stats))
+        .route("/api/entities/suggest", get(api_entity_suggest))
         .route("/api/search",        get(hybrid_search))
         .route("/api/ner/stats",     get(api_ner_stats))
         .route("/api/ner/extract",   post(api_ner_extract))
@@ -70,6 +71,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ranker/top",    get(api_ranker_top))
         .route("/api/ranker/stats",  get(api_ranker_stats))
         .route("/api/chat",          post(chat_submit))
+        .route("/api/settings",      get(settings_get).post(settings_save))
 
         // Static files
         .nest_service("/static", ServeDir::new(format!("{}/static", env!("CARGO_MANIFEST_DIR"))))

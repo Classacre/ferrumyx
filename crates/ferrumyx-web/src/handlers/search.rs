@@ -1,5 +1,7 @@
 //! Hybrid search endpoints.
-//! Combines vector similarity + keyword search + KG facts.
+//! Combines LanceDB FTS + vector retrieval with RRF fusion + KG evidence aggregation.
+
+use std::collections::HashMap;
 
 use axum::{
     extract::{Query, State},
@@ -10,8 +12,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
-use ferrumyx_db::chunks::ChunkRepository;
-use ferrumyx_db::kg_facts::KgFactRepository;
+use ferrumyx_db::{kg_facts::KgFactRepository, papers::PaperRepository};
+use ferrumyx_ingestion::embedding::{
+    hybrid_search as ingestion_hybrid_search, EmbeddingClient, EmbeddingConfig,
+    HybridSearchConfig,
+};
+use ferrumyx_ingestion::repository::IngestionRepository;
 
 #[derive(Debug, Deserialize)]
 pub struct SearchQuery {
@@ -23,7 +29,11 @@ pub struct SearchQuery {
 
 impl Default for SearchQuery {
     fn default() -> Self {
-        Self { q: String::new(), limit: 20, cancer_type: None }
+        Self {
+            q: String::new(),
+            limit: 20,
+            cancer_type: None,
+        }
     }
 }
 
@@ -53,56 +63,125 @@ pub struct KgFactBrief {
     pub evidence_count: i32,
 }
 
-/// GET /api/search - Hybrid search (vector + keyword + KG)
+/// GET /api/search - Hybrid search (LanceDB FTS + vector + KG)
 pub async fn hybrid_search(
     State(state): State<SharedState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let q = query.q.trim();
+    if q.is_empty() {
+        return Ok(Json(HybridSearchResponse {
+            query: String::new(),
+            results: Vec::new(),
+            kg_facts: Vec::new(),
+            total: 0,
+        }));
+    }
+
     let limit = query.limit.max(1).min(100) as usize;
-
-    // Use repositories for search
-    let chunk_repo = ChunkRepository::new(state.db.clone());
+    let scan_limit = (limit * 20).clamp(100, 3000);
+    let ingestion_repo = IngestionRepository::new(state.db.clone());
     let kg_repo = KgFactRepository::new(state.db.clone());
+    let paper_repo = PaperRepository::new(state.db.clone());
 
-    // 1. Search chunks (placeholder - would need full-text search implementation)
-    let chunks = chunk_repo.list(0, limit).await.unwrap_or_default();
-    
-    // Convert chunks to search results
-    let results: Vec<SearchResult> = chunks
+    let q_lower = q.to_ascii_lowercase();
+    let cancer_filter = query
+        .cancer_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.to_ascii_lowercase());
+
+    let embed_client = EmbeddingClient::new(EmbeddingConfig::default());
+    let query_vec = embed_client
+        .embed_batch(&[q.to_string()])
+        .await
+        .ok()
+        .and_then(|mut v| v.pop());
+
+    let mut cfg = HybridSearchConfig {
+        limit,
+        pre_fusion_limit: scan_limit,
+        ..HybridSearchConfig::default()
+    };
+
+    let mut hybrid_rows = if let Some(v) = query_vec {
+        match ingestion_hybrid_search(&ingestion_repo, q, Some(v), &cfg).await {
+            Ok(rows) => rows,
+            Err(_) => {
+                cfg.use_vector = false;
+                ingestion_hybrid_search(&ingestion_repo, q, None, &cfg)
+                    .await
+                    .unwrap_or_default()
+            }
+        }
+    } else {
+        cfg.use_vector = false;
+        ingestion_hybrid_search(&ingestion_repo, q, None, &cfg)
+            .await
+            .unwrap_or_default()
+    };
+
+    if let Some(cancer) = &cancer_filter {
+        hybrid_rows.retain(|r| r.content.to_ascii_lowercase().contains(cancer));
+    }
+
+    let paper_ids: Vec<uuid::Uuid> = hybrid_rows.iter().map(|r| r.paper_id).collect();
+    let titles_by_id = paper_repo.find_titles_by_ids(&paper_ids).await.unwrap_or_default();
+
+    let results: Vec<SearchResult> = hybrid_rows
         .into_iter()
-        .filter(|c| c.content.to_lowercase().contains(&query.q.to_lowercase()))
-        .map(|c| SearchResult {
-            paper_id: c.paper_id.to_string(),
-            title: None,
-            chunk_text: c.content,
-            similarity: 0.5,
-            section_type: None,
-            source: "keyword".to_string(),
+        .map(|r| {
+            let source = if r.is_hybrid() {
+                "hybrid-rrf".to_string()
+            } else if r.vector_rank.is_some() {
+                "vector".to_string()
+            } else {
+                "fts".to_string()
+            };
+            SearchResult {
+                paper_id: r.paper_id.to_string(),
+                title: titles_by_id.get(&r.paper_id).cloned(),
+                chunk_text: r.content,
+                similarity: r.score as f64,
+                section_type: None,
+                source,
+            }
         })
-        .take(limit)
         .collect();
 
-    // 2. Get relevant KG facts
-    let kg_facts_data = kg_repo.list(0, 10).await.unwrap_or_default();
-    
-    let kg_facts: Vec<KgFactBrief> = kg_facts_data
+    let mut fact_counts: HashMap<(String, String, String), i32> = HashMap::new();
+    for fact in kg_repo
+        .list_filtered(
+            None,
+            Some(&q_lower),
+            None,
+            (limit * 15).clamp(50, 1200),
+        )
+        .await
+        .unwrap_or_default()
+    {
+        let key = (fact.predicate, fact.subject_name, fact.object_name);
+        *fact_counts.entry(key).or_insert(0) += 1;
+    }
+
+    let mut kg_facts: Vec<KgFactBrief> = fact_counts
         .into_iter()
-        .filter(|f| f.subject_name.to_lowercase().contains(&query.q.to_lowercase()) 
-                  || f.object_name.to_lowercase().contains(&query.q.to_lowercase()))
-        .map(|f| KgFactBrief {
-            fact_type: f.predicate,
-            subject: f.subject_name,
-            object: f.object_name,
-            evidence_count: 1,
+        .map(|((fact_type, subject, object), evidence_count)| KgFactBrief {
+            fact_type,
+            subject,
+            object,
+            evidence_count,
         })
         .collect();
 
-    let total = results.len() as u64;
+    kg_facts.sort_by(|a, b| b.evidence_count.cmp(&a.evidence_count));
+    kg_facts.truncate(limit);
 
     Ok(Json(HybridSearchResponse {
-        query: query.q,
+        query: q.to_string(),
+        total: results.len() as u64,
         results,
         kg_facts,
-        total,
     }))
 }

@@ -4,7 +4,7 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 3 Paper-Centric Refactor Complete)  
+**Status:** Active Implementation (Phase 3 Complete; entering Phase 4 hardening)  
 **Date:** 2026-03-09
 
 ---
@@ -1658,6 +1658,24 @@ Rationale: For the MVP cancer domain (KRAS G12D PDAC), the knowledge graph will 
 
 **Trigger for dedicated graph adoption:** If at Month 12, path traversal queries on >5M facts exceed 500ms P95 latency for common patterns. If adopted, the graph DB is a read-only analytical mirror updated via CDC; LanceDB remains the write-primary source of truth.
 
+## 3.9 Completion Status (2026-03-09)
+
+Phase 3 is now treated as complete for the current codebase baseline.
+
+- [x] Paper-centric KG ingestion and relation extraction are live.
+- [x] Dynamic entity typeahead and performance-capped KG rendering are live.
+- [x] Chat gateway flow is asynchronous and thread/history-backed (no longer assuming immediate sync replies).
+- [x] Agent tool surface now includes autonomous loop controls:
+  - `ingest_literature`
+  - `query_targets`
+  - `workflow_status`
+  - `recompute_target_scores`
+  - `run_molecule_pipeline`
+  - `run_autonomous_cycle`
+- [x] Settings-driven provider/env sync into IronClaw is live (including OpenAI-compatible cached-chat toggle).
+
+These changes satisfy the Phase 3 target for autonomous KG-driven operation and transition readiness into Phase 4 scoring/quality work.
+
 ---
 
 # Phase 4: Target Prioritization Engine
@@ -1823,6 +1841,20 @@ OUTPUT FIELDS (per candidate):
   rank, composite_score, confidence_adjusted_score, percentile,
   component_score_breakdown[9], shortlist_tier, flags[], warnings[]
 ```
+
+## 4.6 Phase 4 Kickoff Status (2026-03-09)
+
+- [x] Cohort scoring now runs at **gene-level** rather than per-fact row expansion.
+- [x] Random/hash fallback metrics removed from target query path.
+- [x] Ranking metrics now derived deterministically from KG evidence aggregates (with explicit proxy fields where external providers are not yet fully wired).
+- [x] Shortlist tiering now enforces the architecture hard exclusion rule for saturated/low-novelty targets.
+- [x] DISPUTED and quality-risk flags are surfaced directly in query results.
+
+Remaining Phase 4 hardening work:
+- [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
+- [x] Add explicit percentile field and richer component breakdown in API output.
+- [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
+  - Note: legacy databases without these columns are handled via backward-compatible runtime dedupe; new/updated tables use native `score_version` + `is_current`.
 
 ---
 
@@ -2237,13 +2269,14 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 **Deliverable:** Ingest a PubMed query result, parse full text, chunk, embed, store in LanceDB. Manual verification of 50 KRAS PDAC papers.
 
 ### Month 2: Knowledge Graph
-- [ ] TrieNer NER Native tool (High-speed Rust Aho-Corasick)
-- [ ] Entity normalisation (HGNC, HGVS, OLS)
-- [ ] kg_facts population from NER output
-- [ ] External DB pulls: COSMIC, DepMap CERES, ChEMBL, ClinicalTrials.gov
-- [ ] Target score computation (all 9 components)
-- [ ] Hybrid search (LanceDB + LanceDB FTS RRF)
-- [ ] Basic REPL query interface
+- [x] TrieNer NER Native tool (High-speed Rust Aho-Corasick)
+- [x] Entity normalisation (HGNC, HGVS, OncoTree)
+- [x] kg_facts population from NER output
+- [x] External DB pulls: COSMIC, DepMap CERES, ChEMBL, ClinicalTrials.gov (connectors implemented; runtime coverage depends on source/API availability)
+- [x] Target score computation (all 9 components + persisted `target_scores`)
+- [x] Hybrid search (LanceDB vector + LanceDB FTS with RRF fusion)
+- [x] Basic REPL + Gateway query interface (`query_targets`, `ingest_literature`, async chat history-backed replies)
+- [x] Autonomous workflow tooling (`workflow_status`, `recompute_target_scores`, `run_autonomous_cycle`)
 
 **Deliverable:** Can answer "What are the top KRAS G12D targets in PAAD?" with ranked list and source citations.
 
@@ -2254,7 +2287,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - [ ] RDKit Docker tool (SMILES → properties + Lipinski filter)
 - [ ] ADMET-AI Docker tool
 - [ ] Molecule pipeline orchestration
-- [ ] NL query handler (intent parsing → structured plan → tool calls)
+- [/] NL query handler (intent parsing → structured plan → tool calls) (Gateway async flow and autonomous tool invocation implemented; refinement still ongoing)
 - [ ] Output JSON schema (§6.5)
 - [ ] LLM router with Ollama + OpenAI backends
 - [ ] Audit logging populated
@@ -2267,7 +2300,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - No generative molecule design (Reinvent4 not integrated)
 - LanceDB-only; no Neo4j
 - LLM narration quality depends on Ollama model capability
-- No web UI; REPL + Web Gateway only
+- Web UI available; some advanced autonomy controls still maturing
 
 ---
 

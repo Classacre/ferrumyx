@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use std::path::PathBuf;
 
 use ferrumyx_ingestion::pipeline::{
     IngestionJob, IngestionSourceSpec, run_ingestion,
@@ -15,7 +16,6 @@ use ferrumyx_ingestion::repository::IngestionRepository;
 
 use crate::state::{SharedState, AppEvent};
 use crate::handlers::dashboard::NAV_HTML;
-use ferrumyx_db::papers::PaperRepository;
 
 // ── Form input ────────────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ pub async fn ingestion_run(
         cancer_type:    form.cancer.clone(),
         max_results:    form.max_results.unwrap_or(100),
         sources,
-        pubmed_api_key: None,
+        pubmed_api_key: resolve_pubmed_api_key(),
         embedding_cfg:  None,
         enable_scihub_fallback: form.enable_scihub.is_some() && form.enable_scihub.as_deref() == Some("on"),
     };
@@ -140,19 +140,40 @@ struct PageStats {
 }
 
 async fn load_stats(state: &SharedState) -> PageStats {
-    // Use repository to get paper count
-    let paper_repo = PaperRepository::new(state.db.clone());
-    let total = paper_repo.count().await.unwrap_or(0) as i64;
-    
-    // For now, return placeholder values for parsed/pending/failed
-    // In a full implementation, we'd track these in the database
-    PageStats { 
-        total, 
-        parsed: total,  // All papers are considered parsed for now
-        pending: 0, 
-        failed: 0, 
-        recent_audit: vec![]  // No audit log in LanceDB yet
+    let repo = IngestionRepository::new(state.db.clone());
+    let total = repo.paper_count().await.unwrap_or(0);
+    let parsed = repo.paper_count_by_status("parsed").await.unwrap_or(0);
+    let pending = repo.paper_count_by_status("pending").await.unwrap_or(0);
+    let failed = repo.paper_count_by_status("failed").await.unwrap_or(0);
+
+    PageStats {
+        total,
+        parsed,
+        pending,
+        failed,
+        recent_audit: vec![],
     }
+}
+
+fn resolve_pubmed_api_key() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_PUBMED_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let path = std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"));
+    let content = std::fs::read_to_string(path).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("pubmed"))
+        .and_then(|v| v.get("api_key"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
 }
 
 // ── Source parser ─────────────────────────────────────────────────────────────
@@ -220,6 +241,22 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
     <style>
         .sse-live {{ display: inline-flex; align-items: center; gap: 6px; }}
         .sse-dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }}
+        .source-grid {{ display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; }}
+        .source-chip {{ display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.6rem 0.75rem; border-radius:8px; border:1px solid var(--border-glass); cursor:pointer; }}
+        .pipeline-card-body {{ padding: 0.85rem 1rem 1rem; }}
+        .pipeline-meta {{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.75rem; margin-top: 0.95rem; }}
+        .pipeline-meta-item {{ background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-glass); border-radius: 8px; padding: 0.55rem 0.7rem; }}
+        .pipeline-meta-label {{ font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }}
+        .pipeline-meta-value {{ font-size: 0.92rem; color: var(--text-main); margin-top: 0.2rem; }}
+        .run-grid {{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 0.9rem; }}
+        .advanced-block {{ border-top:1px solid var(--border-glass); margin-top:12px; padding-top:12px; }}
+        .advanced-block summary {{ cursor:pointer; color:var(--text-muted); font-weight:600; }}
+        .status-line {{ margin-top: 0.75rem; margin-bottom: 0; font-family: monospace; font-size: 0.9rem; color:var(--brand-cyan); line-height: 1.45; }}
+        @media (max-width: 1200px) {{
+            .pipeline-meta {{ grid-template-columns: 1fr; }}
+            .source-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+            .run-grid {{ grid-template-columns: 1fr; }}
+        }}
         @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} 100% {{ opacity: 1; }} }}
     </style>
 </head>
@@ -232,7 +269,7 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                 Ingestion Pipeline
             </h1>
-            <p class="text-muted">Manage knowledge ingestion from PubMed and Europe PMC</p>
+            <p class="text-muted">Run literature ingestion jobs and monitor progress in real time.</p>
         </div>
     </div>
 
@@ -262,19 +299,26 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                 <span id="pipeline-stage" class="badge badge-primary">Running Operations</span>
             </div>
         </div>
-        <div>
+        <div class="pipeline-card-body">
             <div class="progress-track" style="height: 12px; margin-bottom: 1rem;">
                 <div id="pipeline-progress" class="progress-bar brand" style="width: 5%">
                 </div>
             </div>
-            <div class="d-flex justify-between text-muted" style="font-size: 0.9rem; font-family: 'Outfit';">
-                <span id="papers-found">Vectors Decoded: 0</span>
-                <span>|</span>
-                <span id="papers-inserted">Inserted: 0 / <span id="progress-text">5%</span></span>
-                <span>|</span>
-                <span id="papers-remaining">Remaining: {}</span>
+            <div class="pipeline-meta">
+                <div class="pipeline-meta-item">
+                    <div class="pipeline-meta-label">Vectors Decoded</div>
+                    <div class="pipeline-meta-value" id="papers-found">0</div>
+                </div>
+                <div class="pipeline-meta-item">
+                    <div class="pipeline-meta-label">Inserted</div>
+                    <div class="pipeline-meta-value" id="papers-inserted">0 / <span id="progress-text">5%</span></div>
+                </div>
+                <div class="pipeline-meta-item">
+                    <div class="pipeline-meta-label">Remaining</div>
+                    <div class="pipeline-meta-value" id="papers-remaining">{}</div>
+                </div>
             </div>
-            <p id="pipeline-status-text" class="text-brand mt-4 mb-0" style="font-family: monospace; font-size: 0.95rem; color:var(--brand-cyan);">> Initiating search sequence for PubMed and Europe PMC interfaces...</p>
+            <p id="pipeline-status-text" class="status-line">> Initiating search sequence for PubMed and Europe PMC interfaces...</p>
         </div>
         <script>
             // Auto-show progress card and start listening to SSE
@@ -308,11 +352,11 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                 
                 if (data.type === 'paper_ingested') {{
                     papersInserted++;
-                    document.getElementById('papers-inserted').innerHTML = 'Inserted: ' + papersInserted + ' / <span id="progress-text"></span>';
+                    document.getElementById('papers-inserted').innerHTML = papersInserted + ' / <span id="progress-text"></span>';
                     const percent = Math.min(100, Math.round((papersInserted / totalExpected) * 100));
                     document.getElementById('pipeline-progress').style.width = percent + '%';
                     document.getElementById('progress-text').textContent = percent + '%';
-                    document.getElementById('papers-remaining').textContent = 'Remaining: ' + Math.max(0, totalExpected - papersInserted);
+                    document.getElementById('papers-remaining').textContent = Math.max(0, totalExpected - papersInserted);
                 }}
             }};
             
@@ -325,73 +369,74 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
 
     <div class="grid-2 mt-4">
         <div class="card">
-            <div class="card-header">Initialize Mining Sequence</div>
+            <div class="card-header">Start Ingestion Job</div>
             <form method="POST" action="/ingestion/run" class="d-flex flex-column gap-3">
-                <div class="d-flex gap-3">
-                    <div style="flex:1">
-                        <label class="form-label">Target Gene / Domain</label>
-                        <input type="text" name="gene" class="form-control" placeholder="KRAS" value="KRAS" required>
+                <div class="run-grid">
+                    <div>
+                        <label class="form-label">Target Gene</label>
+                        <input type="text" name="gene" class="form-control" placeholder="e.g. EGFR, TP53, BRAF" required>
                     </div>
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Mutation Filter</label>
                         <input type="text" name="mutation" class="form-control" placeholder="G12D (optional)">
                     </div>
-                </div>
-                <div class="d-flex gap-3 mt-2">
-                    <div style="flex:2">
-                        <label class="form-label">Cancer Domain Specification</label>
-                        <input type="text" name="cancer" class="form-control" placeholder="pancreatic cancer" value="pancreatic cancer" required>
+                    <div>
+                        <label class="form-label">Cancer Context</label>
+                        <input type="text" name="cancer" class="form-control" placeholder="e.g. NSCLC, colorectal cancer" required>
                     </div>
-                    <div style="flex:1">
-                        <label class="form-label">Max Articles Limit</label>
+                    <div>
+                        <label class="form-label">Max Papers</label>
                         <input type="number" name="max_results" class="form-control" value="100" min="10" max="1000">
                     </div>
                 </div>
                 <div class="mt-2">
-                    <label class="form-label">Distributed Source Targets</label>
-                    <div class="d-flex flex-wrap gap-2 mt-1">
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                    <label class="form-label">Sources</label>
+                    <div class="source-grid mt-1">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_pubmed" id="src_pubmed" checked> <span style="font-weight:500">PubMed</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_europepmc" id="src_europepmc" checked> <span style="font-weight:500">Europe PMC</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_biorxiv" id="src_biorxiv"> <span style="font-weight:500">bioRxiv</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_medrxiv" id="src_medrxiv"> <span style="font-weight:500">medRxiv</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_clinicaltrials" id="src_clinicaltrials"> <span style="font-weight:500">ClinicalTrials</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_crossref" id="src_crossref"> <span style="font-weight:500">CrossRef</span>
                         </label>
-                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                        <label class="source-chip">
                             <input type="checkbox" name="src_semanticscholar" id="src_semanticscholar"> <span style="font-weight:500">Semantic Scholar</span>
                         </label>
                     </div>
                 </div>
-                <div class="mt-2">
-                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input type="checkbox" name="enable_scihub" id="enable_scihub" checked> <span style="font-weight:500; color: var(--brand-purple);">Enable Sci-Hub Fallback (Full-text PDFs)</span>
-                    </label>
-                </div>
+                <details class="advanced-block">
+                    <summary>Advanced Options</summary>
+                    <div class="mt-2">
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="checkbox" name="enable_scihub" id="enable_scihub" checked> <span style="font-weight:500; color: var(--brand-purple);">Enable Sci-Hub fallback for full-text retrieval</span>
+                        </label>
+                    </div>
+                </details>
                 <div class="mt-4 pt-4" style="border-top:1px solid var(--border-glass)">
                     <button type="submit" class="btn btn-primary w-100" style="padding: 1rem; font-size: 1.1rem; justify-content:center;">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                        Execute Ingestion Routine
+                        Run Ingestion
                     </button>
-                    <div class="text-muted text-center mt-2 small">Results stream to the Live Activity feed mapped above in real-time via Server-Sent Events.</div>
+                    <div class="text-muted text-center mt-2 small">Live status updates stream automatically while the job runs.</div>
                 </div>
             </form>
         </div>
 
         <div class="card">
             <div class="card-header d-flex justify-between">
-                <div>Recent Ingestion Subroutines</div>
-                <a href="/audit" class="btn btn-sm btn-outline">Query Logs</a>
+                <div>Recent Jobs</div>
+                <a href="/audit" class="btn btn-sm btn-outline">View Logs</a>
             </div>
             <div class="table-container p-0">
                 <table class="table mb-0">

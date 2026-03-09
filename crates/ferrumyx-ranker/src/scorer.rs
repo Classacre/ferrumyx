@@ -227,9 +227,10 @@ pub fn determine_shortlist_tier(
     mutation_freq_raw: Option<f64>,
     structural_tractability: f64,
     penalty_inputs: &PenaltyInputs,
+    novelty_score: f64,
 ) -> ShortlistTier {
     // Hard exclusion: saturated + low novelty
-    if penalty_inputs.chembl_inhibitor_count > 50 {
+    if penalty_inputs.chembl_inhibitor_count > 50 && novelty_score < 0.20 {
         return ShortlistTier::Excluded;
     }
 

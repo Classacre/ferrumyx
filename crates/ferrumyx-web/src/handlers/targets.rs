@@ -1,14 +1,23 @@
 //! Target rankings page with score breakdown.
 
 use axum::{
-    extract::{State, Query, Path},
+    extract::{Path, Query, State},
     response::{Html, IntoResponse},
     Json,
 };
 use serde::{Deserialize, Serialize};
-use crate::state::SharedState;
+use std::collections::HashMap;
+
 use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
+use ferrumyx_db::{
+    entities::EntityRepository,
+    kg_facts::KgFactRepository,
+    papers::PaperRepository,
+    target_scores::TargetScoreRepository,
+};
+use ferrumyx_ranker::{depmap_provider::{DepMapClientAdapter, DepMapProvider}, normalise::normalise_ceres};
 
 #[derive(Deserialize, Default)]
 pub struct TargetFilter {
@@ -17,8 +26,6 @@ pub struct TargetFilter {
     pub tier: Option<String>,
     pub page: Option<i64>,
 }
-
-// === API Types ===
 
 #[derive(Debug, Serialize)]
 pub struct ApiTarget {
@@ -66,76 +73,184 @@ pub struct LiteratureHit {
     pub snippet: String,
 }
 
-// === API Endpoints ===
-
-/// GET /api/targets - List all scored targets
-pub async fn api_targets(
-    State(_state): State<SharedState>,
-    Query(filter): Query<TargetFilter>,
-) -> Result<impl IntoResponse, ApiError> {
-    let _cancer = filter.cancer.as_deref().unwrap_or("PAAD");
-    let _limit = filter.page.unwrap_or(100).max(1).min(500) as i32;
-
-    // Placeholder - would need target_scores table implementation
-    let rows: Vec<ApiTarget> = Vec::new();
-
-    Ok(Json(rows))
+#[derive(Clone)]
+struct TargetRow {
+    gene_id: uuid::Uuid,
+    gene: String,
+    cancer_type: String,
+    composite_score: f64,
+    confidence_adj: f64,
+    tier: String,
+    literature_score: Option<f64>,
+    crispr_score: Option<f64>,
+    mutation_score: Option<f64>,
+    evidence_count: u32,
 }
 
-/// GET /api/targets/:gene - Single gene details
+pub async fn api_targets(
+    State(state): State<SharedState>,
+    Query(filter): Query<TargetFilter>,
+) -> Result<impl IntoResponse, ApiError> {
+    let cancer = filter.cancer.as_deref();
+    let gene = filter.gene.as_deref();
+    let tier = filter.tier.as_deref();
+    let limit = filter.page.unwrap_or(100).clamp(1, 500) as usize;
+
+    let rows = load_target_rows(&state, cancer, gene, tier, 50_000).await?;
+    let api_rows: Vec<ApiTarget> = rows
+        .into_iter()
+        .take(limit)
+        .map(|r| ApiTarget {
+            gene: r.gene,
+            cancer_type: r.cancer_type,
+            composite_score: r.composite_score,
+            literature_score: r.literature_score,
+            crispr_score: r.crispr_score,
+            mutation_score: r.mutation_score,
+            confidence_adj: Some(r.confidence_adj),
+            tier: Some(r.tier),
+            evidence_count: r.evidence_count as i32,
+        })
+        .collect();
+
+    Ok(Json(api_rows))
+}
+
 pub async fn api_target_detail(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
     Path(gene): Path<String>,
     Query(filter): Query<TargetFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let _cancer = filter.cancer.as_deref().unwrap_or("PAAD");
+    let rows = load_target_rows(
+        &state,
+        filter.cancer.as_deref(),
+        Some(&gene),
+        None,
+        50_000,
+    )
+    .await?;
 
-    // Placeholder - would need target_scores table implementation
+    let row = rows
+        .into_iter()
+        .find(|r| r.gene.eq_ignore_ascii_case(&gene))
+        .ok_or_else(|| ApiError::NotFound(format!("Target {gene} not found")))?;
+
+    let kg_repo = KgFactRepository::new(state.db.clone());
+    let paper_repo = PaperRepository::new(state.db.clone());
+
+    let facts = kg_repo
+        .find_by_subject(row.gene_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let mut paper_title_cache: HashMap<uuid::Uuid, String> = HashMap::new();
+    let mut kg_facts = Vec::new();
+    let mut literature = Vec::new();
+
+    for fact in facts.into_iter().take(80) {
+        let source = if fact.paper_id.is_nil() {
+            "unknown".to_string()
+        } else if let Some(cached) = paper_title_cache.get(&fact.paper_id) {
+            cached.clone()
+        } else {
+            let title = paper_repo
+                .find_by_id(fact.paper_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|p| p.title)
+                .unwrap_or_else(|| fact.paper_id.to_string());
+            paper_title_cache.insert(fact.paper_id, title.clone());
+            title
+        };
+
+        kg_facts.push(KgFactBrief {
+            predicate: fact.predicate.clone(),
+            object: fact.object_name.clone(),
+            confidence: fact.confidence as f64,
+            source: source.clone(),
+        });
+
+        if let Some(evidence) = fact.evidence.clone().filter(|s| !s.trim().is_empty()) {
+            literature.push(LiteratureHit {
+                pmid: None,
+                title: Some(source),
+                snippet: evidence,
+            });
+        }
+    }
+
     let scores = ScoreBreakdown {
-        composite: 0.0,
-        literature: None,
-        crispr: None,
-        mutation: None,
-        confidence_adj: None,
+        composite: row.composite_score,
+        literature: row.literature_score,
+        crispr: row.crispr_score,
+        mutation: row.mutation_score,
+        confidence_adj: Some(row.confidence_adj),
     };
 
     Ok(Json(ApiTargetDetail {
-        gene: gene.clone(),
-        cancer_type: _cancer.to_string(),
+        gene: row.gene,
+        cancer_type: row.cancer_type,
         scores,
-        kg_facts: Vec::new(),
-        literature: Vec::new(),
+        kg_facts,
+        literature,
     }))
 }
 
 pub async fn targets_page(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
     Query(filter): Query<TargetFilter>,
 ) -> Html<String> {
     let cancer = filter.cancer.as_deref().unwrap_or("PAAD");
-    let page = filter.page.unwrap_or(0);
-    let _per_page = 25i64;
+    let page = filter.page.unwrap_or(0).max(0);
+    let per_page = 25i64;
 
-    // Placeholder - would need target_scores table implementation
-    let rows: Vec<(String, String, f64, Option<f64>, Option<String>, i32)> = Vec::new();
-    let total: i64 = 0;
+    let rows = load_target_rows(
+        &state,
+        Some(cancer),
+        filter.gene.as_deref(),
+        filter.tier.as_deref(),
+        100_000,
+    )
+    .await
+    .unwrap_or_default();
 
-    let rows_html: String = if rows.is_empty() {
+    let total = rows.len() as i64;
+    let start = (page * per_page) as usize;
+    let end = ((page + 1) * per_page) as usize;
+    let page_rows = if start < rows.len() {
+        &rows[start..rows.len().min(end)]
+    } else {
+        &[]
+    };
+
+    let rows_html: String = if page_rows.is_empty() {
         r#"<tr><td colspan="8" class="text-center text-muted">
             No targets scored yet for this cancer type.<br><br>
             <a href="/ingestion" class="btn btn-primary">Initialize Ingestion Pipeline</a>
-        </td></tr>"#.to_string()
+        </td></tr>"#
+            .to_string()
     } else {
-        rows.iter().enumerate().map(|(i, (gene, cancer_code, score, conf_adj, tier, version))| {
-            let rank = page * _per_page + i as i64 + 1;
-            let tier_badge = match tier.as_deref() {
-                Some("primary")   => r#"<span class="badge badge-success">Primary</span>"#,
-                Some("secondary") => r#"<span class="badge badge-warning">Secondary</span>"#,
-                _                 => r#"<span class="badge badge-outline">—</span>"#,
-            };
-            let bar = (score * 100.0) as u32;
-            let bar_class = if *score > 0.7 { "success" } else if *score > 0.5 { "warning" } else { "danger" };
-            format!(r#"
+        page_rows
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let rank = page * per_page + i as i64 + 1;
+                let tier_badge = match row.tier.as_str() {
+                    "primary" => r#"<span class="badge badge-success">Primary</span>"#,
+                    "secondary" => r#"<span class="badge badge-warning">Secondary</span>"#,
+                    _ => r#"<span class="badge badge-outline">—</span>"#,
+                };
+                let bar = (row.composite_score * 100.0) as u32;
+                let bar_class = if row.composite_score > 0.7 {
+                    "success"
+                } else if row.composite_score > 0.5 {
+                    "warning"
+                } else {
+                    "danger"
+                };
+                format!(
+                    r#"
             <tr>
                 <td class="text-muted rank-badge">#{}</td>
                 <td><a href="/targets?gene={}&cancer={}" style="font-weight:700;">{}</a></td>
@@ -158,22 +273,49 @@ pub async fn targets_page(
                     </div>
                 </td>
             </tr>"#,
-            rank, gene, cancer_code, gene, cancer_code,
-            bar_class, bar, score, conf_adj.unwrap_or(0.0), tier_badge, version,
-            gene, cancer_code, gene)
-        }).collect()
+                    rank,
+                    row.gene,
+                    row.cancer_type,
+                    row.gene,
+                    row.cancer_type,
+                    bar_class,
+                    bar,
+                    row.composite_score,
+                    row.confidence_adj,
+                    tier_badge,
+                    1,
+                    row.gene,
+                    row.cancer_type,
+                    row.gene
+                )
+            })
+            .collect()
     };
 
-    let pagination = if total > _per_page {
-        let pages = (total + _per_page - 1) / _per_page;
-        let btns: String = (0..pages).map(|p| format!(
-            r#"<a href="/targets?cancer={}&page={}" class="btn btn-sm {}">{}</a>"#,
-            cancer, p,
-            if p == page { "btn-primary" } else { "btn-outline-secondary" },
-            p + 1
-        )).collect();
-        format!(r#"<div class="d-flex justify-content-center gap-1 mt-3">{}</div>"#, btns)
-    } else { String::new() };
+    let pagination = if total > per_page {
+        let pages = (total + per_page - 1) / per_page;
+        let btns: String = (0..pages)
+            .map(|p| {
+                format!(
+                    r#"<a href="/targets?cancer={}&page={}" class="btn btn-sm {}">{}</a>"#,
+                    cancer,
+                    p,
+                    if p == page {
+                        "btn-primary"
+                    } else {
+                        "btn-outline-secondary"
+                    },
+                    p + 1
+                )
+            })
+            .collect();
+        format!(
+            r#"<div class="d-flex justify-content-center gap-1 mt-3">{}</div>"#,
+            btns
+        )
+    } else {
+        String::new()
+    };
 
     Html(format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -246,4 +388,99 @@ pub async fn targets_page(
     rows_html,
     pagination
     ))
+}
+
+async fn load_target_rows(
+    state: &SharedState,
+    cancer_filter: Option<&str>,
+    gene_filter: Option<&str>,
+    tier_filter: Option<&str>,
+    limit: usize,
+) -> Result<Vec<TargetRow>, ApiError> {
+    let score_repo = TargetScoreRepository::new(state.db.clone());
+    let entity_repo = EntityRepository::new(state.db.clone());
+    let kg_repo = KgFactRepository::new(state.db.clone());
+    let depmap = DepMapClientAdapter::init().await.ok();
+
+    let mut scores = score_repo
+        .list(0, limit)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    scores.sort_by(|a, b| {
+        b.confidence_adjusted_score
+            .partial_cmp(&a.confidence_adjusted_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let all_facts = kg_repo.list(0, 50_000).await.unwrap_or_default();
+    let mut evidence_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
+    for fact in all_facts {
+        *evidence_by_gene.entry(fact.subject_id).or_insert(0) += 1;
+    }
+
+    let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
+    let mut rows = Vec::new();
+
+    for s in scores {
+        let raw_json: serde_json::Value = serde_json::from_str(&s.components_raw).unwrap_or_default();
+        let norm_json: serde_json::Value = serde_json::from_str(&s.components_normed).unwrap_or_default();
+
+        let gene = if let Some(v) = raw_json.get("gene").and_then(|v| v.as_str()) {
+            v.to_string()
+        } else if let Some(cached) = name_cache.get(&s.gene_id) {
+            cached.clone()
+        } else if let Ok(Some(ent)) = entity_repo.find_by_id(s.gene_id).await {
+            name_cache.insert(s.gene_id, ent.name.clone());
+            ent.name
+        } else {
+            s.gene_id.to_string()
+        };
+
+        let cancer_type = raw_json
+            .get("cancer_code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("UNSPECIFIED")
+            .to_string();
+
+        if let Some(cf) = cancer_filter {
+            if !cancer_type.eq_ignore_ascii_case(cf) {
+                continue;
+            }
+        }
+
+        if let Some(gf) = gene_filter {
+            if !gene.to_lowercase().contains(&gf.to_lowercase()) {
+                continue;
+            }
+        }
+
+        if let Some(tf) = tier_filter {
+            if !s.shortlist_tier.eq_ignore_ascii_case(tf) {
+                continue;
+            }
+        }
+
+        let mut crispr_score = None;
+        if let Some(depmap) = &depmap {
+            if let Some(ceres) = depmap.get_mean_ceres(&gene, &cancer_type) {
+                crispr_score = Some(normalise_ceres(ceres));
+            }
+        }
+
+        rows.push(TargetRow {
+            gene_id: s.gene_id,
+            gene,
+            cancer_type,
+            composite_score: s.composite_score,
+            confidence_adj: s.confidence_adjusted_score,
+            tier: s.shortlist_tier,
+            literature_score: norm_json.get("literature_score").and_then(|v| v.as_f64()),
+            mutation_score: norm_json.get("mutation_score").and_then(|v| v.as_f64()),
+            crispr_score,
+            evidence_count: evidence_by_gene.get(&s.gene_id).copied().unwrap_or(0),
+        });
+    }
+
+    Ok(rows)
 }

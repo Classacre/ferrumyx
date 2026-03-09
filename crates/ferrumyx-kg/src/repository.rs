@@ -185,6 +185,75 @@ impl KgRepository {
     }
 }
 
+#[async_trait]
+impl KgRepositoryTrait for KgRepository {
+    async fn insert_fact(&self, fact: &KgFact) -> Result<Uuid> {
+        KgRepository::insert_fact(self, fact).await?;
+        Ok(fact.id)
+    }
+
+    async fn get_facts(&self, subject_id: Uuid, predicate: &str) -> Result<Vec<KgFact>> {
+        let facts = self
+            .find_by_subject_and_predicate(subject_id, predicate)
+            .await?;
+        Ok(facts.into_iter().filter(|f| f.valid_until.is_none()).collect())
+    }
+
+    async fn supersede_fact(&self, fact_id: Uuid) -> Result<()> {
+        let fact_repo = self.fact_repo();
+        if let Some(existing) = fact_repo.find_by_id(fact_id).await? {
+            let table = self
+                .db
+                .connection()
+                .open_table(ferrumyx_db::schema::TABLE_KG_FACTS)
+                .execute()
+                .await?;
+            table
+                .update()
+                .only_if(&format!("id = '{}'", fact_id))
+                .column("valid_until", format!("'{}'", chrono::Utc::now().to_rfc3339()))
+                .execute()
+                .await?;
+
+            if let Some(tx) = &self.event_queue {
+                let _ = tx.send(crate::update::KgUpdateTrigger::FactConfidenceChanged {
+                    fact_id,
+                    old_confidence: existing.confidence as f64,
+                    new_confidence: 0.0,
+                    subject_id: existing.subject_id,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_synthetic_lethality_partners(
+        &self,
+        gene_id: Uuid,
+        _cancer_id: Uuid,
+        min_confidence: f64,
+    ) -> Result<Vec<SyntheticLethalityResult>> {
+        let facts = self.find_by_subject(gene_id).await?;
+        let mut out = Vec::new();
+        for fact in facts {
+            if fact.confidence as f64 >= min_confidence
+                && (fact.predicate.eq_ignore_ascii_case("synthetic_lethal_with")
+                    || fact.predicate.eq_ignore_ascii_case("synthetic_lethality"))
+            {
+                out.push(SyntheticLethalityResult {
+                    partner_gene_id: fact.object_id,
+                    partner_symbol: fact.object_name.clone(),
+                    effect_size: None,
+                    confidence: fact.confidence as f64,
+                    evidence_type: fact.evidence_type.clone(),
+                    source_db: None,
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SyntheticLethalityResult {
     pub partner_gene_id: Uuid,

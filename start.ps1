@@ -50,17 +50,39 @@ $computerSystem = Get-CimInstance Win32_ComputerSystem
 $ramGB = [math]::Round($computerSystem.TotalPhysicalMemory / 1GB)
 Write-Host "Total System RAM: ${ramGB}GB" -ForegroundColor Cyan
 
-# 4. Select Optimal Model
+# 4. Detect System GPU & CUDA
+Write-Host "Detecting System GPU..." -ForegroundColor Cyan
+$gpus = Get-CimInstance Win32_VideoController
+$hasNvidia = $false
+foreach ($gpu in $gpus) {
+    if ($gpu.Name -match "NVIDIA") {
+        $hasNvidia = $true
+        Write-Host "Found NVIDIA GPU: $($gpu.Name)" -ForegroundColor Green
+    }
+}
+
+$hasNvcc = $false
+if (Get-Command nvcc -ErrorAction SilentlyContinue) {
+    $hasNvcc = $true
+    Write-Host "CUDA Toolkit (nvcc) found." -ForegroundColor Green
+} else {
+    if ($hasNvidia) {
+        Write-Host "NVIDIA GPU found but CUDA Toolkit (nvcc) is missing. Hardware acceleration will be disabled for embeddings. Install CUDA to enable." -ForegroundColor Yellow
+    }
+}
+$cudaEnabled = $hasNvidia -and $hasNvcc
+
+# 5. Select Optimal Model (Ollama uses GPU automatically if available)
 $model = "llama3.2:1b"
-if ($ramGB -ge 16) {
+if ($ramGB -ge 16 -or $hasNvidia) {
     $model = "llama3.1:8b"
 } elseif ($ramGB -ge 8) {
     $model = "llama3.2" # 3B
 }
 
-Write-Host "Based on your ${ramGB}GB of RAM, we selected the optimal model: ${model}" -ForegroundColor Cyan
+Write-Host "Based on your hardware, we selected the optimal model: ${model}" -ForegroundColor Cyan
 
-# 5. Pull Model
+# 6. Pull Model
 Write-Host "Pulling model ${model}... (This may take a while)" -ForegroundColor Yellow
 ollama pull $model
 
@@ -71,15 +93,24 @@ if (Test-Path $configFile) {
     Write-Host "Updated ferrumyx.toml to use ${model}" -ForegroundColor Green
 }
 
-# 6. Build and Run
+# 7. Build and Run
 Write-Host "Building and starting Ferrumyx Agent..." -ForegroundColor Cyan
 $env:RUST_LOG = "info"
+
+$cargoArgs = @("run", "--release", "--bin", "ferrumyx-web")
+
+# If CUDA capable, pass the feature flag to root compilation so the workspace member picks it up
+if ($cudaEnabled) {
+    Write-Host "Compiling with CUDA hardware acceleration enabled..." -ForegroundColor Green
+    $cargoArgs += "--features"
+    $cargoArgs += "ferrumyx-ingestion/cuda"
+}
 
 Write-Host "Waiting for server to start, will attempt to open http://localhost:3001 in your browser..." -ForegroundColor Yellow
 Start-Job -ScriptBlock { Start-Sleep -Seconds 5; Start-Process "http://localhost:3001" } | Out-Null
 
 try {
-    cargo run --release --bin ferrumyx-web
+    & cargo $cargoArgs
 } catch {
     Write-Host "Execution failed: $_" -ForegroundColor Red
 }

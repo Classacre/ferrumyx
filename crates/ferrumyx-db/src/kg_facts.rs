@@ -297,6 +297,55 @@ impl KgFactRepository {
         
         Ok(facts)
     }
+
+    /// List facts with optional DB-side filtering for performance.
+    pub async fn list_filtered(
+        &self,
+        gene_term: Option<&str>,
+        query_term: Option<&str>,
+        predicate: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<KgFact>> {
+        let table = self.db.connection()
+            .open_table(crate::schema::TABLE_KG_FACTS)
+            .execute()
+            .await?;
+
+        let mut conditions = Vec::new();
+        if let Some(g) = gene_term.map(str::trim).filter(|s| !s.is_empty()) {
+            let esc = g.replace('\'', "''");
+            conditions.push(format!(
+                "(subject_name LIKE '%{esc}%' OR object_name LIKE '%{esc}%' OR predicate LIKE '%{esc}%')"
+            ));
+        }
+
+        if let Some(q) = query_term.map(str::trim).filter(|s| !s.is_empty()) {
+            let esc = q.replace('\'', "''");
+            conditions.push(format!(
+                "(subject_name LIKE '%{esc}%' OR object_name LIKE '%{esc}%' OR predicate LIKE '%{esc}%')"
+            ));
+        }
+
+        if let Some(p) = predicate.map(str::trim).filter(|s| !s.is_empty() && *s != "all") {
+            let esc = p.replace('\'', "''");
+            conditions.push(format!("predicate = '{esc}'"));
+        }
+
+        let mut query = table.query().limit(limit);
+        if !conditions.is_empty() {
+            query = query.only_if(&conditions.join(" AND "));
+        }
+
+        let mut stream = query.execute().await?;
+        let mut facts = Vec::new();
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            for i in 0..batch.num_rows() {
+                facts.push(record_to_kg_fact(&batch, i)?);
+            }
+        }
+        Ok(facts)
+    }
     
     /// Get distinct predicates.
     pub async fn get_predicates(&self) -> Result<Vec<String>> {

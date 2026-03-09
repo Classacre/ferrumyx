@@ -7,8 +7,10 @@ use crate::error::Result;
 use crate::schema::Paper;
 use crate::schema_arrow::{paper_to_record, record_to_paper};
 use std::sync::Arc;
+use std::collections::HashMap;
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
+use arrow_array::{Array, StringArray};
 
 /// Repository for paper operations.
 #[derive(Clone)]
@@ -241,6 +243,71 @@ impl PaperRepository {
             .await?;
         Ok(table.count_rows(None).await? as u64)
     }
+
+    /// Resolve paper titles for a list of IDs in one query.
+    pub async fn find_titles_by_ids(&self, ids: &[uuid::Uuid]) -> Result<HashMap<uuid::Uuid, String>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq: Vec<uuid::Uuid> = ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+
+        let table = self.db.connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+
+        let in_clause = uniq
+            .iter()
+            .map(|id| format!("'{}'", id))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut stream = table
+            .query()
+            .only_if(&format!("id IN ({})", in_clause))
+            .select(lancedb::query::Select::columns(&["id", "title"]))
+            .execute()
+            .await?;
+
+        let mut out = HashMap::new();
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            let schema = batch.schema();
+            let id_idx = match schema.index_of("id") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let title_idx = match schema.index_of("title") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+
+            let ids_arr = match batch.column(id_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let titles_arr = match batch.column(title_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+
+            let row_count = batch.num_rows();
+            for i in 0..row_count {
+                if ids_arr.is_null(i) || titles_arr.is_null(i) {
+                    continue;
+                }
+
+                if let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(i)) {
+                    out.insert(id, titles_arr.value(i).to_string());
+                }
+            }
+        }
+
+        Ok(out)
+    }
     
     /// Count papers by source.
     pub async fn count_by_source(&self, source: &str) -> Result<u64> {
@@ -250,6 +317,21 @@ impl PaperRepository {
             .await?;
         let escaped = source.replace('\'', "''");
         let count = table.count_rows(Some(format!("source = '{}'", escaped))).await?;
+        Ok(count as u64)
+    }
+
+    /// Count papers by parse status.
+    pub async fn count_by_parse_status(&self, status: &str) -> Result<u64> {
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+        let escaped = status.replace('\'', "''");
+        let count = table
+            .count_rows(Some(format!("parse_status = '{}'", escaped)))
+            .await?;
         Ok(count as u64)
     }
     

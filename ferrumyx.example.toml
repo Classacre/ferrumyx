@@ -19,11 +19,11 @@ min_connections = 2
 # "local_only"   — only Ollama / local endpoints (no API keys needed)
 # "prefer_local" — use local when available, fall back to remote for PUBLIC data
 # "any"          — use the default_backend for all PUBLIC data (recommended for API-only)
-mode = "any"
+mode = "prefer_local"
 
 # Which backend to use for PUBLIC data (scientific literature, not patient data)
 # Options: "openai" | "anthropic" | "gemini" | "openai_compatible" | "ollama"
-default_backend = "openai"
+default_backend = "ollama"
 
 # Backend used for CONFIDENTIAL / INTERNAL data (must be local)
 # Leave as "ollama" even if you don't have Ollama running — it simply won't be
@@ -61,6 +61,7 @@ model    = "gemini-1.5-flash"         # free tier available; 1M context
 base_url = "https://api.groq.com/openai"  # example: Groq
 api_key  = ""                              # or env var FERRUMYX_COMPAT_API_KEY
 model    = "llama-3.3-70b-versatile"      # change to match your provider's model
+cached_chat = true                         # enable cache hints when provider/model supports it
 # Other examples:
 #   Groq:       base_url = "https://api.groq.com/openai"
 #   OpenRouter: base_url = "https://openrouter.ai/api"

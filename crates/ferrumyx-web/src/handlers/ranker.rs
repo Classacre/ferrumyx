@@ -1,16 +1,22 @@
 //! Target ranking API — computes composite scores using the ranker engine.
 
 use axum::{
-    extract::{State, Query, Path},
+    extract::{State, Query},
     response::{Html, IntoResponse},
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
 use ferrumyx_common::error::ApiError;
+use ferrumyx_db::{
+    entities::EntityRepository,
+    kg_facts::KgFactRepository,
+    target_scores::TargetScoreRepository,
+};
 use ferrumyx_ranker::{
-    scorer::{ComponentScoresRaw, ComponentScoresNormed, compute_composite_score, compute_penalty, PenaltyInputs, ShortlistTier, determine_shortlist_tier},
+    scorer::ComponentScoresNormed,
     weights::WeightVector,
     normalise::normalise_ceres,
     depmap_provider::{DepMapProvider, DepMapClientAdapter},
@@ -20,6 +26,7 @@ use ferrumyx_ranker::{
 pub struct RankerFilter {
     pub gene: Option<String>,
     pub cancer_type: Option<String>,
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,258 +64,168 @@ pub async fn ranker_page(State(_state): State<SharedState>) -> Html<String> {
 
 /// GET /api/ranker/score — Compute score for a gene-cancer pair
 pub async fn api_ranker_score(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
     Query(filter): Query<RankerFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
     let gene = filter.gene.as_deref().unwrap_or("KRAS");
     let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
-    
-    // Try to initialize DepMap client
-    let depmap_result = DepMapClientAdapter::init().await;
-    
-    // Compute component scores
-    let (raw_scores, normed_scores, penalty, evidence) = if let Ok(depmap) = depmap_result {
-        // Use real DepMap data
-        let ceres = depmap.get_mean_ceres(gene, cancer_type);
-        let crispr_dependency = ceres.map(|c| normalise_ceres(c));
-        
-        // Get evidence from KG (placeholder - would query from LanceDB)
-        let evidence = EvidenceSummary {
-            literature_count: 150,
-            kg_fact_count: 45,
-            clinical_trials: 12,
-        };
-        
-        // Compute penalty
-        let penalty_inputs = PenaltyInputs {
-            chembl_inhibitor_count: 5, // Would query from ChEMBL
-            expression_ratio: 3.2,     // Would query from expression data
-            has_pdb: true,
-            alphafold_plddt: Some(92.0),
-        };
-        let penalty = compute_penalty(&penalty_inputs);
-        
-        // Raw scores (would come from various data sources)
-        let raw = ComponentScoresRaw {
-            mutation_freq: Some(0.25),           // 25% mutation rate in PAAD
-            crispr_dependency: ceres,            // From DepMap
-            survival_correlation: Some(0.72),    // Would come from TCGA
-            expression_specificity: Some(0.85),  // Tumor vs normal
-            structural_tractability: Some(0.65), // From structural analysis
-            pocket_detectability: Some(0.55),    // From fpocket
-            novelty_score: Some(0.80),           // Inverse ChEMBL density
-            pathway_independence: Some(0.60),    // From pathway analysis
-            literature_novelty: Some(0.45),      // Underexplored ratio
-        };
-        
-        // Normalized scores
-        let normed = ComponentScoresNormed {
-            mutation_freq: raw.mutation_freq.unwrap_or(0.0),
-            crispr_dependency: crispr_dependency.unwrap_or(0.0),
-            survival_correlation: raw.survival_correlation.unwrap_or(0.0),
-            expression_specificity: raw.expression_specificity.unwrap_or(0.0),
-            structural_tractability: raw.structural_tractability.unwrap_or(0.0),
-            pocket_detectability: raw.pocket_detectability.unwrap_or(0.0),
-            novelty_score: raw.novelty_score.unwrap_or(0.0),
-            pathway_independence: raw.pathway_independence.unwrap_or(0.0),
-            literature_novelty: raw.literature_novelty.unwrap_or(0.0),
-        };
-        
-        (raw, normed, penalty, evidence)
-    } else {
-        // Fallback to mock data if DepMap unavailable
-        let evidence = EvidenceSummary {
-            literature_count: 150,
-            kg_fact_count: 45,
-            clinical_trials: 12,
-        };
-        
-        let penalty_inputs = PenaltyInputs {
-            chembl_inhibitor_count: 5,
-            expression_ratio: 3.2,
-            has_pdb: true,
-            alphafold_plddt: Some(92.0),
-        };
-        let penalty = compute_penalty(&penalty_inputs);
-        
-        let raw = ComponentScoresRaw {
-            mutation_freq: Some(0.25),
-            crispr_dependency: Some(-1.2), // Mock CERES score
-            survival_correlation: Some(0.72),
-            expression_specificity: Some(0.85),
-            structural_tractability: Some(0.65),
-            pocket_detectability: Some(0.55),
-            novelty_score: Some(0.80),
-            pathway_independence: Some(0.60),
-            literature_novelty: Some(0.45),
-        };
-        
-        let normed = ComponentScoresNormed {
-            mutation_freq: 0.25,
-            crispr_dependency: normalise_ceres(-1.2),
-            survival_correlation: 0.72,
-            expression_specificity: 0.85,
-            structural_tractability: 0.65,
-            pocket_detectability: 0.55,
-            novelty_score: 0.80,
-            pathway_independence: 0.60,
-            literature_novelty: 0.45,
-        };
-        
-        (raw, normed, penalty, evidence)
-    };
-    
-    // Compute composite score
-    let weights = WeightVector::default();
-    let mean_confidence = 0.85; // Would compute from KG fact confidence
-    let (composite, adjusted) = compute_composite_score(&normed_scores, &weights, penalty, mean_confidence);
-    
-    // Determine tier
-    let tier = determine_shortlist_tier(
-        adjusted,
-        raw_scores.mutation_freq,
-        normed_scores.structural_tractability,
-        &PenaltyInputs {
-            chembl_inhibitor_count: 5,
-            expression_ratio: 3.2,
-            has_pdb: true,
-            alphafold_plddt: Some(92.0),
-        },
-    );
-    
-    let tier_str = match tier {
-        ShortlistTier::Primary => "primary",
-        ShortlistTier::Secondary => "secondary",
-        ShortlistTier::Excluded => "excluded",
-    };
-    
-    let result = RankedTarget {
-        gene: gene.to_string(),
-        cancer_type: cancer_type.to_string(),
-        composite_score: composite,
-        confidence_adjusted_score: adjusted,
-        tier: tier_str.to_string(),
-        component_scores: normed_scores,
-        penalty,
-        evidence,
-    };
-    
-    Ok(Json(result))
+
+    let all = load_ranked_targets(&state, Some(cancer_type), 50_000).await?;
+    let row = all
+        .into_iter()
+        .find(|r| r.gene.eq_ignore_ascii_case(gene))
+        .ok_or_else(|| ApiError::NotFound(format!("No persisted score found for {gene} in {cancer_type}")))?;
+
+    Ok(Json(row))
 }
 
 /// GET /api/ranker/top — Get top ranked targets for a cancer type
 pub async fn api_ranker_top(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
     Query(filter): Query<RankerFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
     let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
-    let limit = filter.gene.as_deref().and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
-    
-    // Try to get real data from DepMap
-    let depmap_result = DepMapClientAdapter::init().await;
-    
-    let top_targets: Vec<RankedTarget> = if let Ok(depmap) = depmap_result {
-        // Get top dependencies from DepMap
-        let top_deps = depmap.get_top_dependencies(cancer_type, limit);
-        
-        top_deps.into_iter().map(|(gene, ceres)| {
-            let crispr_normed = normalise_ceres(ceres);
-            let weights = WeightVector::default();
-            
-            // Simplified scoring for top dependencies
-            let normed = ComponentScoresNormed {
-                mutation_freq: 0.1, // Placeholder
-                crispr_dependency: crispr_normed,
-                survival_correlation: 0.5,
-                expression_specificity: 0.5,
-                structural_tractability: 0.5,
-                pocket_detectability: 0.5,
-                novelty_score: 0.5,
-                pathway_independence: 0.5,
-                literature_novelty: 0.5,
-            };
-            
-            let (composite, adjusted) = compute_composite_score(&normed, &weights, 0.0, 0.85);
-            
-            let tier = if adjusted > 0.6 { "primary" } else if adjusted > 0.45 { "secondary" } else { "excluded" };
-            
-            RankedTarget {
-                gene,
-                cancer_type: cancer_type.to_string(),
-                composite_score: composite,
-                confidence_adjusted_score: adjusted,
-                tier: tier.to_string(),
-                component_scores: normed,
-                penalty: 0.0,
-                evidence: EvidenceSummary {
-                    literature_count: 0,
-                    kg_fact_count: 0,
-                    clinical_trials: 0,
-                },
-            }
-        }).collect()
-    } else {
-        // Mock data fallback
-        vec![
-            RankedTarget {
-                gene: "KRAS".to_string(),
-                cancer_type: cancer_type.to_string(),
-                composite_score: 0.78,
-                confidence_adjusted_score: 0.66,
-                tier: "primary".to_string(),
-                component_scores: ComponentScoresNormed {
-                    mutation_freq: 0.25,
-                    crispr_dependency: 0.60,
-                    survival_correlation: 0.72,
-                    expression_specificity: 0.85,
-                    structural_tractability: 0.65,
-                    pocket_detectability: 0.55,
-                    novelty_score: 0.80,
-                    pathway_independence: 0.60,
-                    literature_novelty: 0.45,
-                },
-                penalty: 0.0,
-                evidence: EvidenceSummary { literature_count: 150, kg_fact_count: 45, clinical_trials: 12 },
-            },
-            RankedTarget {
-                gene: "TP53".to_string(),
-                cancer_type: cancer_type.to_string(),
-                composite_score: 0.72,
-                confidence_adjusted_score: 0.61,
-                tier: "primary".to_string(),
-                component_scores: ComponentScoresNormed {
-                    mutation_freq: 0.35,
-                    crispr_dependency: 0.45,
-                    survival_correlation: 0.80,
-                    expression_specificity: 0.70,
-                    structural_tractability: 0.40,
-                    pocket_detectability: 0.30,
-                    novelty_score: 0.30,
-                    pathway_independence: 0.50,
-                    literature_novelty: 0.20,
-                },
-                penalty: 0.15,
-                evidence: EvidenceSummary { literature_count: 500, kg_fact_count: 120, clinical_trials: 45 },
-            },
-        ]
-    };
-    
+    let limit = filter.limit.unwrap_or(10).clamp(1, 100);
+    let mut top_targets = load_ranked_targets(&state, Some(cancer_type), 50_000).await?;
+    top_targets.truncate(limit);
     Ok(Json(top_targets))
 }
 
 /// GET /api/ranker/stats — Get ranker statistics
 pub async fn api_ranker_stats(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let rows = load_ranked_targets(&state, None, 100_000).await?;
+    let mut primary_count = 0u32;
+    let mut secondary_count = 0u32;
+    let mut excluded_count = 0u32;
+
+    for row in &rows {
+        match row.tier.as_str() {
+            "primary" => primary_count += 1,
+            "secondary" => secondary_count += 1,
+            _ => excluded_count += 1,
+        }
+    }
+
     let stats = RankerStats {
         weights: WeightVector::default(),
-        total_targets_scored: 1250,
-        primary_count: 85,
-        secondary_count: 320,
-        excluded_count: 845,
+        total_targets_scored: rows.len() as u32,
+        primary_count,
+        secondary_count,
+        excluded_count,
     };
     
     Ok(Json(stats))
+}
+
+async fn load_ranked_targets(
+    state: &SharedState,
+    cancer_filter: Option<&str>,
+    limit: usize,
+) -> Result<Vec<RankedTarget>, ApiError> {
+    let score_repo = TargetScoreRepository::new(state.db.clone());
+    let entity_repo = EntityRepository::new(state.db.clone());
+    let kg_repo = KgFactRepository::new(state.db.clone());
+    let depmap = DepMapClientAdapter::init().await.ok();
+
+    let mut rows = score_repo
+        .list(0, limit)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    rows.sort_by(|a, b| {
+        b.confidence_adjusted_score
+            .partial_cmp(&a.confidence_adjusted_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let all_facts = kg_repo.list(0, 50_000).await.unwrap_or_default();
+    let mut fact_count_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
+    for fact in all_facts {
+        *fact_count_by_gene.entry(fact.subject_id).or_insert(0) += 1;
+    }
+
+    let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
+    let mut out = Vec::new();
+    for s in rows {
+        let raw_json: serde_json::Value = serde_json::from_str(&s.components_raw).unwrap_or_default();
+        let norm_json: serde_json::Value = serde_json::from_str(&s.components_normed).unwrap_or_default();
+        let mut gene = raw_json
+            .get("gene")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let mut cancer_type = raw_json
+            .get("cancer_code")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+
+        if gene.is_none() {
+            if let Some(cached) = name_cache.get(&s.gene_id) {
+                gene = Some(cached.clone());
+            } else if let Ok(Some(ent)) = entity_repo.find_by_id(s.gene_id).await {
+                name_cache.insert(s.gene_id, ent.name.clone());
+                gene = Some(ent.name);
+            }
+        }
+        if cancer_type.is_none() {
+            if let Some(cached) = name_cache.get(&s.cancer_id) {
+                cancer_type = Some(cached.clone());
+            } else if s.cancer_id != uuid::Uuid::nil() {
+                if let Ok(Some(ent)) = entity_repo.find_by_id(s.cancer_id).await {
+                    name_cache.insert(s.cancer_id, ent.name.clone());
+                    cancer_type = Some(ent.name);
+                }
+            }
+        }
+
+        let gene = gene.unwrap_or_else(|| s.gene_id.to_string());
+        let cancer_type = cancer_type.unwrap_or_else(|| "UNSPECIFIED".to_string());
+        if let Some(filter_code) = cancer_filter {
+            if !cancer_type.eq_ignore_ascii_case(filter_code) {
+                continue;
+            }
+        }
+
+        let mut component_scores = ComponentScoresNormed {
+            mutation_freq: norm_json.get("mutation_score").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            crispr_dependency: 0.0,
+            survival_correlation: 0.0,
+            expression_specificity: 0.0,
+            structural_tractability: 0.0,
+            pocket_detectability: 0.0,
+            novelty_score: 0.0,
+            pathway_independence: 0.0,
+            literature_novelty: norm_json.get("literature_score").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        };
+        if let Some(depmap) = &depmap {
+            if let Some(ceres) = depmap.get_mean_ceres(&gene, &cancer_type) {
+                component_scores.crispr_dependency = normalise_ceres(ceres);
+            }
+        }
+
+        out.push(RankedTarget {
+            gene: gene.clone(),
+            cancer_type: cancer_type.clone(),
+            composite_score: s.composite_score,
+            confidence_adjusted_score: s.confidence_adjusted_score,
+            tier: s.shortlist_tier.clone(),
+            component_scores,
+            penalty: s.penalty_score,
+            evidence: EvidenceSummary {
+                literature_count: fact_count_by_gene.get(&s.gene_id).copied().unwrap_or(0),
+                kg_fact_count: fact_count_by_gene.get(&s.gene_id).copied().unwrap_or(0),
+                clinical_trials: 0,
+            },
+        });
+    }
+
+    out.sort_by(|a, b| {
+        b.confidence_adjusted_score
+            .partial_cmp(&a.confidence_adjusted_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    Ok(out)
 }
 
 fn render_ranker_page(_result: Option<RankedTarget>) -> String {
@@ -378,47 +295,28 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
             </div>
         </div>
         
-        <div class="grid-2 gap-4 mt-4">
+        <div class="mt-4">
             <div class="card h-100">
-                <div class="card-header border-bottom border-glass pb-3 mb-3 d-flex justify-between">
-                    <div>Top Computed Candidates <span class="text-muted" id="cancerLabel">PAAD</span></div>
+                <div class="card-header border-bottom border-glass pb-3 mb-3 d-flex justify-between align-center">
+                    <div class="d-flex align-center gap-2">
+                        <span>Top Computed Candidates <span class="text-muted" id="cancerLabel">PAAD</span></span>
+                        <span class="info-tip">i
+                            <span class="tooltip-card">
+                                <strong class="text-main">Mathematical Synthesis Model</strong><br>
+                                S(g,c) = Σ(wᵢ × nᵢ) − P(g,c)<br><br>
+                                <strong>wᵢ</strong>: configured feature weights.<br>
+                                <strong>nᵢ</strong>: normalized feature values (0.0-1.0).<br>
+                                <strong>P(g,c)</strong>: penalty term for saturation and structural constraints.<br><br>
+                                Weight vector: mutation 20%, CRISPR 18%, survival 15%, expression 12%, structure 12%, pocket 8%, novelty 7%, pathway 5%, literature deficit 3%.
+                            </span>
+                        </span>
+                    </div>
                     <span class="badge badge-outline">Algorithmic Rank</span>
                 </div>
                 <div class="table-container p-0">
                     <div id="topTargets">
                         <div class="p-4 text-center text-muted">Retrieving network data...</div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="card h-100" style="border-left: 4px solid var(--brand-blue);">
-                <div class="card-body p-4">
-                    <h5 class="card-title font-outfit mb-3">Mathematical Synthesis Model</h5>
-                    <p class="text-muted small">The composite rank function S(g,c) calculates weighted heuristic bounds:</p>
-                    <div class="p-3 mb-3 font-outfit text-center" style="background:var(--bg-card); border:1px solid var(--border-glass); border-radius:6px; color:var(--text-main); font-size:1.1rem; letter-spacing:1px;">
-                        S(g,c) = Σ(wᵢ × nᵢ) − P(g,c)
-                    </div>
-                    <p class="text-muted small mb-3">Parameters:</p>
-                    <ul class="text-muted small mb-4" style="padding-left:1.5rem">
-                        <li><strong style="color:var(--text-main)">wᵢ</strong> — Feature weight vector magnitude (normalized = 1.0)</li>
-                        <li><strong style="color:var(--text-main)">nᵢ</strong> — Feature scalar projection (0.0–1.0 bounds)</li>
-                        <li><strong style="color:var(--text-main)">P(g,c)</strong> — Penalty heuristic (saturation, structural constraints)</li>
-                    </ul>
-                    
-                    <h6 class="font-outfit text-muted mb-2 text-uppercase" style="font-size:0.8rem; letter-spacing:1px">Configured Weights</h6>
-                    <table class="table mb-0 method-table" style="font-size: 0.85rem">
-                        <tbody>
-                            <tr><td>Mutation Frequency</td><td>20%</td></tr>
-                            <tr><td>CRISPR Dependency</td><td>18%</td></tr>
-                            <tr><td>Survival Correlation</td><td>15%</td></tr>
-                            <tr><td>Expression Specificity</td><td>12%</td></tr>
-                            <tr><td>Structural Tractability</td><td>12%</td></tr>
-                            <tr><td>Pocket Detectability</td><td>8%</td></tr>
-                            <tr><td>Novelty Density</td><td>7%</td></tr>
-                            <tr><td>Pathway Orthogonality</td><td>5%</td></tr>
-                            <tr><td>Literature Deficit</td><td>3%</td></tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>

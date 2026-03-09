@@ -1,0 +1,42 @@
+name: Ironclaw Sync Gate
+
+on:
+  pull_request:
+    paths:
+      - "crates/ironclaw/**"
+      - "crates/ferrumyx-agent/**"
+      - "crates/ferrumyx-ingestion/**"
+      - "crates/ferrumyx-web/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/ironclaw-sync-gate.yml"
+  push:
+    branches:
+      - "integration/ironclaw-sync-*"
+
+jobs:
+  validate-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Validate ferrumyx-agent
+        run: cargo check -p ferrumyx-agent
+
+      - name: Validate ferrumyx-web
+        run: cargo check -p ferrumyx-web
+
+      - name: Validate ferrumyx-ingestion
+        run: cargo check -p ferrumyx-ingestion
+
+      - name: Compile tests for ferrumyx-agent
+        run: cargo test -p ferrumyx-agent --no-run
+

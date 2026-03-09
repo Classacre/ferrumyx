@@ -7,6 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
+use ferrumyx_ranker::depmap_provider::DepMapClientAdapter;
 
 #[derive(Deserialize)]
 pub struct DepMapFilter {
@@ -47,20 +48,59 @@ pub async fn api_depmap_gene(
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
     let gene = filter.gene.as_deref().unwrap_or("KRAS");
-    
-    // Query from database if available, otherwise return mock data
-    let stats = DepMapGeneStats {
+    let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
+
+    let mut stats = DepMapGeneStats {
         gene: gene.to_string(),
-        mean_ceres: -0.85,
-        median_ceres: -0.92,
-        min_ceres: -1.45,
-        max_ceres: 0.23,
-        cell_lines_count: 42,
-        essential_count: 38,
-        selective_count: 3,
-        non_essential_count: 1,
+        mean_ceres: 0.0,
+        median_ceres: 0.0,
+        min_ceres: 0.0,
+        max_ceres: 0.0,
+        cell_lines_count: 0,
+        essential_count: 0,
+        selective_count: 0,
+        non_essential_count: 0,
     };
-    
+
+    if let Ok(depmap) = DepMapClientAdapter::init().await {
+        let scores = depmap.client().get_gene_scores(gene, cancer_type);
+        if !scores.is_empty() {
+            let mut sorted = scores.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mean = scores.iter().sum::<f64>() / scores.len() as f64;
+            let mid = sorted.len() / 2;
+            let median = if sorted.len() % 2 == 0 {
+                (sorted[mid - 1] + sorted[mid]) / 2.0
+            } else {
+                sorted[mid]
+            };
+            let min = *sorted.first().unwrap_or(&0.0);
+            let max = *sorted.last().unwrap_or(&0.0);
+
+            let mut essential = 0i64;
+            let mut selective = 0i64;
+            let mut non_essential = 0i64;
+            for s in &scores {
+                if *s < -1.0 {
+                    essential += 1;
+                } else if *s < -0.5 {
+                    selective += 1;
+                } else {
+                    non_essential += 1;
+                }
+            }
+
+            stats.mean_ceres = mean;
+            stats.median_ceres = median;
+            stats.min_ceres = min;
+            stats.max_ceres = max;
+            stats.cell_lines_count = scores.len() as i64;
+            stats.essential_count = essential;
+            stats.selective_count = selective;
+            stats.non_essential_count = non_essential;
+        }
+    }
+
     Json(stats)
 }
 
@@ -70,32 +110,9 @@ pub async fn api_depmap_celllines(
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
     let _gene = filter.gene.as_deref().unwrap_or("KRAS");
-    
-    // Mock data for now - would query from database
-    let cell_lines = vec![
-        DepMapCellLine {
-            cell_line: "A549".to_string(),
-            cancer_type: "Lung Adenocarcinoma".to_string(),
-            ceres_score: -1.23,
-            expression: Some(8.5),
-            copy_number: Some(1.2),
-        },
-        DepMapCellLine {
-            cell_line: "H358".to_string(),
-            cancer_type: "Lung Adenocarcinoma".to_string(),
-            ceres_score: -1.15,
-            expression: Some(7.8),
-            copy_number: Some(1.0),
-        },
-        DepMapCellLine {
-            cell_line: "PANC1".to_string(),
-            cancer_type: "Pancreatic Adenocarcinoma".to_string(),
-            ceres_score: -1.45,
-            expression: Some(9.2),
-            copy_number: Some(1.8),
-        },
-    ];
-    
+    let _cancer = filter.cancer_type.as_deref().unwrap_or("PAAD");
+    // Real-data only: no fabricated cell-line rows.
+    let cell_lines: Vec<DepMapCellLine> = Vec::new();
     Json(cell_lines)
 }
 
@@ -114,10 +131,18 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
         .essential {{ color: var(--danger); font-weight: bold; }}
         .selective {{ color: var(--warning); font-weight: bold; }}
         .non-essential {{ color: var(--success); font-weight: bold; }}
-        .search-container {{ display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }}
-        .ceres-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; text-align: center; margin-top: 1rem; }}
+        .search-container {{ display: flex; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.9rem; }}
+        .ceres-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; text-align: center; margin-top: 1rem; padding: 0.35rem 0.1rem 0.2rem; }}
         .ceres-val {{ font-size: 2.2rem; font-weight: 800; font-family: 'Outfit'; margin-bottom: 0.25rem; }}
         .ceres-label {{ font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }}
+        .method-note {{ border:1px solid var(--border-color); border-radius:12px; overflow:hidden; }}
+        .method-note summary {{ cursor:pointer; list-style:none; padding: 12px 16px; font-weight:600; }}
+        .method-note summary::-webkit-details-marker {{ display:none; }}
+        .method-note[open] summary {{ border-bottom:1px solid var(--border-color); }}
+        @media (max-width: 1180px) {{
+            .search-container {{ flex-direction: column; }}
+            .search-container .btn {{ width: 100%; justify-content: center; }}
+        }}
     </style>
 </head>
 <body>
@@ -129,33 +154,26 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                     DepMap CRISPR Integration
                 </h1>
-                <p class="text-muted">CRISPR-Cas9 dependency score analytics and cell line viability profiles via Broad Institute DepMap</p>
+                <p class="text-muted">CRISPR dependency signals and cell-line essentiality from DepMap.</p>
             </div>
         </div>
         
         <div class="grid-2 align-start" style="grid-template-columns: 350px 1fr; gap: 2rem; margin-bottom: 2rem;">
             <div class="card">
-                <div class="card-header border-bottom border-glass pb-3 mb-3">Execute Target Search</div>
-                <div class="card-body p-0">
+                <div class="card-header border-bottom border-glass pb-3 mb-3">Gene Lookup</div>
+                <div class="card-body p-1">
                     <form id="geneForm" class="mb-4">
                         <div class="search-container">
-                            <input type="text" id="geneInput" class="form-control" style="flex:1" placeholder="Gene symbol (e.g., KRAS)">
-                            <button class="btn btn-primary" type="submit">Analyze</button>
+                            <input type="text" id="geneInput" class="form-control" style="flex:1" placeholder="Enter gene symbol">
+                            <button class="btn btn-primary" type="submit">Run</button>
                         </div>
                     </form>
-                    <div class="text-muted mb-2" style="font-size:0.85rem;">Reference Corpi:</div>
-                    <div class="d-grid gap-2" style="grid-template-columns: 1fr 1fr;">
-                        <button class="btn btn-sm btn-outline w-100" onclick="loadGene('KRAS')">KRAS</button>
-                        <button class="btn btn-sm btn-outline w-100" onclick="loadGene('EGFR')">EGFR</button>
-                        <button class="btn btn-sm btn-outline w-100" onclick="loadGene('BRCA1')">BRCA1</button>
-                        <button class="btn btn-sm btn-outline w-100" onclick="loadGene('TP53')">TP53</button>
-                    </div>
                 </div>
             </div>
             
             <div class="card h-100">
-                <div class="card-header border-bottom border-glass pb-3">Essentiality Matrix: <span id="geneName" class="text-gradient" style="font-weight:700">—</span></div>
-                <div class="card-body d-flex align-center justify-center p-0">
+                <div class="card-header border-bottom border-glass pb-3">Essentiality Snapshot: <span id="geneName" class="text-gradient" style="font-weight:700">—</span></div>
+                <div class="card-body d-flex align-center justify-center p-1">
                     <div class="ceres-grid w-100">
                         <div>
                             <div class="ceres-val" style="color:var(--brand-blue)" id="meanCeres">—</div>
@@ -180,15 +198,15 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
         
         <div class="grid-2 gap-4">
             <div class="card h-100">
-                <div class="card-header border-bottom border-glass pb-3 mb-3">CERES Score Distribution Topology</div>
+                <div class="card-header border-bottom border-glass pb-3 mb-3">CERES Distribution</div>
                 <div class="card-body p-0">
                     <canvas id="distributionChart" height="200"></canvas>
                 </div>
             </div>
             <div class="card h-100">
                 <div class="card-header border-bottom border-glass pb-3 mb-3 d-flex justify-between">
-                    <div>Ranked Cell Line Dependency</div>
-                    <span class="badge badge-outline">Top Dependencies</span>
+                    <div>Cell-Line Dependencies</div>
+                    <span class="badge badge-outline">Ranked</span>
                 </div>
                 <div class="table-container p-0">
                     <table class="table mb-0">
@@ -208,9 +226,9 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
             </div>
         </div>
         
-        <div class="card mt-4 mb-4" style="border-left: 4px solid var(--brand-purple);">
+        <details class="method-note mt-4 mb-4">
+            <summary>Method Notes</summary>
             <div class="card-body p-4">
-                <h5 class="mb-2" style="font-family:'Outfit'">DepMap Methodology Notes</h5>
                 <p class="text-muted" style="font-size:0.95rem;">
                     DepMap (Dependency Map) provides CRISPR-Cas9 gene knockout screens across hundreds of cancer cell lines.
                     CERES scores indicate gene essentiality: more negative values correlate to higher essentiality for cellular proliferation and survival.
@@ -221,7 +239,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                     <div style="display:flex; align-items:center; gap:0.5rem;"><div style="width:12px; height:12px; border-radius:50%; background:var(--success)"></div> <strong>Non-essential (CERES > -0.5):</strong> Minimal knockout effect</div>
                 </div>
             </div>
-        </div>
+        </details>
     </main>
     <script src="/static/js/main.js"></script>
     <script>

@@ -276,7 +276,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
             
             <div class="d-flex flex-column">
                 <div class="card input-section">
-                    <form method="POST" action="/ner/extract" class="d-flex flex-column gap-3">
+                    <form method="POST" action="/ner/extract" class="d-flex flex-column gap-3 p-3">
                         <div>
                             <label class="form-label" style="font-size: 1.1rem;">Input Document Stream</label>
                             <textarea name="text" id="textInput" class="form-control mt-2" rows="6" placeholder="Enter biomedical text to initiate entity extraction sequence...">{}</textarea>

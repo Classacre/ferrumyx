@@ -12,12 +12,14 @@ pub struct QueryRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
     pub rank: usize,
+    pub percentile: Option<f64>,
     pub gene_symbol: String,
     pub cancer_code: String,
     pub composite_score: f64,
     pub confidence_adj: f64,
     pub shortlist_tier: String,
     pub flags: Vec<String>,
+    pub component_breakdown: Option<TargetScoreResult>,
     pub metrics: Option<TargetMetrics>,
 }
 

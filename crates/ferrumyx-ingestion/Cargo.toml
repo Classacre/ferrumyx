@@ -38,3 +38,5 @@ strsim = "0.11.1"
 default = []
 rust-embed = []
 python-embed = []  # Native BiomedBERT via Candle is default
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]

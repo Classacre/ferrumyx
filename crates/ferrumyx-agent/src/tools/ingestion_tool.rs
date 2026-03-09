@@ -102,10 +102,13 @@ impl Tool for IngestionTool {
 
         // Execute the ingestion pipeline without relying on external channel communication
         let result = run_ingestion(job, repo, None).await;
+        let recomputed = ferrumyx_kg::compute_target_scores(self.db.clone())
+            .await
+            .unwrap_or(0);
 
         let output_text = format!(
-            "Ingestion completed in {}ms. Found {} papers across sources. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} duplicates.",
-            result.duration_ms, result.papers_found, result.papers_inserted, result.chunks_inserted, result.papers_duplicate
+            "Ingestion completed in {}ms. Found {} papers across sources. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} duplicates. Recomputed {} target scores.",
+            result.duration_ms, result.papers_found, result.papers_inserted, result.chunks_inserted, result.papers_duplicate, recomputed
         );
 
         Ok(ToolOutput::text(

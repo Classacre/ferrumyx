@@ -50,17 +50,43 @@ fi
 
 echo "Total System RAM: ${RAM_GB}GB"
 
-# 4. Select Optimal Model
+# 4. Detect System GPU & CUDA
+echo "Detecting System GPU..."
+HAS_NVIDIA=false
+if command -v nvidia-smi &> /dev/null; then
+    if nvidia-smi | grep -q "NVIDIA"; then
+        HAS_NVIDIA=true
+        GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+        echo "Found NVIDIA GPU: $GPU_NAME"
+    fi
+fi
+
+HAS_NVCC=false
+if command -v nvcc &> /dev/null; then
+    HAS_NVCC=true
+    echo "CUDA Toolkit (nvcc) found."
+else
+    if [ "$HAS_NVIDIA" = true ]; then
+        echo "WARNING: NVIDIA GPU found but CUDA Toolkit (nvcc) is missing. Hardware acceleration will be disabled for embeddings. Install CUDA to enable."
+    fi
+fi
+
+CUDA_ENABLED=false
+if [ "$HAS_NVIDIA" = true ] && [ "$HAS_NVCC" = true ]; then
+    CUDA_ENABLED=true
+fi
+
+# 5. Select Optimal Model (Ollama uses GPU automatically if available)
 MODEL="llama3.2:1b"
-if [ "$RAM_GB" -ge 16 ]; then
+if [ "$RAM_GB" -ge 16 ] || [ "$HAS_NVIDIA" = true ]; then
     MODEL="llama3.1:8b"
 elif [ "$RAM_GB" -ge 8 ]; then
     MODEL="llama3.2:3b"
 fi
 
-echo "Based on your ${RAM_GB}GB of RAM, we selected the optimal model: ${MODEL}"
+echo "Based on your hardware, we selected the optimal model: ${MODEL}"
 
-# 5. Pull Model
+# 6. Pull Model
 echo "Pulling model ${MODEL}... (This may take a while)"
 ollama pull "$MODEL"
 
@@ -71,11 +97,19 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "Updated ferrumyx.toml to use ${MODEL}"
 fi
 
-# 6. Build and Run
+# 7. Build and Run
 echo "Building and starting Ferrumyx Agent..."
 export RUST_LOG=info
+
+CARGO_ARGS=("run" "--release" "--bin" "ferrumyx-web")
+
+# If CUDA capable, pass the feature flag to root compilation so the workspace member picks it up
+if [ "$CUDA_ENABLED" = true ]; then
+    echo "Compiling with CUDA hardware acceleration enabled..."
+    CARGO_ARGS+=("--features" "ferrumyx-ingestion/cuda")
+fi
 
 echo "Waiting for server to start, will attempt to open http://localhost:3001 in your browser..."
 (sleep 5 && if command -v xdg-open &> /dev/null; then xdg-open http://localhost:3001; elif command -v open &> /dev/null; then open http://localhost:3001; fi) &
 
-cargo run --release --bin ferrumyx-web
+cargo "${CARGO_ARGS[@]}"

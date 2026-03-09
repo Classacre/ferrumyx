@@ -15,8 +15,11 @@ pub async fn query_submit(
     Form(form): Form<QueryRequest>,
 ) -> Html<String> {
     let engine = TargetQueryEngine::new(state.db.clone());
-    let query_text = form.query_text.clone();
-    let results = engine.execute_query(form).await.unwrap_or_default();
+    let mut req = form;
+    // Guardrail to keep query requests bounded under UI/API abuse.
+    req.max_results = req.max_results.clamp(1, 200);
+    let query_text = req.query_text.clone();
+    let results = engine.execute_query(req).await.unwrap_or_default();
 
     Html(render_query_page(Some((&query_text, results))))
 }
@@ -44,6 +47,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                 format!(r#"
                 <tr>
                     <td><span class="rank-badge">#{}</span></td>
+                    <td><span class="badge badge-outline">{:.1}%</span></td>
                     <td><a href="/targets?gene={}" style="font-weight:700;">{}</a></td>
                     <td><span class="badge badge-outline">{}</span></td>
                     <td>
@@ -64,7 +68,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                         </div>
                     </td>
                 </tr>"#,
-                t.rank, t.gene_symbol, t.gene_symbol, t.cancer_code,
+                t.rank, t.percentile.unwrap_or(0.0), t.gene_symbol, t.gene_symbol, t.cancer_code,
                 (t.composite_score * 100.0) as u32, t.composite_score,
                 t.confidence_adj, tier_badge, flags_html,
                 t.gene_symbol, t.cancer_code, t.gene_symbol)
@@ -81,6 +85,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                         <thead>
                             <tr>
                                 <th>Rank</th>
+                                <th>Percentile</th>
                                 <th>Gene Target</th>
                                 <th>Indication</th>
                                 <th>Priority Score</th>
@@ -109,6 +114,9 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
             min-height: 120px;
             resize: vertical;
         }}
+        .query-main-field {{
+            width: 100%;
+        }}
         .form-row {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -131,9 +139,9 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
     </div>
 
     <div class="card">
-        <form method="POST" action="/query" class="d-flex flex-column gap-4">
-            <div>
-                <label class="form-label" style="font-family:'Outfit',sans-serif; font-size:1.1rem; color:var(--text-main);">Research Question</label>
+        <form method="POST" action="/query" class="d-flex flex-column gap-4 p-4">
+            <div class="query-main-field">
+                <label class="form-label" style="font-family:'Outfit',sans-serif; font-size:1.1rem;">Research Question</label>
                 <textarea name="query_text" class="form-control query-textarea"
                     placeholder="e.g. What are promising synthetic lethal targets in KRAS G12D pancreatic cancer with structural druggability and low prior inhibitor exploration?"
                     required></textarea>
@@ -143,15 +151,15 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
             <div class="form-row">
                 <div>
                     <label class="form-label">Cancer Type (OncoTree)</label>
-                    <input type="text" name="cancer_code" class="form-control" placeholder="PAAD" value="PAAD">
+                    <input type="text" name="cancer_code" class="form-control" placeholder="e.g. PAAD">
                 </div>
                 <div>
                     <label class="form-label">Gene Symbol</label>
-                    <input type="text" name="gene" class="form-control" placeholder="KRAS">
+                    <input type="text" name="gene_symbol" class="form-control" placeholder="e.g. EGFR">
                 </div>
                 <div>
                     <label class="form-label">Mutation Indicator</label>
-                    <input type="text" name="mutation" class="form-control" placeholder="G12D">
+                    <input type="text" name="mutation" class="form-control" placeholder="e.g. L858R">
                 </div>
                 <div>
                     <label class="form-label">Target Relationship</label>
@@ -187,6 +195,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                         min="0" max="1000" value="20" placeholder="20">
                 </div>
                 <div class="d-flex align-center" style="margin-top: 1.5rem;">
+                    <input type="hidden" name="max_results" value="20">
                     <button type="submit" class="btn btn-primary w-100" style="padding: 0.75rem; font-size: 1.05rem;">
                         Execution Core
                     </button>

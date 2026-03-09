@@ -324,6 +324,8 @@ impl Database {
             Field::new("id", DataType::Utf8, false),
             Field::new("gene_id", DataType::Utf8, false),
             Field::new("cancer_id", DataType::Utf8, false),
+            Field::new("score_version", DataType::Int64, false),
+            Field::new("is_current", DataType::Boolean, false),
             Field::new("composite_score", DataType::Float64, false),
             Field::new("confidence_adjusted_score", DataType::Float64, false),
             Field::new("penalty_score", DataType::Float64, false),

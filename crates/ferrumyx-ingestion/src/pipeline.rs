@@ -15,6 +15,7 @@
 //! The pipeline is designed to be called from both the IronClaw tool
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -34,8 +35,10 @@ use crate::repository::IngestionRepository;
 use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
 use crate::pdf_parser::parse_pdf_sections;
 use crate::models::SectionType;
-use ferrumyx_kg::ner::{TrieNer, EntityType, CancerNormaliser};
-use ferrumyx_kg::extraction::{build_facts, RelationExtractor};
+use ferrumyx_db::entities::EntityRepository;
+use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType};
+use ferrumyx_kg::ner::{EntityType as NerEntityType, TrieNer};
+use ferrumyx_kg::extraction::build_facts;
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -193,7 +196,8 @@ pub async fn run_ingestion(
     info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);
     
     let cancer_normaliser = ner.cancers();
-    let relation_extractor = RelationExtractor::new();
+    let entity_repo = EntityRepository::new(repo.db());
+    let mut entity_id_cache: HashMap<String, Uuid> = HashMap::new();
 
     let mut result = IngestionResult {
         job_id,
@@ -382,15 +386,31 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
             for entity in entities {
                 // Canonicalise Subject
                 let mut canon_subject = entity.text.clone();
-                if entity.label == EntityType::Gene {
+                if entity.label == NerEntityType::Gene {
                     if let Some(sym) = ner.hgnc().normalise_symbol(&entity.text) {
                         canon_subject = sym;
                     }
-                } else if entity.label == EntityType::CancerType {
+                } else if entity.label == NerEntityType::CancerType {
                     if let Some(code) = cancer_normaliser.normalise(&entity.text) {
                         canon_subject = code;
                     }
                 }
+
+                let entity_db_type = map_ner_type(entity.label);
+                let entity_id = match resolve_or_create_entity(
+                    &entity_repo,
+                    &mut entity_id_cache,
+                    entity_db_type,
+                    &canon_subject,
+                )
+                .await
+                {
+                    Ok(id) => id,
+                    Err(err) => {
+                        warn!("Entity resolution failed for '{}': {}", canon_subject, err);
+                        continue;
+                    }
+                };
 
                 // 1. Store "mentions" relationship (Paper Hub -> Entity Spoke)
                 // Use a descriptive name for the paper hub node
@@ -405,13 +425,13 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                     upsert.paper_id,
                     &paper_subject_name,
                     "mentions",
-                    Uuid::new_v4(), // Entity-specific stable UUID would be better, but name works for resolution
+                    entity_id,
                     &canon_subject,
                     entity.confidence,
                 ).await;
 
                 // 2. Extract specific relations if it's a Gene
-                if entity.label == EntityType::Gene {
+                if entity.label == NerEntityType::Gene {
                     let extracted_facts = build_facts(&canon_subject, &chunk.content);
                     for mut fact in extracted_facts {
                         // Canonicalise Object (e.g. if it's a Cancer)
@@ -421,12 +441,27 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                              }
                         }
 
+                        let object_id = match resolve_or_create_entity(
+                            &entity_repo,
+                            &mut entity_id_cache,
+                            infer_object_type(&fact.fact_type, &fact.object),
+                            &fact.object,
+                        )
+                        .await
+                        {
+                            Ok(id) => id,
+                            Err(err) => {
+                                warn!("Object entity resolution failed for '{}': {}", fact.object, err);
+                                continue;
+                            }
+                        };
+
                         let _ = repo.insert_fact(
                             upsert.paper_id,
-                            upsert.paper_id, // Evidence source
+                            entity_id,
                             &canon_subject,
                             &fact.fact_type,
-                            Uuid::new_v4(),
+                            object_id,
                             &fact.object,
                             entity.confidence,
                         ).await;
@@ -548,6 +583,82 @@ fn build_sections_from_abstract(paper: &crate::models::PaperMetadata) -> Vec<Doc
     }
 
     sections
+}
+
+fn map_ner_type(label: NerEntityType) -> DbEntityType {
+    match label {
+        NerEntityType::Gene => DbEntityType::Gene,
+        NerEntityType::Disease => DbEntityType::Disease,
+        NerEntityType::Chemical => DbEntityType::Chemical,
+        NerEntityType::Mutation => DbEntityType::Mutation,
+        NerEntityType::CancerType => DbEntityType::CancerType,
+        NerEntityType::Pathway => DbEntityType::Pathway,
+        NerEntityType::CellLine | NerEntityType::Other => DbEntityType::Disease,
+    }
+}
+
+fn infer_object_type(predicate: &str, object: &str) -> DbEntityType {
+    let p = predicate.to_lowercase();
+    if p == "has_mutation" || p.contains("mutation") {
+        return DbEntityType::Mutation;
+    }
+    let o = object.trim();
+    let oncotree_like = !o.is_empty() && o.len() <= 8 && o.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if oncotree_like {
+        return DbEntityType::CancerType;
+    }
+    let lc = o.to_lowercase();
+    if lc.contains("cancer")
+        || lc.contains("carcinoma")
+        || lc.contains("sarcoma")
+        || lc.contains("lymphoma")
+        || lc.contains("leukemia")
+        || lc.contains("tumor")
+    {
+        return DbEntityType::CancerType;
+    }
+    DbEntityType::Disease
+}
+
+fn canonical_key(entity_type: DbEntityType, name: &str) -> String {
+    let mut normalized = name.trim().to_uppercase();
+    normalized = normalized
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    while normalized.contains("__") {
+        normalized = normalized.replace("__", "_");
+    }
+    format!("{}:{}", entity_type, normalized.trim_matches('_'))
+}
+
+async fn resolve_or_create_entity(
+    repo: &EntityRepository,
+    cache: &mut HashMap<String, Uuid>,
+    entity_type: DbEntityType,
+    display_name: &str,
+) -> anyhow::Result<Uuid> {
+    let key = canonical_key(entity_type, display_name);
+    if let Some(id) = cache.get(&key) {
+        return Ok(*id);
+    }
+
+    let external_id = format!("FERRUMYX:{}", key);
+    if let Some(existing) = repo.find_by_external_id(&external_id).await?.into_iter().next() {
+        cache.insert(key, existing.id);
+        return Ok(existing.id);
+    }
+
+    let mut entity = DbEntity::new(
+        entity_type,
+        display_name.trim().to_string(),
+        external_id,
+        "ferrumyx".to_string(),
+    );
+    entity.canonical_name = Some(display_name.trim().to_string());
+    repo.insert(&entity).await?;
+    cache.insert(key, entity.id);
+    Ok(entity.id)
 }
 
 // ── Full-text PDF fetcher ─────────────────────────────────────────────────────
