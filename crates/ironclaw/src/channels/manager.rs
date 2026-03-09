@@ -14,7 +14,7 @@ use crate::error::ChannelError;
 /// Includes an injection channel so background tasks (e.g., job monitors) can
 /// push messages into the agent loop without being a full `Channel` impl.
 pub struct ChannelManager {
-    channels: Arc<RwLock<HashMap<String, Box<dyn Channel>>>>,
+    channels: Arc<RwLock<HashMap<String, Arc<dyn Channel>>>>,
     inject_tx: mpsc::Sender<IncomingMessage>,
     /// Taken once in `start_all()` and merged into the stream.
     inject_rx: tokio::sync::Mutex<Option<mpsc::Receiver<IncomingMessage>>>,
@@ -42,7 +42,10 @@ impl ChannelManager {
     /// Add a channel to the manager.
     pub async fn add(&self, channel: Box<dyn Channel>) {
         let name = channel.name().to_string();
-        self.channels.write().await.insert(name.clone(), channel);
+        self.channels
+            .write()
+            .await
+            .insert(name.clone(), Arc::from(channel));
         tracing::debug!("Added channel: {}", name);
     }
 
@@ -56,7 +59,10 @@ impl ChannelManager {
         let stream = channel.start().await?;
 
         // Register for respond/broadcast/send_status
-        self.channels.write().await.insert(name.clone(), channel);
+        self.channels
+            .write()
+            .await
+            .insert(name.clone(), Arc::from(channel));
 
         // Forward stream messages through inject_tx
         let tx = self.inject_tx.clone();
@@ -217,10 +223,118 @@ impl ChannelManager {
     pub async fn channel_names(&self) -> Vec<String> {
         self.channels.read().await.keys().cloned().collect()
     }
+
+    /// Get a channel by name.
+    pub async fn get_channel(&self, name: &str) -> Option<Arc<dyn Channel>> {
+        self.channels.read().await.get(name).cloned()
+    }
 }
 
 impl Default for ChannelManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channels::IncomingMessage;
+    use crate::testing::StubChannel;
+    use futures::StreamExt;
+
+    #[tokio::test]
+    async fn test_add_and_start_all() {
+        let manager = ChannelManager::new();
+        let (stub, sender) = StubChannel::new("test");
+
+        manager.add(Box::new(stub)).await;
+
+        let mut stream = manager.start_all().await.expect("start_all failed");
+
+        // Inject a message through the stub
+        sender
+            .send(IncomingMessage::new("test", "user1", "hello"))
+            .await
+            .expect("send failed");
+
+        // Should appear in the merged stream
+        let msg = stream.next().await.expect("stream ended");
+        assert_eq!(msg.content, "hello");
+        assert_eq!(msg.channel, "test");
+    }
+
+    #[tokio::test]
+    async fn test_respond_routes_to_correct_channel() {
+        let manager = ChannelManager::new();
+        let (stub, _sender) = StubChannel::new("alpha");
+
+        // Keep a reference for response inspection
+        let responses = stub.captured_responses_handle();
+        manager.add(Box::new(stub)).await;
+
+        let msg = IncomingMessage::new("alpha", "user1", "request");
+        manager
+            .respond(&msg, OutgoingResponse::text("reply"))
+            .await
+            .expect("respond failed");
+
+        // Verify the stub captured the response
+        let captured = responses.lock().expect("poisoned");
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].1.content, "reply");
+    }
+
+    #[tokio::test]
+    async fn test_respond_unknown_channel_errors() {
+        let manager = ChannelManager::new();
+        let msg = IncomingMessage::new("nonexistent", "user1", "test");
+        let result = manager.respond(&msg, OutgoingResponse::text("hi")).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_all() {
+        let manager = ChannelManager::new();
+        let (stub1, _) = StubChannel::new("healthy");
+        let (stub2, _) = StubChannel::new("sick");
+        stub2.set_healthy(false);
+
+        manager.add(Box::new(stub1)).await;
+        manager.add(Box::new(stub2)).await;
+
+        let results = manager.health_check_all().await;
+        assert!(results["healthy"].is_ok());
+        assert!(results["sick"].is_err());
+    }
+
+    #[tokio::test]
+    async fn test_start_all_no_channels_errors() {
+        let manager = ChannelManager::new();
+        let result = manager.start_all().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_injection_channel_merges() {
+        let manager = ChannelManager::new();
+        let (stub, _sender) = StubChannel::new("real");
+        manager.add(Box::new(stub)).await;
+
+        let mut stream = manager.start_all().await.expect("start_all failed");
+
+        // Use the injection channel (simulating background task)
+        let inject_tx = manager.inject_sender();
+        inject_tx
+            .send(IncomingMessage::new(
+                "injected",
+                "system",
+                "background alert",
+            ))
+            .await
+            .expect("inject failed");
+
+        let msg = stream.next().await.expect("stream ended");
+        assert_eq!(msg.content, "background alert");
     }
 }

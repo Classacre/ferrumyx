@@ -149,7 +149,7 @@ CREATE INDEX idx_leak_patterns_enabled ON leak_detection_patterns(enabled) WHERE
 
 -- Pre-populate with common API key patterns
 INSERT INTO leak_detection_patterns (name, pattern, severity, action) VALUES
-    -- OpenAI (sk-prefix followed by alphanumeric)
+    -- OpenAI (sk-proj-... or sk-... followed by alphanumeric)
     ('openai_api_key', 'sk-(?:proj-)?[a-zA-Z0-9]{20,}(?:T3BlbkFJ[a-zA-Z0-9_-]*)?', 'critical', 'block'),
 
     -- Anthropic (sk-ant-api followed by 90+ chars)

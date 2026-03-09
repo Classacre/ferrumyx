@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ironclaw::context::JobContext;
-use ironclaw::tools::{require_str, Tool, ToolError, ToolOutput};
+use ironclaw::tools::{Tool, ToolError, ToolOutput};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,6 +18,13 @@ impl IngestionTool {
     pub fn new(db: Arc<Database>) -> Self {
         Self { db }
     }
+}
+
+fn require_str<'a>(params: &'a serde_json::Value, name: &str) -> Result<&'a str, ToolError> {
+    params
+        .get(name)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::InvalidParameters(format!("missing '{}' parameter", name)))
 }
 
 #[async_trait]

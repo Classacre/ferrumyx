@@ -21,8 +21,8 @@ use crate::db::{
 };
 use crate::error::{DatabaseError, WorkspaceError};
 use crate::history::{
-    ConversationMessage, ConversationSummary, JobEventRecord, LlmCallRecord, SandboxJobRecord,
-    SandboxJobSummary, SettingRow, Store,
+    AgentJobRecord, AgentJobSummary, ConversationMessage, ConversationSummary, JobEventRecord,
+    LlmCallRecord, SandboxJobRecord, SandboxJobSummary, SettingRow, Store,
 };
 use crate::workspace::{
     MemoryChunk, MemoryDocument, Repository, SearchConfig, SearchResult, WorkspaceEntry,
@@ -113,6 +113,36 @@ impl ConversationStore for PgBackend {
     ) -> Result<Vec<ConversationSummary>, DatabaseError> {
         self.store
             .list_conversations_with_preview(user_id, channel, limit)
+            .await
+    }
+
+    async fn list_conversations_all_channels(
+        &self,
+        user_id: &str,
+        limit: i64,
+    ) -> Result<Vec<ConversationSummary>, DatabaseError> {
+        self.store
+            .list_conversations_all_channels(user_id, limit)
+            .await
+    }
+
+    async fn get_or_create_routine_conversation(
+        &self,
+        routine_id: Uuid,
+        routine_name: &str,
+        user_id: &str,
+    ) -> Result<Uuid, DatabaseError> {
+        self.store
+            .get_or_create_routine_conversation(routine_id, routine_name, user_id)
+            .await
+    }
+
+    async fn get_or_create_heartbeat_conversation(
+        &self,
+        user_id: &str,
+    ) -> Result<Uuid, DatabaseError> {
+        self.store
+            .get_or_create_heartbeat_conversation(user_id)
             .await
     }
 
@@ -213,6 +243,21 @@ impl JobStore for PgBackend {
 
     async fn get_stuck_jobs(&self) -> Result<Vec<Uuid>, DatabaseError> {
         self.store.get_stuck_jobs().await
+    }
+
+    async fn list_agent_jobs(&self) -> Result<Vec<AgentJobRecord>, DatabaseError> {
+        self.store.list_agent_jobs().await
+    }
+
+    async fn agent_job_summary(&self) -> Result<AgentJobSummary, DatabaseError> {
+        self.store.agent_job_summary().await
+    }
+
+    async fn get_agent_job_failure_reason(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<String>, DatabaseError> {
+        self.store.get_agent_job_failure_reason(id).await
     }
 
     async fn save_action(&self, job_id: Uuid, action: &ActionRecord) -> Result<(), DatabaseError> {
@@ -371,6 +416,10 @@ impl RoutineStore for PgBackend {
 
     async fn list_routines(&self, user_id: &str) -> Result<Vec<Routine>, DatabaseError> {
         self.store.list_routines(user_id).await
+    }
+
+    async fn list_all_routines(&self) -> Result<Vec<Routine>, DatabaseError> {
+        self.store.list_all_routines().await
     }
 
     async fn list_event_routines(&self) -> Result<Vec<Routine>, DatabaseError> {

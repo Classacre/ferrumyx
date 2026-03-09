@@ -2,10 +2,8 @@
 
 use chrono::{DateTime, Utc};
 #[cfg(feature = "postgres")]
-use deadpool_postgres::{Config, Pool, Runtime};
+use deadpool_postgres::{Config, Pool};
 use rust_decimal::Decimal;
-#[cfg(feature = "postgres")]
-use tokio_postgres::NoTls;
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
@@ -50,8 +48,7 @@ impl Store {
             ..Default::default()
         });
 
-        let pool = cfg
-            .create_pool(Some(Runtime::Tokio1), NoTls)
+        let pool = crate::db::tls::create_pool(&cfg, config.ssl_mode)
             .map_err(|e| DatabaseError::Pool(e.to_string()))?;
 
         // Test connection
@@ -240,6 +237,13 @@ impl Store {
                     total_tokens_used: 0,
                     max_tokens: 0,
                     extra_env: std::sync::Arc::new(std::collections::HashMap::new()),
+                    http_interceptor: None,
+                    tool_output_stash: std::sync::Arc::new(tokio::sync::RwLock::new(
+                        std::collections::HashMap::new(),
+                    )),
+                    // TODO(#661): persist user_timezone in agent_jobs table so
+                    // background/routine jobs retain the session's timezone context.
+                    user_timezone: "UTC".to_string(),
                 }))
             }
             None => Ok(None),
@@ -485,6 +489,45 @@ pub struct SandboxJobSummary {
     pub completed: usize,
     pub failed: usize,
     pub interrupted: usize,
+}
+
+/// Lightweight record for agent (non-sandbox) jobs, used by the web Jobs tab.
+#[derive(Debug, Clone)]
+pub struct AgentJobRecord {
+    pub id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub user_id: String,
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub failure_reason: Option<String>,
+}
+
+/// Summary counts for agent (non-sandbox) jobs.
+#[derive(Debug, Clone, Default)]
+pub struct AgentJobSummary {
+    pub total: usize,
+    pub pending: usize,
+    pub in_progress: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub stuck: usize,
+}
+
+impl AgentJobSummary {
+    /// Accumulate a status/count pair into the summary buckets.
+    pub fn add_count(&mut self, status: &str, count: usize) {
+        self.total += count;
+        match status {
+            "pending" => self.pending += count,
+            "in_progress" => self.in_progress += count,
+            "completed" | "submitted" | "accepted" => self.completed += count,
+            "failed" | "cancelled" => self.failed += count,
+            "stuck" => self.stuck += count,
+            _ => {}
+        }
+    }
 }
 
 #[cfg(feature = "postgres")]
@@ -754,6 +797,70 @@ impl Store {
         }
         Ok(summary)
     }
+
+    /// List all agent (non-sandbox) jobs, most recent first.
+    pub async fn list_agent_jobs(&self) -> Result<Vec<AgentJobRecord>, DatabaseError> {
+        let conn = self.conn().await?;
+        let rows = conn
+            .query(
+                r#"
+                SELECT id, title, status, user_id, failure_reason,
+                       created_at, started_at, completed_at
+                FROM agent_jobs WHERE source = 'direct'
+                ORDER BY created_at DESC
+                "#,
+                &[],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|r| AgentJobRecord {
+                id: r.get("id"),
+                title: r.get("title"),
+                status: r.get("status"),
+                user_id: r.get::<_, Option<String>>("user_id").unwrap_or_default(),
+                created_at: r.get("created_at"),
+                started_at: r.get("started_at"),
+                completed_at: r.get("completed_at"),
+                failure_reason: r.get("failure_reason"),
+            })
+            .collect())
+    }
+
+    /// Get the failure reason for a single agent job.
+    pub async fn get_agent_job_failure_reason(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<String>, DatabaseError> {
+        let conn = self.conn().await?;
+        let row = conn
+            .query_opt(
+                "SELECT failure_reason FROM agent_jobs WHERE id = $1",
+                &[&id],
+            )
+            .await?;
+        Ok(row.and_then(|r| r.get::<_, Option<String>>("failure_reason")))
+    }
+
+    /// Summary counts for agent (non-sandbox) jobs.
+    pub async fn agent_job_summary(&self) -> Result<AgentJobSummary, DatabaseError> {
+        let conn = self.conn().await?;
+        let rows = conn
+            .query(
+                "SELECT status, COUNT(*) as cnt FROM agent_jobs WHERE source = 'direct' GROUP BY status",
+                &[],
+            )
+            .await?;
+
+        let mut summary = AgentJobSummary::default();
+        for row in &rows {
+            let status: String = row.get("status");
+            let count: i64 = row.get("cnt");
+            summary.add_count(&status, count as usize);
+        }
+        Ok(summary)
+    }
 }
 
 // ==================== Job Events ====================
@@ -959,6 +1066,15 @@ impl Store {
                 "SELECT * FROM routines WHERE user_id = $1 ORDER BY name",
                 &[&user_id],
             )
+            .await?;
+        rows.iter().map(row_to_routine).collect()
+    }
+
+    /// List all routines across all users.
+    pub async fn list_all_routines(&self) -> Result<Vec<Routine>, DatabaseError> {
+        let conn = self.conn().await?;
+        let rows = conn
+            .query("SELECT * FROM routines ORDER BY name", &[])
             .await?;
         rows.iter().map(row_to_routine).collect()
     }
@@ -1264,6 +1380,8 @@ pub struct ConversationSummary {
     pub last_activity: DateTime<Utc>,
     /// Thread type extracted from metadata (e.g. "assistant", "thread").
     pub thread_type: Option<String>,
+    /// Channel that owns this conversation (e.g. "gateway", "telegram", "routine").
+    pub channel: String,
 }
 
 /// A single message in a conversation.
@@ -1316,7 +1434,8 @@ impl Store {
                     c.started_at,
                     c.last_activity,
                     c.metadata,
-                    (SELECT COUNT(*) FROM conversation_messages m WHERE m.conversation_id = c.id) AS message_count,
+                    c.channel,
+                    (SELECT COUNT(*) FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user') AS message_count,
                     (SELECT LEFT(m2.content, 100)
                      FROM conversation_messages m2
                      WHERE m2.conversation_id = c.id AND m2.role = 'user'
@@ -1340,16 +1459,179 @@ impl Store {
                     .get("thread_type")
                     .and_then(|v| v.as_str())
                     .map(String::from);
+                let sql_title: Option<String> = r.get("title");
+                let title = sql_title.or_else(|| {
+                    metadata
+                        .get("routine_name")
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                });
                 ConversationSummary {
                     id: r.get("id"),
-                    title: r.get("title"),
+                    title,
                     message_count: r.get("message_count"),
                     started_at: r.get("started_at"),
                     last_activity: r.get("last_activity"),
                     thread_type,
+                    channel: r.get("channel"),
                 }
             })
             .collect())
+    }
+
+    /// List conversations across all channels with a title derived from the first user message.
+    pub async fn list_conversations_all_channels(
+        &self,
+        user_id: &str,
+        limit: i64,
+    ) -> Result<Vec<ConversationSummary>, DatabaseError> {
+        let conn = self.conn().await?;
+        let rows = conn
+            .query(
+                r#"
+                SELECT
+                    c.id,
+                    c.started_at,
+                    c.last_activity,
+                    c.metadata,
+                    c.channel,
+                    (SELECT COUNT(*) FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user') AS message_count,
+                    (SELECT LEFT(m2.content, 100)
+                     FROM conversation_messages m2
+                     WHERE m2.conversation_id = c.id AND m2.role = 'user'
+                     ORDER BY m2.created_at ASC
+                     LIMIT 1
+                    ) AS title
+                FROM conversations c
+                WHERE c.user_id = $1
+                ORDER BY c.last_activity DESC
+                LIMIT $2
+                "#,
+                &[&user_id, &limit],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let metadata: serde_json::Value = r.get("metadata");
+                let thread_type = metadata
+                    .get("thread_type")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                // For routine/heartbeat threads, derive title from metadata
+                // since they may have no user messages.
+                let sql_title: Option<String> = r.get("title");
+                let title = sql_title.or_else(|| {
+                    metadata
+                        .get("routine_name")
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                });
+                ConversationSummary {
+                    id: r.get("id"),
+                    title,
+                    message_count: r.get("message_count"),
+                    started_at: r.get("started_at"),
+                    last_activity: r.get("last_activity"),
+                    thread_type,
+                    channel: r.get("channel"),
+                }
+            })
+            .collect())
+    }
+
+    /// Get or create a persistent conversation for a routine.
+    ///
+    /// Looks for a conversation where `metadata->>'routine_id' = routine_id`.
+    /// Creates one if it doesn't exist. Uses INSERT ON CONFLICT to avoid
+    /// TOCTOU races under concurrent routine executions.
+    pub async fn get_or_create_routine_conversation(
+        &self,
+        routine_id: Uuid,
+        routine_name: &str,
+        user_id: &str,
+    ) -> Result<Uuid, DatabaseError> {
+        let conn = self.conn().await?;
+        let rid = routine_id.to_string();
+
+        // Attempt insert first; the partial unique index
+        // uq_conv_routine(user_id, (metadata->>'routine_id')) prevents duplicates.
+        let new_id = Uuid::new_v4();
+        let metadata = serde_json::json!({
+            "thread_type": "routine",
+            "routine_id": routine_id.to_string(),
+            "routine_name": routine_name,
+        });
+        conn.execute(
+            r#"
+            INSERT INTO conversations (id, channel, user_id, metadata)
+            VALUES ($1, 'routine', $2, $3)
+            ON CONFLICT (user_id, (metadata->>'routine_id'))
+                WHERE metadata->>'routine_id' IS NOT NULL
+                DO NOTHING
+            "#,
+            &[&new_id, &user_id, &metadata],
+        )
+        .await?;
+
+        // Select back — always returns the winner.
+        let row = conn
+            .query_one(
+                r#"
+                SELECT id FROM conversations
+                WHERE user_id = $1 AND metadata->>'routine_id' = $2
+                LIMIT 1
+                "#,
+                &[&user_id, &rid],
+            )
+            .await?;
+
+        Ok(row.get("id"))
+    }
+
+    /// Get or create the singleton heartbeat conversation for a user.
+    ///
+    /// Looks for a conversation where `metadata->>'thread_type' = 'heartbeat'`.
+    /// Creates one if it doesn't exist. Uses INSERT ON CONFLICT to avoid
+    /// TOCTOU races under concurrent heartbeat sends.
+    pub async fn get_or_create_heartbeat_conversation(
+        &self,
+        user_id: &str,
+    ) -> Result<Uuid, DatabaseError> {
+        let conn = self.conn().await?;
+
+        // Attempt insert; the partial unique index
+        // uq_conv_heartbeat(user_id) prevents duplicates.
+        let new_id = Uuid::new_v4();
+        let metadata = serde_json::json!({
+            "thread_type": "heartbeat",
+        });
+        conn.execute(
+            r#"
+            INSERT INTO conversations (id, channel, user_id, metadata)
+            VALUES ($1, 'heartbeat', $2, $3)
+            ON CONFLICT (user_id)
+                WHERE metadata->>'thread_type' = 'heartbeat'
+                DO NOTHING
+            "#,
+            &[&new_id, &user_id, &metadata],
+        )
+        .await?;
+
+        // Select back — always returns the winner.
+        let row = conn
+            .query_one(
+                r#"
+                SELECT id FROM conversations
+                WHERE user_id = $1 AND metadata->>'thread_type' = 'heartbeat'
+                LIMIT 1
+                "#,
+                &[&user_id],
+            )
+            .await?;
+
+        Ok(row.get("id"))
     }
 
     /// Get or create the singleton "assistant" conversation for a user+channel.
@@ -1813,5 +2095,42 @@ impl Store {
             .await?;
         let count: i64 = row.get("cnt");
         Ok(count > 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_conversation_summary_has_channel_field() {
+        // Regression: ConversationSummary must include a `channel` field
+        // so the gateway can distinguish thread origins.
+        let summary = ConversationSummary {
+            id: Uuid::nil(),
+            title: Some("Hello".to_string()),
+            message_count: 1,
+            started_at: Utc::now(),
+            last_activity: Utc::now(),
+            thread_type: Some("thread".to_string()),
+            channel: "telegram".to_string(),
+        };
+        assert_eq!(summary.channel, "telegram");
+    }
+
+    #[test]
+    fn test_conversation_summary_channel_various_values() {
+        for ch in ["gateway", "routine", "heartbeat", "telegram", "signal"] {
+            let summary = ConversationSummary {
+                id: Uuid::nil(),
+                title: None,
+                message_count: 0,
+                started_at: Utc::now(),
+                last_activity: Utc::now(),
+                thread_type: None,
+                channel: ch.to_string(),
+            };
+            assert_eq!(summary.channel, ch);
+        }
     }
 }

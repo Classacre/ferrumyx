@@ -2,7 +2,6 @@
 //! Entry point for the agent binary.
 
 use std::sync::Arc;
-use ironclaw::llm;
 
 mod config;
 mod tools;
@@ -136,6 +135,10 @@ async fn main() -> anyhow::Result<()> {
         skills_config: ironclaw::config::SkillsConfig::default(),
         hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
         cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
+        sse_tx: None,
+        http_interceptor: None,
+        transcription: None,
+        document_extraction: None,
     };
 
     let mut channels = ironclaw::channels::ChannelManager::new();
@@ -163,6 +166,7 @@ async fn main() -> anyhow::Result<()> {
         max_actions_per_hour: None,
         max_tool_iterations: 50,
         auto_approve_tools: true,
+        default_timezone: "UTC".to_string(),
     };
 
     let agent = ironclaw::agent::Agent::new(

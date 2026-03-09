@@ -73,6 +73,14 @@ pub struct AgentDeps {
     pub hooks: Arc<HookRegistry>,
     /// Cost enforcement guardrails (daily budget, hourly rate limits).
     pub cost_guard: Arc<crate::agent::cost_guard::CostGuard>,
+    /// SSE broadcast sender for live job event streaming to the web gateway.
+    pub sse_tx: Option<tokio::sync::broadcast::Sender<crate::channels::web::types::SseEvent>>,
+    /// HTTP interceptor for trace recording/replay.
+    pub http_interceptor: Option<Arc<dyn crate::llm::recording::HttpInterceptor>>,
+    /// Audio transcription middleware for voice messages.
+    pub transcription: Option<Arc<crate::transcription::TranscriptionMiddleware>>,
+    /// Document text extraction middleware for PDF, DOCX, PPTX, etc.
+    pub document_extraction: Option<Arc<crate::document_extraction::DocumentExtractionMiddleware>>,
 }
 
 /// The main agent that coordinates all components.
@@ -88,6 +96,9 @@ pub struct Agent {
     pub(super) heartbeat_config: Option<HeartbeatConfig>,
     pub(super) hygiene_config: Option<crate::config::HygieneConfig>,
     pub(super) routine_config: Option<RoutineConfig>,
+    /// Optional slot to expose the routine engine to the gateway for manual triggering.
+    pub(super) routine_engine_slot:
+        Option<Arc<tokio::sync::RwLock<Option<Arc<crate::agent::routine_engine::RoutineEngine>>>>>,
 }
 
 impl Agent {
@@ -111,7 +122,7 @@ impl Agent {
 
         let session_manager = session_manager.unwrap_or_else(|| Arc::new(SessionManager::new()));
 
-        let scheduler = Arc::new(Scheduler::new(
+        let mut scheduler = Scheduler::new(
             config.clone(),
             context_manager.clone(),
             deps.llm.clone(),
@@ -119,7 +130,14 @@ impl Agent {
             deps.tools.clone(),
             deps.store.clone(),
             deps.hooks.clone(),
-        ));
+        );
+        if let Some(ref tx) = deps.sse_tx {
+            scheduler.set_sse_sender(tx.clone());
+        }
+        if let Some(ref interceptor) = deps.http_interceptor {
+            scheduler.set_http_interceptor(Arc::clone(interceptor));
+        }
+        let scheduler = Arc::new(scheduler);
 
         Self {
             config,
@@ -133,10 +151,24 @@ impl Agent {
             heartbeat_config,
             hygiene_config,
             routine_config,
+            routine_engine_slot: None,
         }
     }
 
+    /// Set the routine engine slot for exposing the engine to the gateway.
+    pub fn set_routine_engine_slot(
+        &mut self,
+        slot: Arc<tokio::sync::RwLock<Option<Arc<crate::agent::routine_engine::RoutineEngine>>>>,
+    ) {
+        self.routine_engine_slot = Some(slot);
+    }
+
     // Convenience accessors
+
+    /// Get the scheduler (for external wiring, e.g. CreateJobTool).
+    pub fn scheduler(&self) -> Arc<Scheduler> {
+        Arc::clone(&self.scheduler)
+    }
 
     pub(super) fn store(&self) -> Option<&Arc<dyn Database>> {
         self.deps.store.as_ref()
@@ -322,8 +354,19 @@ impl Agent {
         let heartbeat_handle = if let Some(ref hb_config) = self.heartbeat_config {
             if hb_config.enabled {
                 if let Some(workspace) = self.workspace() {
-                    let config = AgentHeartbeatConfig::default()
+                    let mut config = AgentHeartbeatConfig::default()
                         .with_interval(std::time::Duration::from_secs(hb_config.interval_secs));
+                    config.quiet_hours_start = hb_config.quiet_hours_start;
+                    config.quiet_hours_end = hb_config.quiet_hours_end;
+                    config.timezone = hb_config
+                        .timezone
+                        .clone()
+                        .or_else(|| Some(self.config.default_timezone.clone()));
+                    if let (Some(user), Some(channel)) =
+                        (&hb_config.notify_user, &hb_config.notify_channel)
+                    {
+                        config = config.with_notify(user, channel);
+                    }
 
                     // Set up notification channel
                     let (notify_tx, mut notify_rx) =
@@ -374,8 +417,8 @@ impl Agent {
                         hygiene,
                         workspace.clone(),
                         self.cheap_llm().clone(),
-                        self.safety().clone(),
                         Some(notify_tx),
+                        self.store().map(Arc::clone),
                     ))
                 } else {
                     tracing::warn!("Heartbeat enabled but no workspace available");
@@ -413,7 +456,7 @@ impl Agent {
                     // Load initial event cache
                     engine.refresh_event_cache().await;
 
-                    // Spawn notification forwarder
+                    // Spawn notification forwarder (mirrors heartbeat pattern)
                     let channels = self.channels.clone();
                     tokio::spawn(async move {
                         while let Some(response) = notify_rx.recv().await {
@@ -423,14 +466,33 @@ impl Agent {
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("default")
                                 .to_string();
-                            let results = channels.broadcast_all(&user, response).await;
-                            for (ch, result) in results {
-                                if let Err(e) = result {
-                                    tracing::warn!(
-                                        "Failed to broadcast routine notification to {}: {}",
-                                        ch,
-                                        e
-                                    );
+                            let notify_channel = response
+                                .metadata
+                                .get("notify_channel")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+
+                            // Try the configured channel first, fall back to
+                            // broadcasting on all channels.
+                            let targeted_ok = if let Some(ref channel) = notify_channel {
+                                channels
+                                    .broadcast(channel, &user, response.clone())
+                                    .await
+                                    .is_ok()
+                            } else {
+                                false
+                            };
+
+                            if !targeted_ok {
+                                let results = channels.broadcast_all(&user, response).await;
+                                for (ch, result) in results {
+                                    if let Err(e) = result {
+                                        tracing::warn!(
+                                            "Failed to broadcast routine notification to {}: {}",
+                                            ch,
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -446,6 +508,11 @@ impl Agent {
                     let engine_ref = Arc::clone(&engine);
                     // SAFETY: self is consumed by run(), we can smuggle the engine in
                     // via a local to use in the message loop below.
+
+                    // Expose engine to gateway for manual triggering
+                    if let Some(ref slot) = self.routine_engine_slot {
+                        *slot.write().await = Some(Arc::clone(&engine));
+                    }
 
                     tracing::info!(
                         "Routines enabled: cron ticker every {}s, max {} concurrent",
@@ -488,6 +555,20 @@ impl Agent {
                     }
                 }
             };
+
+            // Apply transcription middleware to audio attachments
+            let mut message = message;
+            if let Some(ref transcription) = self.deps.transcription {
+                transcription.process(&mut message).await;
+            }
+
+            // Apply document extraction middleware to document attachments
+            if let Some(ref doc_extraction) = self.deps.document_extraction {
+                doc_extraction.process(&mut message).await;
+            }
+
+            // Store successfully extracted document text in workspace for indexing
+            self.store_extracted_documents(&message).await;
 
             match self.handle_message(&message).await {
                 Ok(Some(response)) if !response.is_empty() => {
@@ -587,9 +668,93 @@ impl Agent {
         Ok(())
     }
 
+    /// Store extracted document text in workspace memory for future search/recall.
+    async fn store_extracted_documents(&self, message: &IncomingMessage) {
+        let workspace = match self.workspace() {
+            Some(ws) => ws,
+            None => return,
+        };
+
+        for attachment in &message.attachments {
+            if attachment.kind != crate::channels::AttachmentKind::Document {
+                continue;
+            }
+            let text = match &attachment.extracted_text {
+                Some(t) if !t.starts_with('[') => t, // skip error messages like "[Failed to..."
+                _ => continue,
+            };
+
+            // Sanitize filename: strip path separators to prevent directory traversal
+            let raw_name = attachment.filename.as_deref().unwrap_or("unnamed_document");
+            let filename: String = raw_name
+                .chars()
+                .map(|c| {
+                    if c == '/' || c == '\\' || c == '\0' {
+                        '_'
+                    } else {
+                        c
+                    }
+                })
+                .collect();
+            let filename = filename.trim_start_matches('.');
+            let filename = if filename.is_empty() {
+                "unnamed_document"
+            } else {
+                filename
+            };
+            let date = chrono::Utc::now().format("%Y-%m-%d");
+            let path = format!("documents/{date}/{filename}");
+
+            let header = format!(
+                "# {filename}\n\n\
+                 > Uploaded by **{}** via **{}** on {date}\n\
+                 > MIME: {} | Size: {} bytes\n\n---\n\n",
+                message.user_id,
+                message.channel,
+                attachment.mime_type,
+                attachment.size_bytes.unwrap_or(0),
+            );
+            let content = format!("{header}{text}");
+
+            match workspace.write(&path, &content).await {
+                Ok(_) => {
+                    tracing::info!(
+                        path = %path,
+                        text_len = text.len(),
+                        "Stored extracted document in workspace memory"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        path = %path,
+                        error = %e,
+                        "Failed to store extracted document in workspace"
+                    );
+                }
+            }
+        }
+    }
+
     async fn handle_message(&self, message: &IncomingMessage) -> Result<Option<String>, Error> {
+        // Set message tool context for this turn (current channel and target)
+        // For Signal, use signal_target from metadata (group:ID or phone number),
+        // otherwise fall back to user_id
+        let target = message
+            .metadata
+            .get("signal_target")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| message.user_id.clone());
+        self.tools()
+            .set_message_tool_context(Some(message.channel.clone()), Some(target))
+            .await;
+
         // Parse submission type first
         let mut submission = SubmissionParser::parse(&message.content);
+        tracing::debug!(
+            "[agent_loop] Parsed submission: {:?}",
+            std::any::type_name_of_val(&submission)
+        );
 
         // Hook: BeforeInbound — allow hooks to modify or reject user input
         if let Submission::UserInput { ref content } = submission {
@@ -674,7 +839,14 @@ impl Agent {
                     .await
             }
             Submission::SystemCommand { command, args } => {
-                self.handle_system_command(&command, &args).await
+                tracing::debug!(
+                    "[agent_loop] SystemCommand: command={}, channel={}",
+                    command,
+                    message.channel
+                );
+                // Authorization checks (including restart channel check) are enforced in handle_system_command
+                self.handle_system_command(&command, &args, &message.channel)
+                    .await
             }
             Submission::Undo => self.process_undo(session, thread_id).await,
             Submission::Redo => self.process_redo(session, thread_id).await,
@@ -685,6 +857,13 @@ impl Agent {
             Submission::Heartbeat => self.process_heartbeat().await,
             Submission::Summarize => self.process_summarize(session, thread_id).await,
             Submission::Suggest => self.process_suggest(session, thread_id).await,
+            Submission::JobStatus { job_id } => {
+                self.process_job_status(&message.user_id, job_id.as_deref())
+                    .await
+            }
+            Submission::JobCancel { job_id } => {
+                self.process_job_cancel(&message.user_id, &job_id).await
+            }
             Submission::Quit => return Ok(None),
             Submission::SwitchThread { thread_id: target } => {
                 self.process_switch_thread(message, target).await

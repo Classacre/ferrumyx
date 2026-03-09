@@ -24,17 +24,46 @@ pub async fn extensions_list_handler(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let pairing_store = crate::pairing::PairingStore::new();
     let extensions = installed
         .into_iter()
-        .map(|ext| ExtensionInfo {
-            name: ext.name,
-            kind: ext.kind.to_string(),
-            description: ext.description,
-            url: ext.url,
-            authenticated: ext.authenticated,
-            active: ext.active,
-            tools: ext.tools,
-            needs_setup: ext.needs_setup,
+        .map(|ext| {
+            let activation_status = if ext.kind == crate::extensions::ExtensionKind::WasmChannel {
+                Some(if ext.activation_error.is_some() {
+                    "failed".to_string()
+                } else if !ext.authenticated {
+                    "installed".to_string()
+                } else if ext.active {
+                    let has_paired = pairing_store
+                        .read_allow_from(&ext.name)
+                        .map(|list| !list.is_empty())
+                        .unwrap_or(false);
+                    if has_paired {
+                        "active".to_string()
+                    } else {
+                        "pairing".to_string()
+                    }
+                } else {
+                    "configured".to_string()
+                })
+            } else {
+                None
+            };
+            ExtensionInfo {
+                name: ext.name,
+                display_name: ext.display_name,
+                kind: ext.kind.to_string(),
+                description: ext.description,
+                url: ext.url,
+                authenticated: ext.authenticated,
+                active: ext.active,
+                tools: ext.tools,
+                needs_setup: ext.needs_setup,
+                has_auth: ext.has_auth,
+                activation_status,
+                activation_error: ext.activation_error,
+                version: ext.version,
+            }
         })
         .collect();
 
@@ -96,7 +125,11 @@ pub async fn extensions_activate_handler(
     ))?;
 
     match ext_mgr.activate(&name).await {
-        Ok(result) => Ok(Json(ActionResponse::ok(result.message))),
+        Ok(result) => {
+            // Activation just loads the WASM module. Auth (OAuth/manual) is
+            // triggered separately via save_setup_secrets or the auth endpoint.
+            Ok(Json(ActionResponse::ok(result.message)))
+        }
         Err(activate_err) => {
             let err_str = activate_err.to_string();
             let needs_auth = err_str.contains("authentication")
@@ -109,7 +142,7 @@ pub async fn extensions_activate_handler(
 
             // Activation failed due to auth; try authenticating first.
             match ext_mgr.auth(&name, None).await {
-                Ok(auth_result) if auth_result.status == "authenticated" => {
+                Ok(auth_result) if auth_result.is_authenticated() => {
                     // Auth succeeded, retry activation.
                     match ext_mgr.activate(&name).await {
                         Ok(result) => Ok(Json(ActionResponse::ok(result.message))),
@@ -120,13 +153,13 @@ pub async fn extensions_activate_handler(
                     // Auth in progress (OAuth URL or awaiting manual token).
                     let mut resp = ActionResponse::fail(
                         auth_result
-                            .instructions
-                            .clone()
+                            .instructions()
+                            .map(String::from)
                             .unwrap_or_else(|| format!("'{}' requires authentication.", name)),
                     );
-                    resp.auth_url = auth_result.auth_url;
-                    resp.awaiting_token = Some(auth_result.awaiting_token);
-                    resp.instructions = auth_result.instructions;
+                    resp.auth_url = auth_result.auth_url().map(String::from);
+                    resp.awaiting_token = Some(auth_result.is_awaiting_token());
+                    resp.instructions = auth_result.instructions().map(String::from);
                     Ok(Json(resp))
                 }
                 Err(auth_err) => Ok(Json(ActionResponse::fail(format!(
