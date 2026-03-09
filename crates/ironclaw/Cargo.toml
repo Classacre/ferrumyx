@@ -155,7 +155,7 @@ pretty_assertions = "1"
 tempfile = "3"
 
 [features]
-default = ["postgres", "libsql", "html-to-markdown"]
+default = ["postgres", "html-to-markdown"]
 postgres = [
     "dep:deadpool-postgres",
     "dep:tokio-postgres",

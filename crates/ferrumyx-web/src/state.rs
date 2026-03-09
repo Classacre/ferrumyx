@@ -48,8 +48,9 @@ impl AppState {
         
         // Connect to LanceDB (embedded, no external server needed)
         let db = Database::open(&data_dir).await?;
+        db.initialize().await?;
         
-        tracing::info!("Connected to LanceDB at: {}", data_dir);
+        tracing::info!("Connected to LanceDB at: {} and initialized tables", data_dir);
         
         let (event_tx, _) = broadcast::channel(256);
         Ok(Self { db: Arc::new(db), event_tx })

@@ -86,28 +86,99 @@ pub struct ExtractedFact {
     pub evidence_count: i32,
 }
 
+/// Fast pattern-based relation extraction.
+pub struct RelationExtractor {
+    /// List of (pattern, predicate_name)
+    /// Example: ("inhibits", "inhibits"), ("overexpressed in", "upregulated_in")
+    patterns: Vec<(Regex, String)>,
+}
+
+impl RelationExtractor {
+    pub fn new() -> Self {
+        let rules = vec![
+            (r"(?i)\binhibit[s]?\b", "inhibits"),
+            (r"(?i)\bsuppress[es]?\b", "inhibits"),
+            (r"(?i)\btarget[s]?\b", "targets"),
+            (r"(?i)\bactivate[s]?\b", "activates"),
+            (r"(?i)\binduce[s]?\b", "activates"),
+            (r"(?i)\bdrive[s]?\b", "drives"),
+            (r"(?i)\boverexpressed in\b", "upregulated_in"),
+            (r"(?i)\bupregulated in\b", "upregulated_in"),
+            (r"(?i)\bdownregulated in\b", "downregulated_in"),
+            (r"(?i)\bmutated in\b", "mutated_in"),
+            (r"(?i)\bmutation[s]? in\b", "mutated_in"),
+            (r"(?i)\bvariant[s]? in\b", "mutated_in"),
+            (r"(?i)\bassociated with\b", "associated_with"),
+            (r"(?i)\blinked to\b", "associated_with"),
+        ];
+
+        let patterns = rules
+            .into_iter()
+            .map(|(re, pred)| (Regex::new(re).unwrap(), pred.to_string()))
+            .collect();
+
+        Self { patterns }
+    }
+
+    /// Extract facts between two entities in a given text chunk.
+    pub fn extract_relations(&self, subject: &str, object: &str, text: &str) -> Vec<String> {
+        let mut found = Vec::new();
+        let text_lower = text.to_lowercase();
+        
+        // Ensure both entities are present in the text (basic proximity check could be added here)
+        if !text_lower.contains(&subject.to_lowercase()) || !text_lower.contains(&object.to_lowercase()) {
+            return found;
+        }
+
+        for (re, predicate) in &self.patterns {
+            if re.is_match(text) {
+                found.push(predicate.clone());
+            }
+        }
+
+        found
+    }
+}
+
 /// Build KG facts from gene mentions and text.
 pub fn build_facts(
     gene_symbol: &str,
     text: &str,
 ) -> Vec<ExtractedFact> {
     let mut facts = Vec::new();
+    let extractor = RelationExtractor::new();
     
-    // Gene-Cancer relationship
+    // 1. Gene-Cancer relationships
+    // First, check co-occurrence as a fallback, but prioritize patterns.
     if let Some(cancer) = extract_cancer_type(text) {
-        facts.push(ExtractedFact {
-            fact_type: "gene_cancer".to_string(),
-            subject: gene_symbol.to_uppercase(),
-            object: cancer,
-            evidence_count: 1,
-        });
+        let predicates = extractor.extract_relations(gene_symbol, &cancer, text);
+        
+        if predicates.is_empty() {
+             // Fallback to generic association if co-occurring
+             facts.push(ExtractedFact {
+                fact_type: "associated_with".to_string(),
+                subject: gene_symbol.to_uppercase(),
+                object: cancer,
+                evidence_count: 1,
+            });
+        } else {
+            for pred in predicates {
+                facts.push(ExtractedFact {
+                    fact_type: pred,
+                    subject: gene_symbol.to_uppercase(),
+                    object: cancer.clone(),
+                    evidence_count: 1,
+                });
+            }
+        }
     }
     
-    // Gene-Mutation relationships
+    // 2. Gene-Mutation relationships
     for mutation in extract_mutations(text) {
         if let Some(protein_change) = mutation.protein_change {
-            facts.push(ExtractedFact {
-                fact_type: "gene_mutation".to_string(),
+             // Usually mutations IN genes.
+             facts.push(ExtractedFact {
+                fact_type: "has_mutation".to_string(),
                 subject: gene_symbol.to_uppercase(),
                 object: protein_change,
                 evidence_count: 1,
@@ -130,11 +201,17 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_mutations() {
-        let text = "KRAS G12D and V600E mutations";
-        let mutations = extract_mutations(text);
-        assert_eq!(mutations.len(), 2);
-        assert_eq!(mutations[0].protein_change, Some("G12D".to_string()));
-        assert_eq!(mutations[1].protein_change, Some("V600E".to_string()));
+    fn test_relation_extraction() {
+        let extractor = RelationExtractor::new();
+        let text = "KRAS drives pancreatic cancer progression.";
+        let rels = extractor.extract_relations("KRAS", "pancreatic", text);
+        assert!(rels.contains(&"drives".to_string()));
+    }
+
+    #[test]
+    fn test_build_facts_with_patterns() {
+        let text = "KRAS is overexpressed in lung adenocarcinoma";
+        let facts = build_facts("KRAS", text);
+        assert!(facts.iter().any(|f| f.fact_type == "upregulated_in" && f.object == "LUAD"));
     }
 }

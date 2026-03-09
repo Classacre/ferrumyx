@@ -48,7 +48,7 @@ pub async fn ner_extract(
     State(_state): State<SharedState>,
     Form(form): Form<NerForm>,
 ) -> Html<String> {
-    let ner = TrieNer::with_embedded_subset();
+    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
     let extracted = ner.extract(&form.text);
     
     let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
@@ -69,7 +69,7 @@ pub async fn ner_extract(
 
 /// GET /api/ner/stats — Get NER database stats
 pub async fn api_ner_stats() -> impl IntoResponse {
-    let ner = TrieNer::with_embedded_subset();
+    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
     let stats = ner.stats();
     
     Json(NerStats {
@@ -84,7 +84,7 @@ pub async fn api_ner_stats() -> impl IntoResponse {
 pub async fn api_ner_extract(
     Json(payload): Json<NerForm>,
 ) -> impl IntoResponse {
-    let ner = TrieNer::with_embedded_subset();
+    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
     let extracted = ner.extract(&payload.text);
     
     let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
@@ -102,7 +102,7 @@ pub async fn api_ner_extract(
 }
 
 fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
-    let ner = TrieNer::with_embedded_subset();
+    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
     let stats = ner.stats();
     
     let entity_html = result.as_ref().map(|r| {

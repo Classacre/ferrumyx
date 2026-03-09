@@ -25,8 +25,14 @@ pub struct IngestionForm {
     pub mutation: Option<String>,
     pub cancer: String,
     pub max_results: Option<usize>,
-    /// Comma-separated source list: "pubmed,europepmc"
-    pub sources: Option<String>,
+    /// Sources checked in form
+    pub src_pubmed: Option<String>,
+    pub src_europepmc: Option<String>,
+    pub src_biorxiv: Option<String>,
+    pub src_medrxiv: Option<String>,
+    pub src_clinicaltrials: Option<String>,
+    pub src_crossref: Option<String>,
+    pub src_semanticscholar: Option<String>,
     /// Optional embedding backend: "openai" | "gemini" | "biomedbert" | "" (skip)
     pub embed_backend: Option<String>,
     pub embed_api_key: Option<String>,
@@ -46,7 +52,16 @@ pub async fn ingestion_run(
     Form(form): Form<IngestionForm>,
 ) -> Html<String> {
     // Parse source list from the multi-select
-    let sources = parse_sources(form.sources.as_deref().unwrap_or("pubmed"));
+    let mut sources = Vec::new();
+    if form.src_pubmed.is_some() { sources.push(IngestionSourceSpec::PubMed); }
+    if form.src_europepmc.is_some() { sources.push(IngestionSourceSpec::EuropePmc); }
+    if form.src_biorxiv.is_some() { sources.push(IngestionSourceSpec::BioRxiv); }
+    if form.src_medrxiv.is_some() { sources.push(IngestionSourceSpec::MedRxiv); }
+    if form.src_clinicaltrials.is_some() { sources.push(IngestionSourceSpec::ClinicalTrials); }
+    if form.src_crossref.is_some() { sources.push(IngestionSourceSpec::CrossRef); }
+    if form.src_semanticscholar.is_some() { sources.push(IngestionSourceSpec::SemanticScholar); }
+    
+    if sources.is_empty() { sources.push(IngestionSourceSpec::PubMed); }
 
     let job = IngestionJob {
         gene:           form.gene.clone(),
@@ -344,8 +359,19 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                         <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
                             <input type="checkbox" name="src_biorxiv" id="src_biorxiv"> <span style="font-weight:500">bioRxiv</span>
                         </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                            <input type="checkbox" name="src_medrxiv" id="src_medrxiv"> <span style="font-weight:500">medRxiv</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                            <input type="checkbox" name="src_clinicaltrials" id="src_clinicaltrials"> <span style="font-weight:500">ClinicalTrials</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                            <input type="checkbox" name="src_crossref" id="src_crossref"> <span style="font-weight:500">CrossRef</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-hover); padding:0.5rem 1rem; border-radius:8px; cursor:pointer border:1px solid var(--border-glass)">
+                            <input type="checkbox" name="src_semanticscholar" id="src_semanticscholar"> <span style="font-weight:500">Semantic Scholar</span>
+                        </label>
                     </div>
-                    <input type="hidden" name="sources" id="sources_hidden" value="pubmed,europepmc">
                 </div>
                 <div class="mt-2">
                     <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">

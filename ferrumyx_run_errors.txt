@@ -1,0 +1,576 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   D:\AI\Ferrumyx\crates\ironclaw\Cargo.toml
+workspace: D:\AI\Ferrumyx\Cargo.toml
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:683:9
+    |
+683 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:684:9
+    |
+684 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:754:9
+    |
+754 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:756:9
+    |
+756 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:811:9
+    |
+811 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:812:9
+    |
+812 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:814:9
+    |
+814 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:865:9
+    |
+865 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:866:9
+    |
+866 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:867:9
+    |
+867 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:868:9
+    |
+868 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:931:9
+    |
+931 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:932:9
+    |
+932 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:933:9
+    |
+933 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:934:9
+    |
+934 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:995:9
+    |
+995 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:996:9
+    |
+996 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:998:9
+    |
+998 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1061:9
+     |
+1061 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1062:9
+     |
+1062 | ...et get_opt_i32 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1117:9
+     |
+1117 | ...et get_bool = ...
+     |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1118:9
+     |
+1118 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1180:9
+     |
+1180 | ...et get_bool = ...
+     |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1181:9
+     |
+1181 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1182:9
+     |
+1182 | ...et get_opt_i32 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: `ferrumyx-db` (lib) generated 25 warnings (run `cargo fix --lib -p ferrumyx-db` to apply 25 suggestions)
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\scoring.rs:5:5
+  |
+5 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `info` and `warn`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:6:15
+  |
+6 | ...::{info, warn};
+  |       ^^^^  ^^^^
+
+warning: unused import: `std::path::PathBuf`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:4:5
+  |
+4 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:5:14
+  |
+5 | ...::{Context, R...
+  |       ^^^^^^^
+
+warning: unused import: `HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_db.rs:3:24
+  |
+3 | ...::{HashMap, H...
+  |       ^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:4:5
+  |
+4 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `tracing::info`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:5:5
+  |
+5 | use tracing::info;
+  |     ^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:6:5
+  |
+6 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-kg\src\ner\trie_ner.rs:25:13
+   |
+25 | ...et mut patterns = ...
+   |       ----^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-kg\src\ner\trie_ner.rs:26:13
+   |
+26 | ...et mut pattern_info = ...
+   |       ----^^^^^^^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: `ferrumyx-kg` (lib) generated 12 warnings (run `cargo fix --lib -p ferrumyx-kg` to apply 12 suggestions)
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:12:34
+   |
+12 | ...t, warn};
+   |       ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:16:28
+   |
+16 | ...o, warn};
+   |       ^^^^
+
+warning: unused import: `tokenizers::models::wordpiece::WordPieceBuilder`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:11:5
+   |
+11 | use ...eceBuilder;
+   |     ...^^^^^^^^^^
+
+warning: unused import: `debug`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:12:15
+   |
+12 | ...::{debug, i...
+   |       ^^^^^
+
+warning: unexpected `cfg` condition value: `cuda`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:75:15
+   |
+75 | ...fg(feature = "cuda")] ...
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `python-embed`, and `rust-embed`
+   = help: consider adding `cuda` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `metal`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:76:15
+   |
+76 | ...fg(feature = "metal")] ...
+   |       ^^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `python-embed`, and `rust-embed`
+   = help: consider adding `metal` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\biorxiv.rs:69:13
+   |
+69 | ...et mut papers: V...
+   |       ----^^^^^^
+   |       |
+   |       help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:28:13
+   |
+28 | ...et mut client = ...
+   |       ----^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: unused variable: `total_samples`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:160:13
+    |
+160 | ...et total_samples: u...
+    |       ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_samples`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `gene_symbol`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:44
+    |
+168 | ...f, gene_symbol: &...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_gene_symbol`
+
+warning: unused variable: `protein_change`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:63
+    |
+168 | ...r, protein_change: &...
+    |       ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_protein_change`
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\scihub.rs:30:13
+   |
+30 | ...et mut client = ...
+   |       ----^^^^^^
+   |       |
+   |       help: remove this `mut`
+
+warning: constant `USER_AGENT` is never used
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:20:7
+   |
+20 | const USER_AGENT:  ...
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `DEPMAP_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:26:7
+   |
+26 | const DEPMAP_API_URL: &...
+   |       ^^^^^^^^^^^^^^
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:41:5
+   |
+40 | pub struct DepMapClient {
+   |            ------------ fields in this struct
+41 |     client: Client,
+   |     ^^^^^^
+42 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+warning: field `source_files` is never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:44:5
+   |
+34 | pub struct DepMapCache {
+   |            ----------- field in this struct
+...
+44 |     source_files: Vec<Pat...
+   |     ^^^^^^^^^^^^
+   |
+   = note: `DepMapCache` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `COSMIC_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:29:7
+   |
+29 | const COSMIC_API_URL: &...
+   |       ^^^^^^^^^^^^^^
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:89:5
+   |
+88 | pub struct CosmicClient {
+   |            ------------ fields in this struct
+89 |     client: Client,
+   |     ^^^^^^
+90 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+warning: `ferrumyx-ingestion` (lib) generated 18 warnings (run `cargo fix --lib -p ferrumyx-ingestion` to apply 10 suggestions)
+warning: unused import: `debug`
+  --> crates\ferrumyx-ranker\src\providers\depmap.rs:11:21
+   |
+11 | ...o, debug};
+   |       ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `TargetScoreResult`
+  --> crates\ferrumyx-ranker\src\lib.rs:16:72
+   |
+16 | ...s, TargetScoreResult};
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: `ferrumyx-ranker` (lib) generated 2 warnings (run `cargo fix --lib -p ferrumyx-ranker` to apply 2 suggestions)
+warning: unused import: `async_trait::async_trait`
+ --> crates\ferrumyx-molecules\src\pdb.rs:4:5
+  |
+4 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::time::Duration`
+ --> crates\ferrumyx-molecules\src\pdb.rs:7:5
+  |
+7 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `async_trait::async_trait`
+ --> crates\ferrumyx-molecules\src\ligand.rs:6:5
+  |
+6 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-molecules\src\scoring.rs:3:5
+  |
+3 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `debug`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:5:21
+  |
+5 | ...o, debug, wa...
+  |       ^^^^^
+
+warning: unused import: `crate::pocket::FPocketRunner`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:8:5
+  |
+8 | use crate::pocket::FPocketRunner;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Molecule`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:9:38
+  |
+9 | ...r, Molecule};
+  |       ^^^^^^^^
+
+warning: unused imports: `DockingConfig` and `VinaRunner`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:10:22
+   |
+10 | ...::{VinaRunner, DockingConfig};
+   |       ^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused variable: `pdb_path`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:29:13
+   |
+29 | ...et pdb_path = ...
+   |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pdb_path`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetResponse` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:56:8
+   |
+56 | ...ct ChemblTargetResponse {
+   |       ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetComponent` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:61:8
+   |
+61 | ...ct ChemblTargetComponent {
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ChemblTargetData` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:66:8
+   |
+66 | ...ct ChemblTargetData {
+   |       ^^^^^^^^^^^^^^^^
+
+warning: field `num_ro5_violations` is never read
+   --> crates\ferrumyx-molecules\src\ligand.rs:103:5
+    |
+100 | struct ChemblMoleculeProperties {
+    |        ------------------------ field in this struct
+...
+103 |     num_ro5_violations: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: `ferrumyx-molecules` (lib) generated 13 warnings (run `cargo fix --lib -p ferrumyx-molecules` to apply 9 suggestions)
+warning: unused import: `Path`
+ --> crates\ferrumyx-web\src\handlers\ranker.rs:4:29
+  |
+4 | ...ry, Path},
+  |        ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-web` (lib) generated 1 warning (run `cargo fix --lib -p ferrumyx-web` to apply 1 suggestion)
+warning: unused import: `PathBuf`
+  --> crates\ironclaw\src\sandbox\container.rs:29:23
+   |
+29 | ...h, PathBuf};
+   |       ^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `SERVICE_NAME` is never used
+  --> crates\ironclaw\src\secrets\keychain.rs:23:7
+   |
+23 | const SERVICE_NAME: &...
+   |       ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MASTER_KEY_ACCOUNT` is never used
+  --> crates\ironclaw\src\secrets\keychain.rs:26:7
+   |
+26 | const MASTER_KEY_ACCOUNT: &...
+   |       ^^^^^^^^^^^^^^^^^^
+
+warning: function `hex_to_bytes` is never used
+   --> crates\ironclaw\src\secrets\keychain.rs:263:4
+    |
+263 | fn hex_to_bytes(he...
+    |    ^^^^^^^^^^^^
+
+warning: `ironclaw` (lib) generated 4 warnings (run `cargo fix --lib -p ironclaw` to apply 1 suggestion)
+warning: unused import: `ironclaw::llm`
+ --> crates\ferrumyx-agent\src\main.rs:5:5
+  |
+5 | use ironclaw::llm;
+  |     ^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> crates\ferrumyx-agent\src\main.rs:140:9
+    |
+140 | ...et mut channels = ...
+    |       ----^^^^^^^^
+    |       |
+    |       help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `kg_event_tx`
+   --> crates\ferrumyx-agent\src\main.rs:106:9
+    |
+106 | ...et kg_event_tx = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_kg_event_tx`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type alias `LlmBackendConfig` is never used
+  --> crates\ferrumyx-agent\src\config\mod.rs:93:10
+   |
+93 | ...pe LlmBackendConfig = ...
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-agent` (bin "ferrumyx") generated 4 warnings (run `cargo fix --bin "ferrumyx" -p ferrumyx-agent` to apply 3 suggestions)
+    Finished `release` profile [optimized] target(s) in 1.76s
+     Running `target\release\ferrumyx.exe`
+[2m2026-03-07T08:06:21.263260Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m ≡ƒö¼ Ferrumyx starting up...
+[2m2026-03-07T08:06:21.263286Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Version: 0.1.0
+[2m2026-03-07T08:06:21.263870Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Configuration loaded. LLM mode: any, Focus: SKCM V600E
+[2m2026-03-07T08:06:21.263884Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Connecting to LanceDB...
+[2m2026-03-07T08:06:21.264341Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Γ£à LanceDB connected.
+[2m2026-03-07T08:06:21.264362Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Γ£à KG event-driven scoring queue initialized.
+[2m2026-03-07T08:06:21.264369Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Using Local Ollama: llama3.1:8b
+[2m2026-03-07T08:06:21.264470Z[0m [32m INFO[0m [2mferrumyx_kg::update[0m[2m:[0m Started event-driven KG scoring queue worker
+[2m2026-03-07T08:06:21.280713Z[0m [32m INFO[0m [2mironclaw::channels::manager[0m[2m:[0m Started channel: repl
+[1mIronClaw[0m  /help for commands, /quit to exit
+
+Input error: Incorrect function. (os error 1)
+[2m2026-03-07T08:06:21.285699Z[0m [32m INFO[0m [2mironclaw::channels::manager[0m[2m:[0m Started channel: gateway
+[2m2026-03-07T08:06:21.285748Z[0m [32m INFO[0m [2mironclaw::agent::agent_loop[0m[2m:[0m Agent Ferrumyx Drug Discovery Agent ready and listening
+Error: Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)
+error: process didn't exit successfully: `target\release\ferrumyx.exe` (exit code: 1)

@@ -1,5 +1,10 @@
-﻿/target
-Cargo.lock
+/target/
+data/
+*.tsv
+!.gitkeep
+*.tsv
+!.gitkeep
+rgo.lock
 **/*.rs.bk
 .env
 ferrumyx.toml

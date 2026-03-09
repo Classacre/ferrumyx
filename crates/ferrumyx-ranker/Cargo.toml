@@ -19,3 +19,4 @@ uuid.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 ferrumyx-ingestion = { version = "0.1.0", path = "../ferrumyx-ingestion" }
+ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }

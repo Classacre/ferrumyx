@@ -27,13 +27,15 @@ use crate::sources::europepmc::EuropePmcClient;
 use crate::sources::biorxiv::BioRxivClient;
 use crate::sources::clinicaltrials::ClinicalTrialsClient;
 use crate::sources::crossref::CrossRefClient;
+use crate::sources::semanticscholar::SemanticScholarClient;
 use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::repository::IngestionRepository;
 use crate::embedding::{EmbeddingClient, EmbeddingConfig, embed_pending_chunks};
 use crate::pdf_parser::parse_pdf_sections;
 use crate::models::SectionType;
-use ferrumyx_kg::ner::TrieNer;
+use ferrumyx_kg::ner::{TrieNer, EntityType, CancerNormaliser};
+use ferrumyx_kg::extraction::{build_facts, RelationExtractor};
 
 // ── Job config ────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ pub enum IngestionSourceSpec {
     MedRxiv,
     ClinicalTrials,
     CrossRef,
+    SemanticScholar,
 }
 
 impl Default for IngestionJob {
@@ -167,17 +170,30 @@ pub async fn run_ingestion(
 
     // Initialize NER once for the entire pipeline (loads real databases)
     info!("Initializing NER with complete biomedical databases...");
-    let ner = match tokio::task::spawn_blocking(move || {
+    let ner = match tokio::task::spawn_blocking(|| {
         TrieNer::with_complete_databases()
     }).await.unwrap() {
         Ok(ner) => ner,
         Err(e) => {
-            warn!("Failed to load complete databases: {e}");
-            tokio::task::spawn_blocking(move || TrieNer::with_embedded_subset()).await.unwrap()
-                .expect("Failed to load subset NER")
+            let msg = format!("Failed to initialize NER with complete databases: {e}. Ingestion aborted to ensure quality.");
+            warn!("{}", &msg);
+            return IngestionResult {
+                job_id,
+                query: query.clone(),
+                papers_found: 0,
+                papers_inserted: 0,
+                papers_duplicate: 0,
+                chunks_inserted: 0,
+                chunks_embedded: 0,
+                errors: vec![msg],
+                duration_ms: (std::time::Instant::now() - t0).as_millis() as u64,
+            };
         }
     };
     info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);
+    
+    let cancer_normaliser = ner.cancers();
+    let relation_extractor = RelationExtractor::new();
 
     let mut result = IngestionResult {
         job_id,
@@ -223,6 +239,10 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                 let client = CrossRefClient::new();
                 client.search(&query, job.max_results).await
             }
+            IngestionSourceSpec::SemanticScholar => {
+                let client = SemanticScholarClient::new();
+                client.search(&query, job.max_results).await
+            }
         };
 
         match source_result {
@@ -248,9 +268,23 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
     // ── 2. Upsert papers + chunk abstracts ───────────────────────────────────
     let chunker_cfg = ChunkerConfig::default();
 
-    for paper in &all_papers {
+    for (i, paper) in all_papers.into_iter().enumerate() {
+        info!(
+            paper_idx = i + 1,
+            total_papers = result.papers_found,
+            paper_title = %paper.title,
+            "Processing paper"
+        );
+        emit("progress", &format!("Processing paper {}/{}", i + 1, result.papers_found), {
+            let mut p = prog_base.clone();
+            p.papers_found = result.papers_found; // Ensure total is updated
+            p.papers_inserted = result.papers_inserted; // Ensure inserted is updated
+            p.chunks_inserted = result.chunks_inserted; // Ensure chunks is updated
+            p
+        });
+
         // Upsert
-        let upsert = match repo.upsert_paper(paper).await {
+        let upsert = match repo.upsert_paper(&paper).await {
             Ok(u) => u,
             Err(e) => {
                 // Use DOI if PMID is not available (e.g., ClinicalTrials)
@@ -267,62 +301,135 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
 
         if !upsert.was_new {
             result.papers_duplicate += 1;
-            continue;
+            info!(paper_id = %upsert.paper_id, "Paper already exists in DB, regenerating KG facts for it");
+            // Don't skip — fall through to NER/KG fact generation below
+        } else {
+            info!(paper_id = %upsert.paper_id, title = %paper.title, "Processing new paper");
+            result.papers_inserted += 1;
         }
 
-        result.papers_inserted += 1;
-
         // Build sections from abstract (always available)
-        let mut sections = build_sections_from_abstract(paper);
+        let mut sections = build_sections_from_abstract(&paper);
         
         // ── 3. Fetch full-text PDF if available ───────────────────────────────
+        let mut pdf_sections = Vec::new();
+
+        // Strategy 1: Explicit open-access URL
         if let Some(ref pdf_url) = paper.full_text_url {
-            match fetch_and_parse_pdf(pdf_url).await {
-                Ok(pdf_sections) => {
-                    if !pdf_sections.is_empty() {
-                        info!(
-                            paper_id = %upsert.paper_id,
-                            n_sections = pdf_sections.len(),
-                            "Full-text PDF parsed successfully"
-                        );
-                        sections.extend(pdf_sections);
-                        // Mark as full-text available
-                        let _ = repo.set_full_text_status(upsert.paper_id, true).await;
-                    }
-                }
-                Err(e) => {
-                    debug!(
-                        paper_id = %upsert.paper_id,
-                        error = %e,
-                        "Full-text PDF fetch/parse failed, using abstract only"
-                    );
-                    // Non-fatal: continue with abstract-only
+            info!(paper_id = %upsert.paper_id, url = %pdf_url, "Attempting explicit full-text URL");
+            if let Ok(sections) = fetch_and_parse_pdf(pdf_url).await {
+                pdf_sections = sections;
+            }
+        }
+
+        // Strategy 2: PMC Direct API if PMCID is known
+        if pdf_sections.is_empty() {
+            if let Some(ref pmcid) = paper.pmcid {
+                let clean_pmcid = if pmcid.starts_with("PMC") { pmcid.clone() } else { format!("PMC{}", pmcid) };
+                let epmc_url = format!("https://europepmc.org/backend/ptpmcrender.fcgi?accid={}&blobtype=pdf", clean_pmcid);
+                info!(paper_id = %upsert.paper_id, url = %epmc_url, "Attempting EuropePMC direct PDF");
+                if let Ok(sections) = fetch_and_parse_pdf(&epmc_url).await {
+                    pdf_sections = sections;
                 }
             }
         }
 
+        // Strategy 3: Sci-Hub Fallback
+        if pdf_sections.is_empty() && job.enable_scihub_fallback {
+            let identifier = paper.doi.as_ref().or(paper.pmid.as_ref());
+            if let Some(id) = identifier {
+                info!(paper_id = %upsert.paper_id, id = %id, "Attempting Sci-Hub fallback");
+                let scihub = crate::sources::scihub::SciHubClient::new();
+                if let Ok(Some(pdf_bytes)) = scihub.download_pdf(id).await {
+                    info!(paper_id = %upsert.paper_id, "Sci-Hub fallback attempted successfully");
+                    if let Ok(sections) = parse_pdf_bytes(&pdf_bytes).await {
+                        pdf_sections = sections;
+                    }
+                }
+            }
+        }
+
+        if !pdf_sections.is_empty() {
+            info!(
+                paper_id = %upsert.paper_id,
+                n_sections = pdf_sections.len(),
+                "Full-text PDF parsed successfully"
+            );
+            sections.extend(pdf_sections);
+            // Mark as full-text available
+            let _ = repo.set_full_text_status(upsert.paper_id, true).await;
+        } else {
+            debug!(
+                paper_id = %upsert.paper_id,
+                "Full-text PDF fetch/parse failed or unavailable, using abstract only"
+            );
+        }
+
         if sections.is_empty() {
+            warn!(paper_id = %upsert.paper_id, "No sections (abstract/title) found for paper, skipping");
             continue;
         }
 
         let chunks = chunk_document(upsert.paper_id, sections, &chunker_cfg);
         let n_chunks = chunks.len();
 
-        // Extract entities from chunks using the pre-initialized NER
+        // Extract entities and built KG facts from chunks
         for chunk in &chunks {
             let entities = ner.extract(&chunk.content);
             if !entities.is_empty() {
-                // Store entities in database (linking to chunk)
-                for entity in entities {
-                    if let Err(e) = repo.insert_entity(
-                        upsert.paper_id,
-                        chunk.chunk_id,
-                        entity.label.as_str(),
-                        &entity.text,
-                        None, // normalized_id - not available in ExtractedEntity
-                        entity.confidence,
-                    ).await {
-                        warn!("Failed to insert entity: {}", e);
+                info!(paper_id = %upsert.paper_id, count = entities.len(), "Entities extracted from chunk");
+            }
+            for entity in entities {
+                // Canonicalise Subject
+                let mut canon_subject = entity.text.clone();
+                if entity.label == EntityType::Gene {
+                    if let Some(sym) = ner.hgnc().normalise_symbol(&entity.text) {
+                        canon_subject = sym;
+                    }
+                } else if entity.label == EntityType::CancerType {
+                    if let Some(code) = cancer_normaliser.normalise(&entity.text) {
+                        canon_subject = code;
+                    }
+                }
+
+                // 1. Store "mentions" relationship (Paper Hub -> Entity Spoke)
+                // Use a descriptive name for the paper hub node
+                let paper_subject_name = if let Some(ref journal) = paper.journal {
+                    format!("{} ({})", paper.title, journal)
+                } else {
+                    paper.title.clone()
+                };
+
+                let _ = repo.insert_fact(
+                    upsert.paper_id,
+                    upsert.paper_id,
+                    &paper_subject_name,
+                    "mentions",
+                    Uuid::new_v4(), // Entity-specific stable UUID would be better, but name works for resolution
+                    &canon_subject,
+                    entity.confidence,
+                ).await;
+
+                // 2. Extract specific relations if it's a Gene
+                if entity.label == EntityType::Gene {
+                    let extracted_facts = build_facts(&canon_subject, &chunk.content);
+                    for mut fact in extracted_facts {
+                        // Canonicalise Object (e.g. if it's a Cancer)
+                        if fact.fact_type != "has_mutation" { // gene_mutation object is a string like "V600E"
+                             if let Some(code) = cancer_normaliser.normalise(&fact.object) {
+                                 fact.object = code;
+                             }
+                        }
+
+                        let _ = repo.insert_fact(
+                            upsert.paper_id,
+                            upsert.paper_id, // Evidence source
+                            &canon_subject,
+                            &fact.fact_type,
+                            Uuid::new_v4(),
+                            &fact.object,
+                            entity.confidence,
+                        ).await;
                     }
                 }
             }
@@ -460,13 +567,14 @@ async fn fetch_and_parse_pdf(pdf_url: &str) -> anyhow::Result<Vec<DocumentSectio
     }
 
     let pdf_bytes = resp.bytes().await?;
-    
-    // Write to temp file (lopdf requires file path)
+    parse_pdf_bytes(&pdf_bytes).await
+}
+
+async fn parse_pdf_bytes(pdf_bytes: &[u8]) -> anyhow::Result<Vec<DocumentSection>> {
     let mut temp_file = NamedTempFile::new()?;
-    std::io::Write::write_all(&mut temp_file, &pdf_bytes)?;
+    std::io::Write::write_all(&mut temp_file, pdf_bytes)?;
     let temp_path = temp_file.path().to_path_buf();
 
-    // Parse with Ferrules
     let parsed = tokio::task::spawn_blocking(move || {
         parse_pdf_sections(&temp_path)
     }).await??;

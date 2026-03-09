@@ -1,0 +1,908 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   D:\AI\Ferrumyx\crates\ironclaw\Cargo.toml
+workspace: D:\AI\Ferrumyx\Cargo.toml
+   Compiling ferrumyx-db v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-db)
+warning: unused import: `PathBuf`
+  --> crates\ironclaw\src\sandbox\container.rs:29:23
+   |
+29 | ...h, PathBuf};
+   |       ^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `SERVICE_NAME` is never used
+  --> crates\ironclaw\src\secrets\keychain.rs:23:7
+   |
+23 | const SERVICE_NAME: &...
+   |       ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MASTER_KEY_ACCOUNT` is never used
+  --> crates\ironclaw\src\secrets\keychain.rs:26:7
+   |
+26 | const MASTER_KEY_ACCOUNT: &...
+   |       ^^^^^^^^^^^^^^^^^^
+
+warning: function `hex_to_bytes` is never used
+   --> crates\ironclaw\src\secrets\keychain.rs:263:4
+    |
+263 | fn hex_to_bytes(he...
+    |    ^^^^^^^^^^^^
+
+warning: `ironclaw` (lib) generated 4 warnings (run `cargo fix --lib -p ironclaw` to apply 1 suggestion)
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:683:9
+    |
+683 |     let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:684:9
+    |
+684 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:754:9
+    |
+754 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:756:9
+    |
+756 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:811:9
+    |
+811 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:812:9
+    |
+812 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:814:9
+    |
+814 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:865:9
+    |
+865 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:866:9
+    |
+866 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:867:9
+    |
+867 |     let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:868:9
+    |
+868 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:931:9
+    |
+931 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:932:9
+    |
+932 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:933:9
+    |
+933 |     let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:934:9
+    |
+934 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:995:9
+    |
+995 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:996:9
+    |
+996 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:998:9
+    |
+998 |     let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwr...
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1061:9
+     |
+1061 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1062:9
+     |
+1062 |     let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap...
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1117:9
+     |
+1117 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+     |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1118:9
+     |
+1118 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1180:9
+     |
+1180 |     let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if a...
+     |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1181:9
+     |
+1181 |     let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap...
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1182:9
+     |
+1182 |     let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap...
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+   Compiling ferrumyx-kg v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-kg)
+   Compiling ferrumyx-molecules v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-molecules)
+warning: unused import: `async_trait::async_trait`
+ --> crates\ferrumyx-molecules\src\pdb.rs:4:5
+  |
+4 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::time::Duration`
+ --> crates\ferrumyx-molecules\src\pdb.rs:7:5
+  |
+7 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `async_trait::async_trait`
+ --> crates\ferrumyx-molecules\src\ligand.rs:6:5
+  |
+6 | use async_trait::async_trait;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-molecules\src\scoring.rs:3:5
+  |
+3 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `debug`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:5:21
+  |
+5 | use tracing::{info, debug, warn};
+  |                     ^^^^^
+
+warning: unused import: `crate::pocket::FPocketRunner`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:8:5
+  |
+8 | use crate::pocket::FPocketRunner;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Molecule`
+ --> crates\ferrumyx-molecules\src\pipeline.rs:9:38
+  |
+9 | use crate::ligand::{LigandGenerator, Molecule};
+  |                                      ^^^^^^^^
+
+warning: unused imports: `DockingConfig` and `VinaRunner`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:10:22
+   |
+10 | use crate::docking::{VinaRunner, DockingConfig};
+   |                      ^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\scoring.rs:5:5
+  |
+5 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `info` and `warn`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:6:15
+  |
+6 | use tracing::{info, warn};
+  |               ^^^^  ^^^^
+
+warning: unused import: `std::path::PathBuf`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:4:5
+  |
+4 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:5:14
+  |
+5 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_db.rs:3:24
+  |
+3 | use std::collections::{HashMap, HashSet};
+  |                        ^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:4:5
+  |
+4 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `tracing::info`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:5:5
+  |
+5 | use tracing::info;
+  |     ^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:6:5
+  |
+6 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: unused variable: `pdb_path`
+  --> crates\ferrumyx-molecules\src\pipeline.rs:29:13
+   |
+29 |         let pdb_path = match fetcher.fetch_alphafold(uniprot_id).await {
+   |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pdb_path`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetResponse` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:56:8
+   |
+56 | struct ChemblTargetResponse {
+   |        ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ChemblTargetComponent` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:61:8
+   |
+61 | struct ChemblTargetComponent {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ChemblTargetData` is never constructed
+  --> crates\ferrumyx-molecules\src\ligand.rs:66:8
+   |
+66 | struct ChemblTargetData {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: field `num_ro5_violations` is never read
+   --> crates\ferrumyx-molecules\src\ligand.rs:103:5
+    |
+100 | struct ChemblMoleculeProperties {
+    |        ------------------------ field in this struct
+...
+103 |     num_ro5_violations: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-kg\src\ner\trie_ner.rs:25:13
+   |
+25 |         let mut patterns = Vec::new();
+   |             ----^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-kg\src\ner\trie_ner.rs:26:13
+   |
+26 |         let mut pattern_info = Vec::new();
+   |             ----^^^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: `ferrumyx-molecules` (lib) generated 13 warnings (run `cargo fix --lib -p ferrumyx-molecules` to apply 9 suggestions)
+   Compiling ferrumyx-ingestion v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-ingestion)
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:12:34
+   |
+12 | use tracing::{debug, instrument, warn};
+   |                                  ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `warn`
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:16:28
+   |
+16 | use tracing::{debug, info, warn};
+   |                            ^^^^
+
+warning: unused import: `tokenizers::models::wordpiece::WordPieceBuilder`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:11:5
+   |
+11 | use tokenizers::models::wordpiece::WordPieceBuilder;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `debug`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:12:15
+   |
+12 | use tracing::{debug, info};
+   |               ^^^^^
+
+warning: unexpected `cfg` condition value: `cuda`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:75:15
+   |
+75 |         #[cfg(feature = "cuda")] { if let Ok(d) = Device::new_cuda(0) { return Ok(d); } }
+   |               ^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `python-embed`, and `rust-embed`
+   = help: consider adding `cuda` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `metal`
+  --> crates\ferrumyx-ingestion\src\embed\embedder.rs:76:15
+   |
+76 |         #[cfg(feature = "metal")] { if let Ok(d) = Device::new_metal(0) { return Ok(d); } }
+   |               ^^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `default`, `python-embed`, and `rust-embed`
+   = help: consider adding `metal` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\biorxiv.rs:69:13
+   |
+69 |         let mut papers: Vec<PaperMetadata> = collection.iter()
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-db` (lib) generated 25 warnings (run `cargo fix --lib -p ferrumyx-db` to apply 25 suggestions)
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:28:13
+   |
+28 |         let mut client = Client::new();
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `total_samples`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:160:13
+    |
+160 |         let total_samples: usize = mutations.iter().map(|m| m.sample_count).sum();
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_samples`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `gene_symbol`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:44
+    |
+168 |     pub async fn is_driver_mutation(&self, gene_symbol: &str, protein_change: &str) -> anyhow::Result<bool> {
+    |                                            ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_gene_symbol`
+
+warning: unused variable: `protein_change`
+   --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:168:63
+    |
+168 |     pub async fn is_driver_mutation(&self, gene_symbol: &str, protein_change: &str) -> anyhow::Result<bool> {
+    |                                                               ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_protein_change`
+
+warning: variable does not need to be mutable
+  --> crates\ferrumyx-ingestion\src\sources\scihub.rs:30:13
+   |
+30 |         let mut client = Client::new();
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: constant `USER_AGENT` is never used
+  --> crates\ferrumyx-ingestion\src\sources\crossref.rs:20:7
+   |
+20 | const USER_AGENT:    &str = "Ferrumyx/0.1 (mailto:ferrumyx@example.com)";
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `DEPMAP_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:26:7
+   |
+26 | const DEPMAP_API_URL: &str = "https://depmap.org/portal/api";
+   |       ^^^^^^^^^^^^^^
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap.rs:41:5
+   |
+40 | pub struct DepMapClient {
+   |            ------------ fields in this struct
+41 |     client: Client,
+   |     ^^^^^^
+42 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+warning: field `source_files` is never read
+  --> crates\ferrumyx-ingestion\src\sources\depmap_cache.rs:44:5
+   |
+34 | pub struct DepMapCache {
+   |            ----------- field in this struct
+...
+44 |     source_files: Vec<PathBuf>,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `DepMapCache` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `COSMIC_API_URL` is never used
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:29:7
+   |
+29 | const COSMIC_API_URL: &str = "https://cancer.sanger.ac.uk/cosmic/api";
+   |       ^^^^^^^^^^^^^^
+
+warning: fields `client` and `api_key` are never read
+  --> crates\ferrumyx-ingestion\src\sources\cosmic.rs:89:5
+   |
+88 | pub struct CosmicClient {
+   |            ------------ fields in this struct
+89 |     client: Client,
+   |     ^^^^^^
+90 |     api_key: Option<String>,
+   |     ^^^^^^^
+
+   Compiling ferrumyx-ranker v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-ranker)
+warning: unused import: `debug`
+  --> crates\ferrumyx-ranker\src\providers\depmap.rs:11:21
+   |
+11 | use tracing::{info, debug};
+   |                     ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `TargetScoreResult`
+  --> crates\ferrumyx-ranker\src\lib.rs:16:72
+   |
+16 | use ferrumyx_common::query::{QueryRequest, QueryResult, TargetMetrics, TargetScoreResult};
+   |                                                                        ^^^^^^^^^^^^^^^^^
+
+   Compiling ferrumyx-web v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-web)
+warning: unused import: `Path`
+ --> crates\ferrumyx-web\src\handlers\ranker.rs:4:29
+  |
+4 |     extract::{State, Query, Path},
+  |                             ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-ranker` (lib) generated 2 warnings (run `cargo fix --lib -p ferrumyx-ranker` to apply 2 suggestions)
+warning: `ferrumyx-kg` (lib) generated 12 warnings (run `cargo fix --lib -p ferrumyx-kg` to apply 12 suggestions)
+warning: `ferrumyx-ingestion` (lib) generated 18 warnings (run `cargo fix --lib -p ferrumyx-ingestion` to apply 10 suggestions)
+warning: `ferrumyx-web` (lib) generated 1 warning (run `cargo fix --lib -p ferrumyx-web` to apply 1 suggestion)
+   Compiling ferrumyx-agent v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-agent)
+warning: unused import: `ironclaw::llm`
+ --> crates\ferrumyx-agent\src\main.rs:5:5
+  |
+5 | use ironclaw::llm;
+  |     ^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> crates\ferrumyx-agent\src\main.rs:141:9
+    |
+141 |     let mut channels = ironclaw::channels::ChannelManager::new();
+    |         ----^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `kg_event_tx`
+   --> crates\ferrumyx-agent\src\main.rs:107:9
+    |
+107 |     let kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_kg_event_tx`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type alias `LlmBackendConfig` is never used
+  --> crates\ferrumyx-agent\src\config\mod.rs:93:10
+   |
+93 | pub type LlmBackendConfig = ApiBackendConfig;
+   |          ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ferrumyx-agent` (bin "ferrumyx") generated 4 warnings (run `cargo fix --bin "ferrumyx" -p ferrumyx-agent` to apply 3 suggestions)
+    Finished `release` profile [optimized] target(s) in 1m 45s
+     Running `target\release\ferrumyx.exe`
+[2m2026-03-07T11:21:18.960137Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m ≡ƒö¼ Ferrumyx starting up...
+[2m2026-03-07T11:21:18.960216Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Version: 0.1.0
+[2m2026-03-07T11:21:18.961194Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Configuration loaded. LLM mode: any, Focus: SKCM V600E
+[2m2026-03-07T11:21:18.961211Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Connecting to LanceDB...
+[2m2026-03-07T11:21:18.965052Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.965142Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.965716Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.968532Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551614.manifest-57d234fd-f6bc-4383-849f-7fe8ac3b4c17"
+[2m2026-03-07T11:21:18.969398Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:18.970611Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.970635Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.971064Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.973107Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551614.manifest-0e70029a-d380-464f-971c-301ac4efb7a2"
+[2m2026-03-07T11:21:18.973634Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:18.975266Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.975300Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.976377Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.979104Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/entities.lance/_versions/18446744073709551614.manifest-f8170918-cc30-475f-955c-6da821ee59cc"
+[2m2026-03-07T11:21:18.980539Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:18.983138Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entity_mentions.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.983188Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\entity_mentions.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.983832Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entity_mentions.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.986696Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/entity_mentions.lance/_versions/18446744073709551614.manifest-b1c4b0c5-f4aa-4c9b-81b3-615dc40128fd"
+[2m2026-03-07T11:21:18.987483Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\entity_mentions.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:18.990418Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.990484Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.991186Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.994203Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/kg_facts.lance/_versions/18446744073709551614.manifest-204ea21d-1e80-4f7a-b2a5-46ce8b29f9d9"
+[2m2026-03-07T11:21:18.994992Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:18.997120Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_conflicts.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:18.997155Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\kg_conflicts.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:18.997581Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_conflicts.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.001654Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/kg_conflicts.lance/_versions/18446744073709551614.manifest-18ed9554-7e29-4d29-9086-380b32497c72"
+[2m2026-03-07T11:21:19.002760Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\kg_conflicts.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.005550Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\target_scores.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.005577Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\target_scores.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.005990Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\target_scores.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.008903Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/target_scores.lance/_versions/18446744073709551614.manifest-13336457-17b5-4049-a18a-94e75b0b3c22"
+[2m2026-03-07T11:21:19.009897Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\target_scores.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.013421Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ingestion_audit.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.013482Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ingestion_audit.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.014436Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ingestion_audit.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.016464Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ingestion_audit.lance/_versions/18446744073709551614.manifest-256c8100-2987-42b9-bd6e-36feac5d6fbf"
+[2m2026-03-07T11:21:19.017343Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ingestion_audit.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.020033Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_genes.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.020072Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_genes.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.020526Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_genes.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.023402Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_genes.lance/_versions/18446744073709551614.manifest-4801bc9d-daf3-47b0-8dbc-10cb57756e8c"
+[2m2026-03-07T11:21:19.024315Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_genes.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.028421Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_mutations.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.028452Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_mutations.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.029107Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_mutations.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.031619Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_mutations.lance/_versions/18446744073709551614.manifest-3b7d3e0c-6dd6-4ed8-84b7-72f51635b17b"
+[2m2026-03-07T11:21:19.032419Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_mutations.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.035847Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_cancer_types.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.035879Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_cancer_types.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.036328Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_cancer_types.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.038867Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_cancer_types.lance/_versions/18446744073709551614.manifest-cd4f8890-aac5-4d90-a938-a95d25cec45b"
+[2m2026-03-07T11:21:19.039766Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_cancer_types.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.044965Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_pathways.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.045018Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_pathways.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.045690Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_pathways.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.049074Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_pathways.lance/_versions/18446744073709551614.manifest-2bb51c6f-50f4-4b1e-a979-fe6cb3d7a7d4"
+[2m2026-03-07T11:21:19.068527Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_pathways.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.074087Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_clinical_evidence.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.074140Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_clinical_evidence.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.074743Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_clinical_evidence.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.077912Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_clinical_evidence.lance/_versions/18446744073709551614.manifest-d30c9701-c771-4638-9907-7a7ef6077b81"
+[2m2026-03-07T11:21:19.078916Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_clinical_evidence.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.083007Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_compounds.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.083076Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_compounds.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.083615Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_compounds.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.088135Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_compounds.lance/_versions/18446744073709551614.manifest-3463906e-ac70-49b1-87cd-1fd6eca101f1"
+[2m2026-03-07T11:21:19.088759Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_compounds.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.092734Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_structures.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.092761Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_structures.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.093156Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_structures.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.095377Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_structures.lance/_versions/18446744073709551614.manifest-f80ab48b-a095-4f42-9bed-4fa2061a6ebe"
+[2m2026-03-07T11:21:19.096343Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_structures.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.100161Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_druggability.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.100206Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_druggability.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.100711Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_druggability.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.103649Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_druggability.lance/_versions/18446744073709551614.manifest-baf51208-dc4e-4cc5-83da-0a04a1d8f3f8"
+[2m2026-03-07T11:21:19.104327Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_druggability.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.109042Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_synthetic_lethality.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.109071Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\ent_synthetic_lethality.lance" [3mmode[0m[2m=[0mCreate
+[2m2026-03-07T11:21:19.109503Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\ent_synthetic_lethality.lance" [3mtarget_ref[0m[2m=[0mNone [3mstatus[0m[2m=[0m"error"
+[2m2026-03-07T11:21:19.112046Z[0m [32m INFO[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/ent_synthetic_lethality.lance/_versions/18446744073709551614.manifest-a5b2e2aa-eb04-4480-b412-3a3f8971d11b"
+[2m2026-03-07T11:21:19.112843Z[0m [32m INFO[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\ent_synthetic_lethality.lance" [3mread_version[0m[2m=[0m0 [3mcommitted_version[0m[2m=[0m1 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Overwrite"
+[2m2026-03-07T11:21:19.112947Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Γ£à LanceDB connected and initialized.
+[2m2026-03-07T11:21:19.113012Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Γ£à KG event-driven scoring queue initialized.
+[2m2026-03-07T11:21:19.113050Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m Using Local Ollama: llama3.1:8b
+[2m2026-03-07T11:21:19.113119Z[0m [32m INFO[0m [2mferrumyx_kg::update[0m[2m:[0m Started event-driven KG scoring queue worker
+[2m2026-03-07T11:21:19.130568Z[0m [32m INFO[0m [2mironclaw::channels::manager[0m[2m:[0m Started channel: repl
+[1mIronClaw[0m  /help for commands, /quit to exit
+
+Input error: Incorrect function. (os error 1)
+[2m2026-03-07T11:21:19.132717Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m ≡ƒîÉ Web GUI listening on http://0.0.0.0:3000
+[2m2026-03-07T11:21:19.132751Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    Dashboard:    http://localhost:3000/
+[2m2026-03-07T11:21:19.132756Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    Target Query: http://localhost:3000/query
+[2m2026-03-07T11:21:19.132767Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    KG Explorer:  http://localhost:3000/kg
+[2m2026-03-07T11:21:19.132770Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    Ingestion:    http://localhost:3000/ingestion
+[2m2026-03-07T11:21:19.132774Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    Metrics:      http://localhost:3000/metrics
+[2m2026-03-07T11:21:19.132777Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m    System:       http://localhost:3000/system
+[2m2026-03-07T11:21:19.132782Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m 
+[2m2026-03-07T11:21:19.132786Z[0m [32m INFO[0m [2mferrumyx[0m[2m:[0m ≡ƒö¼ Ferrumyx ready. Press Ctrl+C to stop.
+[2m2026-03-07T11:21:19.134129Z[0m [32m INFO[0m [2mironclaw::channels::manager[0m[2m:[0m Started channel: gateway
+[2m2026-03-07T11:21:19.134289Z[0m [32m INFO[0m [2mironclaw::agent::agent_loop[0m[2m:[0m Agent Ferrumyx Drug Discovery Agent ready and listening
+[2m2026-03-07T11:21:19.147506Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:21:51.578450Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:21:56.839020Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:23:06.504675Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:23:57.805009Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:23:57.805714Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:23:57.912281Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:23:57.913165Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:24:13.823452Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:24:13.824047Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:24:13.824677Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:24:13.825256Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:42.504038Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Starting ingestion pipeline [3mjob_id[0m[2m=[0m6f945cd1-2c03-4e3c-a09b-8f0b85531f5a [3mquery[0m[2m=[0mBRAF[tiab] AND SKCM[tiab] AND V600E[tiab]
+[2m2026-03-07T11:25:42.504066Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Initializing NER with complete biomedical databases...
+[2m2026-03-07T11:25:42.504258Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m NER initialized: 0patterns loaded
+[2m2026-03-07T11:25:42.504461Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:43.617275Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mesearch[0m[1m{[0m[3mquery[0m[2m=[0m"BRAF[tiab] AND SKCM[tiab] AND V600E[tiab]" [3mmax[0m[2m=[0m100[1m}[0m[2m:[0m [2mferrumyx_ingestion::sources::pubmed[0m[2m:[0m PubMed esearch returned PMIDs [3mids[0m[2m=[0m["40436810", "39796775", "36704723", "34573422", "34240406", "33064882", "31434983", "28858076"]
+[2m2026-03-07T11:25:44.728394Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Papers retrieved [3msource[0m[2m=[0mPubMed [3mn[0m[2m=[0m8
+[2m2026-03-07T11:25:45.681618Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1msearch[0m[1m{[0m[3mquery[0m[2m=[0m"BRAF[tiab] AND SKCM[tiab] AND V600E[tiab]" [3mmax_results[0m[2m=[0m100[1m}[0m[2m:[0m [2mferrumyx_ingestion::sources::europepmc[0m[2m:[0m Europe PMC search returned results [3mcount[0m[2m=[0m0
+[2m2026-03-07T11:25:45.681673Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Papers retrieved [3msource[0m[2m=[0mEuropePmc [3mn[0m[2m=[0m0
+[2m2026-03-07T11:25:45.682706Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.687775Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.688833Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.689287Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.691889Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"111101001010000011011100922a7c4283b12abc7055346df9.lance"
+[2m2026-03-07T11:25:45.695131Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551613.manifest-a95e3295-ec0d-4a33-842e-846db2c5b020"
+[2m2026-03-07T11:25:45.695859Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m1 [3mcommitted_version[0m[2m=[0m2 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.695935Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0m45abd8be-d321-4a5f-9949-bbee8c82e451 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("40436810")
+[2m2026-03-07T11:25:45.696699Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.696913Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.698373Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0101100011111101011100100b02b743848f184b99179be372.lance"
+[2m2026-03-07T11:25:45.700558Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551613.manifest-948429a1-05a8-484a-8db4-a9dccede4331"
+[2m2026-03-07T11:25:45.701165Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m1 [3mcommitted_version[0m[2m=[0m2 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.706138Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m2 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.706342Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.707619Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"000101000000101111000000fb49c54a75b03c6b6eb205e824.lance"
+[2m2026-03-07T11:25:45.709701Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551612.manifest-fb3204ac-a463-4d1c-b6de-57ce88ebe93b"
+[2m2026-03-07T11:25:45.710418Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m2 [3mcommitted_version[0m[2m=[0m3 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.710457Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.710479Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0m45abd8be-d321-4a5f-9949-bbee8c82e451 [3mpmid[0m[2m=[0mSome("40436810") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.711305Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m2 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.716877Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m4 [3mrequests[0m[2m=[0m4 [3mbytes_read[0m[2m=[0m4148 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.718340Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0001101111111111001000104387394b1c86cb4945b8189739.lance"
+[2m2026-03-07T11:25:45.721356Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551612.manifest-bf056387-1ed7-4f44-9158-e1fbaddb3f0d"
+[2m2026-03-07T11:25:45.721931Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m2 [3mcommitted_version[0m[2m=[0m3 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.726891Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m3 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.737392Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.738305Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m3 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.738535Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.739721Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"111001100100010100010000f7b79544eaa6a24ab9ad9c3390.lance"
+[2m2026-03-07T11:25:45.742480Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551611.manifest-cdf3a696-cd1c-4bf1-aa2c-fd6272d17d67"
+[2m2026-03-07T11:25:45.743367Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m3 [3mcommitted_version[0m[2m=[0m4 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.743425Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0mce44c3ad-d62f-4e9c-bdc6-13f44268c4d8 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("39796775")
+[2m2026-03-07T11:25:45.744354Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m3 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.744519Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.745645Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"11101110101110010011100070e35042048fb59b73ff9bdf15.lance"
+[2m2026-03-07T11:25:45.748307Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551611.manifest-7328d0db-f165-4818-ae11-ffb9ef9f8448"
+[2m2026-03-07T11:25:45.749239Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m3 [3mcommitted_version[0m[2m=[0m4 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.754226Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m4 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.754420Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.755829Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"010110110000101011101000e9c8254048a9e25bb6eee0bda3.lance"
+[2m2026-03-07T11:25:45.758378Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551610.manifest-16d3e7ab-3177-488e-8a13-d34518610e81"
+[2m2026-03-07T11:25:45.759092Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m4 [3mcommitted_version[0m[2m=[0m5 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.759137Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.759148Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0mce44c3ad-d62f-4e9c-bdc6-13f44268c4d8 [3mpmid[0m[2m=[0mSome("39796775") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.760163Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m4 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.762707Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m7 [3mrequests[0m[2m=[0m7 [3mbytes_read[0m[2m=[0m4200 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.764090Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"101000001001100011010110f87c0b46158f1b5f7a952c78a6.lance"
+[2m2026-03-07T11:25:45.767387Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551610.manifest-996cc408-8422-4778-bc89-34d17400cc3e"
+[2m2026-03-07T11:25:45.768164Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m4 [3mcommitted_version[0m[2m=[0m5 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.773594Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m5 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.776794Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.777741Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m5 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.777935Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.779068Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"111110100111010110110001428e454a49b045e212b6a9795d.lance"
+[2m2026-03-07T11:25:45.782294Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551609.manifest-69c2f50d-d80d-4376-9b28-a68c763d256d"
+[2m2026-03-07T11:25:45.782965Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m5 [3mcommitted_version[0m[2m=[0m6 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.783007Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0m5e2fb2f1-ad70-406a-a710-1cc857a88cdc [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("36704723")
+[2m2026-03-07T11:25:45.783724Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m5 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.783889Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.785026Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"1011100000111100010010008f283a428591ed8c9e07223cf8.lance"
+[2m2026-03-07T11:25:45.788281Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551609.manifest-8e515d8b-5231-4c1e-9be5-499012e6c82d"
+[2m2026-03-07T11:25:45.789041Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m5 [3mcommitted_version[0m[2m=[0m6 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.797369Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m6 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.797646Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.799368Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"110000011100001111000011454cc64f80909d97b5906a1b4f.lance"
+[2m2026-03-07T11:25:45.802948Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551608.manifest-3b9fcac4-5050-41ce-a9a6-2d4a2b909a13"
+[2m2026-03-07T11:25:45.803632Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m6 [3mcommitted_version[0m[2m=[0m7 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.803690Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.803705Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0m5e2fb2f1-ad70-406a-a710-1cc857a88cdc [3mpmid[0m[2m=[0mSome("36704723") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.804586Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m6 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.807666Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m10 [3mrequests[0m[2m=[0m10 [3mbytes_read[0m[2m=[0m4252 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.809144Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"010010011101110101100000696f84447a924cbb6ff4dc1c0d.lance"
+[2m2026-03-07T11:25:45.812889Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551608.manifest-93dc1227-2fc4-4908-a0ed-1b9087d61835"
+[2m2026-03-07T11:25:45.813586Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m6 [3mcommitted_version[0m[2m=[0m7 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.820084Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m7 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.822220Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.823097Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m7 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.823283Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.824307Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"01111011111001110010010178683b4634b1f7ed068abcb934.lance"
+[2m2026-03-07T11:25:45.827437Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551607.manifest-89f95b5a-2af8-48ca-89e9-79ebfe9b272c"
+[2m2026-03-07T11:25:45.828087Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m7 [3mcommitted_version[0m[2m=[0m8 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.828143Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0me45ea49b-23f8-4c03-bb43-4c6c129239b1 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("34573422")
+[2m2026-03-07T11:25:45.829093Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m7 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.829270Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.830403Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"100100011000000101100111460af64c1ea71f51cc872b2809.lance"
+[2m2026-03-07T11:25:45.834255Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551607.manifest-0624c8e7-03d7-4b3a-9cc6-068214dd38f9"
+[2m2026-03-07T11:25:45.835251Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m7 [3mcommitted_version[0m[2m=[0m8 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.841930Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m8 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.842117Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.843406Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"110010110001011010101010021b394d0daef07cbd1209f16f.lance"
+[2m2026-03-07T11:25:45.846321Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551606.manifest-133773de-7c16-44df-9d6e-04b21d328947"
+[2m2026-03-07T11:25:45.847008Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m8 [3mcommitted_version[0m[2m=[0m9 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.847055Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.847067Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0me45ea49b-23f8-4c03-bb43-4c6c129239b1 [3mpmid[0m[2m=[0mSome("34573422") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.847880Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m8 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.850913Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m13 [3mrequests[0m[2m=[0m13 [3mbytes_read[0m[2m=[0m4304 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.852350Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0000001000100001001110115db7954584807e76440e2fceb1.lance"
+[2m2026-03-07T11:25:45.856112Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551606.manifest-bd971242-e82a-425f-ada9-68235e0abb4b"
+[2m2026-03-07T11:25:45.856841Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m8 [3mcommitted_version[0m[2m=[0m9 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.862692Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m9 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.864467Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.865286Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m9 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.865482Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.866660Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"000111110000001011100000ea3b1045e8a737808fce9f2817.lance"
+[2m2026-03-07T11:25:45.870639Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551605.manifest-b695a839-4356-4e70-b10d-cc98c6961b52"
+[2m2026-03-07T11:25:45.871352Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m9 [3mcommitted_version[0m[2m=[0m10 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.871407Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0m08ef565d-623c-4ee2-aad1-a09993004382 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("34590708")
+[2m2026-03-07T11:25:45.872379Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m9 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.872550Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.873706Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"1001110101010001010011007b449743ffaf8779bbe539b644.lance"
+[2m2026-03-07T11:25:45.878563Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551605.manifest-b6645f73-098d-4785-8e6c-ad4b8ffbdff3"
+[2m2026-03-07T11:25:45.879328Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m9 [3mcommitted_version[0m[2m=[0m10 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.886945Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m10 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.887135Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.888388Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0000001010011011011111106193f748aa80a176eb667ce51a.lance"
+[2m2026-03-07T11:25:45.892246Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551604.manifest-13db242e-6a2e-4e4a-af81-277ac95d9f92"
+[2m2026-03-07T11:25:45.892956Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m10 [3mcommitted_version[0m[2m=[0m11 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.893003Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.893017Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0m08ef565d-623c-4ee2-aad1-a09993004382 [3mpmid[0m[2m=[0mSome("34590708") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.893800Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m10 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.896706Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m16 [3mrequests[0m[2m=[0m16 [3mbytes_read[0m[2m=[0m4356 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.898237Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"00110000110010100100001196980d4c8784a5860ddd2c799c.lance"
+[2m2026-03-07T11:25:45.901853Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551604.manifest-c62bdf8e-b931-40d2-acd0-c26d864da668"
+[2m2026-03-07T11:25:45.902527Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m10 [3mcommitted_version[0m[2m=[0m11 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.907536Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m11 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.910732Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.911695Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m11 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.911917Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.913151Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0000100001011101110110112162f84c168a352b29199bc1ea.lance"
+[2m2026-03-07T11:25:45.916931Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551603.manifest-8c51559b-5143-4236-ab59-7aa234cd133a"
+[2m2026-03-07T11:25:45.917620Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m11 [3mcommitted_version[0m[2m=[0m12 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.917674Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0ma917a997-bda0-4a4f-903a-9dff6e83e543 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("33064882")
+[2m2026-03-07T11:25:45.918563Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m11 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.918737Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.920009Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"01110010100101100111011191be1c42d8bb3325fee6d6d00c.lance"
+[2m2026-03-07T11:25:45.924670Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551603.manifest-ab9fb928-494f-4e0f-9370-fc78672078b5"
+[2m2026-03-07T11:25:45.925382Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m11 [3mcommitted_version[0m[2m=[0m12 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.930699Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m12 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.930881Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.932192Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"01000111100000000100001149d3fc443b897cf451aa93f1b5.lance"
+[2m2026-03-07T11:25:45.936173Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551602.manifest-df38bb22-0c98-4f9f-a5b9-2599beb7c1e7"
+[2m2026-03-07T11:25:45.936820Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m12 [3mcommitted_version[0m[2m=[0m13 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.936873Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.936889Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0ma917a997-bda0-4a4f-903a-9dff6e83e543 [3mpmid[0m[2m=[0mSome("33064882") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.937684Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m12 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.940830Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m19 [3mrequests[0m[2m=[0m19 [3mbytes_read[0m[2m=[0m4408 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.942323Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"100011110111110110110000b483f14f2b998db782be651552.lance"
+[2m2026-03-07T11:25:45.946483Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551602.manifest-2f2d622d-244e-47cf-b131-63bf0ceecf99"
+[2m2026-03-07T11:25:45.947186Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m12 [3mcommitted_version[0m[2m=[0m13 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.952005Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m13 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.954062Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.954917Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m13 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.955091Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.956441Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"00100101100010001010100159343a47159492208f3da8a404.lance"
+[2m2026-03-07T11:25:45.960612Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551601.manifest-ca8c2b3d-8c67-4560-8b6b-daace48a9bc0"
+[2m2026-03-07T11:25:45.961184Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m13 [3mcommitted_version[0m[2m=[0m14 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.961241Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0m6620e862-51bc-441b-a6b5-c5548f0a1d46 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("31434983")
+[2m2026-03-07T11:25:45.962190Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m13 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.962364Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.963452Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"1101110101000000111010112cb625499280f718c269ba0bdd.lance"
+[2m2026-03-07T11:25:45.967797Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551601.manifest-65f2ebeb-9a8e-4896-b9a0-c24acf3a360c"
+[2m2026-03-07T11:25:45.968470Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m13 [3mcommitted_version[0m[2m=[0m14 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.975060Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m14 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.975317Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:45.977159Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"11001010111010001000111046404b43e8af4b82073f6d2472.lance"
+[2m2026-03-07T11:25:45.981366Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551600.manifest-6a28c4c0-150a-4e50-a4d8-56f6f7df2ae4"
+[2m2026-03-07T11:25:45.982025Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m14 [3mcommitted_version[0m[2m=[0m15 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:45.982086Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:45.982101Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0m6620e862-51bc-441b-a6b5-c5548f0a1d46 [3mpmid[0m[2m=[0mSome("31434983") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:45.982967Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m14 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:45.986336Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m22 [3mrequests[0m[2m=[0m22 [3mbytes_read[0m[2m=[0m4460 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:45.987880Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"101000111011110011001001fc9ee84cc78ee0bc59d564cd41.lance"
+[2m2026-03-07T11:25:45.993139Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551600.manifest-0e4c74a7-b5bc-48a4-aeb1-258cb08fa05a"
+[2m2026-03-07T11:25:45.993796Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m14 [3mcommitted_version[0m[2m=[0m15 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:45.999083Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m15 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:46.001257Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:46.002006Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m15 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:46.002175Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:46.003316Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"00010110111001100001110124a18b49349672da833d9f3bef.lance"
+[2m2026-03-07T11:25:46.007846Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551599.manifest-56b63f9b-9614-48bf-a809-94f006a8f483"
+[2m2026-03-07T11:25:46.008560Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m15 [3mcommitted_version[0m[2m=[0m16 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:46.008627Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m Inserted new paper [3mpaper_id[0m[2m=[0m2ac9e99c-28e9-420d-9a06-3e0691596d91 [3mdoi[0m[2m=[0mNone [3mpmid[0m[2m=[0mSome("33723174")
+[2m2026-03-07T11:25:46.009539Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m15 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:46.009719Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:46.011015Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"001010100100110001100101f8a263443585f5cddd3580e65b.lance"
+[2m2026-03-07T11:25:46.016322Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551599.manifest-c01a7b14-ba52-410f-9b6d-5b5586d7aca2"
+[2m2026-03-07T11:25:46.017056Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m15 [3mcommitted_version[0m[2m=[0m16 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:46.022284Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m16 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:46.022597Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"writing" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mmode[0m[2m=[0mAppend
+[2m2026-03-07T11:25:46.023953Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"010011100000110100001101608705440fb626d946b4e34498.lance"
+[2m2026-03-07T11:25:46.027830Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/chunks.lance/_versions/18446744073709551598.manifest-d373659d-3961-4db0-aa6a-0a981183a8f3"
+[2m2026-03-07T11:25:46.028395Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mread_version[0m[2m=[0m16 [3mcommitted_version[0m[2m=[0m17 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Append"
+[2m2026-03-07T11:25:46.028475Z[0m [34mDEBUG[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::repository[0m[2m:[0m bulk_insert_chunks: inserted 2 chunks
+[2m2026-03-07T11:25:46.028499Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Paper ingested [3mpaper_id[0m[2m=[0m2ac9e99c-28e9-420d-9a06-3e0691596d91 [3mpmid[0m[2m=[0mSome("33723174") [3mn_chunks[0m[2m=[0m2
+[2m2026-03-07T11:25:46.029596Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m[1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m16 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:25:46.032892Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m1 [3miops[0m[2m=[0m25 [3mrequests[0m[2m=[0m25 [3mbytes_read[0m[2m=[0m4512 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:25:46.034186Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"0100110100111101100010018296a846cb9d1c15f2ec8cd2cc.lance"
+[2m2026-03-07T11:25:46.038615Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::file_audit[0m[2m:[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"D:/AI/Ferrumyx/data/lancedb/papers.lance/_versions/18446744073709551598.manifest-cad47b08-f463-49e7-8a18-496380102e39"
+[2m2026-03-07T11:25:46.039234Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"committed" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mread_version[0m[2m=[0m16 [3mcommitted_version[0m[2m=[0m17 [3mdetached[0m[2m=[0mfalse [3moperation[0m[2m=[0m"Update"
+[2m2026-03-07T11:25:46.039303Z[0m [32m INFO[0m [1mrun_ingestion[0m[1m{[0m[3mjob[0m[2m=[0mIngestionJob { gene: "BRAF", mutation: Some("V600E"), cancer_type: "SKCM", max_results: 100, sources: [PubMed, EuropePmc], pubmed_api_key: None, embedding_cfg: None, enable_scihub_fallback: true }[1m}[0m[2m:[0m [2mferrumyx_ingestion::pipeline[0m[2m:[0m Ingestion pipeline complete [3mjob_id[0m[2m=[0m6f945cd1-2c03-4e3c-a09b-8f0b85531f5a [3mpapers_found[0m[2m=[0m8 [3mpapers_inserted[0m[2m=[0m8 [3mpapers_dup[0m[2m=[0m0 [3mchunks[0m[2m=[0m16 [3mduration_ms[0m[2m=[0m3535 [3merrors[0m[2m=[0m0
+[2m2026-03-07T11:26:19.610266Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m17 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:26:19.611261Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\chunks.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m17 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:26:19.612050Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\entities.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:26:19.612656Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:26:41.326879Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:26:41.328231Z[0m [32m INFO[0m [1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"FilteredRead" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:27:06.665083Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:27:06.666430Z[0m [32m INFO[0m [1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"FilteredRead" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:27:19.794461Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m17 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:27:33.924807Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\kg_facts.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m1 [3mstatus[0m[2m=[0m"success"
+[2m2026-03-07T11:27:33.925669Z[0m [32m INFO[0m [1mDatasetRecordBatchStream[0m[2m:[0m [2mlance::execution[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"FilteredRead" [3moutput_rows[0m[2m=[0m0 [3miops[0m[2m=[0m0 [3mrequests[0m[2m=[0m0 [3mbytes_read[0m[2m=[0m0 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-03-07T11:27:54.277669Z[0m [32m INFO[0m [1mload[0m[2m:[0m [2mlance::dataset_events[0m[2m:[0m [3mevent[0m[2m=[0m"loading" [3muri[0m[2m=[0m"./data/lancedb\\papers.lance" [3mtarget_ref[0m[2m=[0mNone [3mversion[0m[2m=[0m17 [3mstatus[0m[2m=[0m"success"

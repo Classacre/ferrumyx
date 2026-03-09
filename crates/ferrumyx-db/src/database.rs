@@ -153,6 +153,7 @@ impl Database {
             Field::new("retrieval_tier", DataType::Int32, true),
             Field::new("ingested_at", DataType::Utf8, false),
             Field::new("abstract_simhash", DataType::Int64, true),
+            Field::new("published_version_doi", DataType::Utf8, true),
         ].into();
         
         let schema = Arc::new(Schema::new(fields));
@@ -189,6 +190,14 @@ impl Database {
             Field::new("page", DataType::Int64, true),
             Field::new("created_at", DataType::Utf8, false),
             embedding_field,
+            Field::new(
+                "embedding_large",
+                DataType::FixedSizeList(
+                    Arc::new(Field::new("item", DataType::Float32, false)),
+                    1024 as i32,
+                ),
+                true,
+            ),
         ].into();
         
         let schema = Arc::new(Schema::new(fields));

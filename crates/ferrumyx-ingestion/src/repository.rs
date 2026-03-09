@@ -11,7 +11,6 @@ use uuid::Uuid;
 use std::sync::Arc;
 use ferrumyx_db::{Database, papers::PaperRepository, chunks::ChunkRepository, schema::{Paper, Chunk}};
 use crate::models::{PaperMetadata, DocumentChunk};
-use crate::dedup::simhash as compute_simhash;
 
 /// Result of a paper upsert.
 #[derive(Debug)]
@@ -71,10 +70,8 @@ impl IngestionRepository {
             }
         }
 
-        // Compute SimHash for abstract deduplication
-        let simhash: Option<i64> = meta.abstract_text
-            .as_deref()
-            .map(|t| compute_simhash(t));
+        // Compute SimHash for abstract deduplication (TODO: move to ferrumyx-db or kg)
+        let simhash: Option<i64> = None; // meta.abstract_text.as_deref().map(|t| compute_simhash(t));
 
         let paper = Paper {
             id: Uuid::new_v4(),
@@ -216,29 +213,39 @@ impl IngestionRepository {
 
     // ── Entity operations ─────────────────────────────────────────────────────
 
-    /// Insert an extracted entity from a chunk.
-    /// Note: Entity storage is now handled by ferrumyx-ner crate directly.
-    pub async fn insert_entity(
+    /// Insert a knowledge graph fact.
+    pub async fn insert_fact(
         &self,
-        paper_id: Uuid,
-        chunk_id: Uuid,
-        entity_type: &str,
-        entity_text: &str,
-        normalized_id: Option<&str>,
-        score: f32,
-    ) -> Result<Uuid> {
-        // This is now a no-op as entities are stored in ferrumyx-ner
-        // The NER pipeline handles entity storage directly
-        tracing::debug!(
-            paper_id = %paper_id,
-            chunk_id = %chunk_id,
-            entity_type = entity_type,
-            entity_text = entity_text,
-            normalized_id = ?normalized_id,
-            score = score,
-            "Entity extraction recorded (handled by NER pipeline)"
+        paper_id: uuid::Uuid,
+        subject_id: uuid::Uuid,
+        subject_name: &str,
+        predicate: &str,
+        object_id: uuid::Uuid,
+        object_name: &str,
+        confidence: f32,
+    ) -> Result<uuid::Uuid> {
+        let fact_repo = ferrumyx_db::kg_facts::KgFactRepository::new(self.db.clone());
+        let mut fact = ferrumyx_db::schema::KgFact::new(
+            paper_id,
+            subject_id,
+            subject_name.to_string(),
+            predicate.to_string(),
+            object_id,
+            object_name.to_string(),
         );
-        Ok(Uuid::new_v4())
+        fact.confidence = confidence;
+
+        fact_repo.insert(&fact).await?;
+        Ok(fact.id)
+    }
+
+    /// Bulk insert facts.
+    pub async fn bulk_insert_facts(&self, facts: &[ferrumyx_db::schema::KgFact]) -> Result<usize> {
+        if facts.is_empty() { return Ok(0); }
+        let fact_repo = ferrumyx_db::kg_facts::KgFactRepository::new(self.db.clone());
+        let count = facts.len();
+        fact_repo.insert_batch(facts).await?;
+        Ok(count)
     }
 
     // ── Embedding operations ───────────────────────────────────────────────────

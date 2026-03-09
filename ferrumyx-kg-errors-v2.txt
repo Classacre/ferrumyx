@@ -1,0 +1,227 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   D:\AI\Ferrumyx\crates\ironclaw\Cargo.toml
+workspace: D:\AI\Ferrumyx\Cargo.toml
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:683:9
+    |
+683 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:684:9
+    |
+684 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:754:9
+    |
+754 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:756:9
+    |
+756 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:811:9
+    |
+811 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:812:9
+    |
+812 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:814:9
+    |
+814 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:865:9
+    |
+865 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:866:9
+    |
+866 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:867:9
+    |
+867 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:868:9
+    |
+868 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:931:9
+    |
+931 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:932:9
+    |
+932 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:933:9
+    |
+933 | ...et get_opt_i32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:934:9
+    |
+934 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_bool`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:995:9
+    |
+995 | ...et get_bool = ...
+    |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:996:9
+    |
+996 | ...et get_opt_i16 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_f32`
+   --> crates\ferrumyx-db\src\schema_arrow.rs:998:9
+    |
+998 | ...et get_opt_f32 = ...
+    |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_f32`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1061:9
+     |
+1061 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1062:9
+     |
+1062 | ...et get_opt_i32 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1117:9
+     |
+1117 | ...et get_bool = ...
+     |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1118:9
+     |
+1118 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_bool`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1180:9
+     |
+1180 | ...et get_bool = ...
+     |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_bool`
+
+warning: unused variable: `get_opt_i16`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1181:9
+     |
+1181 | ...et get_opt_i16 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i16`
+
+warning: unused variable: `get_opt_i32`
+    --> crates\ferrumyx-db\src\schema_arrow.rs:1182:9
+     |
+1182 | ...et get_opt_i32 = ...
+     |       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_get_opt_i32`
+
+warning: `ferrumyx-db` (lib) generated 25 warnings (run `cargo fix --lib -p ferrumyx-db` to apply 25 suggestions)
+    Checking ferrumyx-kg v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-kg)
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\scoring.rs:5:5
+  |
+5 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> crates\ferrumyx-kg\src\ner\trie_ner.rs:8:21
+  |
+8 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:4:5
+  |
+4 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> crates\ferrumyx-kg\src\ner\entity_loader.rs:5:14
+  |
+5 | use anyhow::{Context, Result};
+  |              ^^^^^^^
+
+warning: unused import: `HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_db.rs:3:24
+  |
+3 | use std::collections::{HashMap, HashSet};
+  |                        ^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:4:5
+  |
+4 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `tracing::info`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:5:5
+  |
+5 | use tracing::info;
+  |     ^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> crates\ferrumyx-kg\src\ner\entity_aggregator.rs:6:5
+  |
+6 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: `ferrumyx-kg` (lib) generated 11 warnings (run `cargo fix --lib -p ferrumyx-kg` to apply 11 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.86s

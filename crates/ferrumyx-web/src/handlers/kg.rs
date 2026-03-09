@@ -92,26 +92,33 @@ pub async fn kg_page(
     let facts = fact_repo.list(0, 100).await.unwrap_or_default();
     
     // Convert to graph data and display table format
-    let mut nodes_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut nodes_set: std::collections::HashSet<(String, String, bool)> = std::collections::HashSet::new();
     let mut links = Vec::new();
     let mut display_facts = Vec::new();
 
     for f in &facts {
-        nodes_set.insert(f.subject_name.clone());
-        nodes_set.insert(f.object_name.clone());
+        let is_paper_fact = f.predicate == "mentions";
+        
+        // Use paper_id as the unique key for paper nodes, and subject_name for the label
+        let subj_node_id = if is_paper_fact { f.paper_id.to_string() } else { f.subject_name.clone() };
+        let obj_node_id = f.object_name.clone();
+
+        nodes_set.insert((subj_node_id.clone(), f.subject_name.clone(), is_paper_fact));
+        nodes_set.insert((obj_node_id.clone(), f.object_name.clone(), false));
         
         links.push(serde_json::json!({
-            "source": f.subject_name,
-            "target": f.object_name,
+            "source": subj_node_id,
+            "target": obj_node_id,
             "label": f.predicate
         }));
         
-        display_facts.push((f.subject_name.clone(), f.predicate.clone(), f.object_name.clone(), "Pipeline Extraction".to_string()));
+        display_facts.push((f.subject_name.clone(), f.predicate.clone(), f.object_name.clone(), f.paper_id.to_string()));
     }
 
-    let nodes: Vec<_> = nodes_set.into_iter().map(|id| {
-        let group = if id == gene { 1 } else { 2 };
-        serde_json::json!({ "id": id, "group": group, "name": id })
+    let nodes: Vec<_> = nodes_set.into_iter().map(|(id, name, is_paper)| {
+        let group = if name == gene { 1 } else if is_paper { 3 } else { 2 };
+        let size = if is_paper { 8 } else { 4 };
+        serde_json::json!({ "id": id, "group": group, "name": name, "size": size })
     }).collect();
 
     let graph_data = serde_json::json!({
@@ -126,12 +133,16 @@ pub async fn kg_page(
         </td></tr>"#, gene)
     } else {
         display_facts.iter().map(|(subj, pred, obj, src)| {
-            let pred_badge = format!(r#"<span class="badge badge-outline">{}</span>"#, pred);
+            let pred_badge = if pred == "mentions" {
+                 format!(r#"<span class="badge badge-accent">{}</span>"#, pred)
+            } else {
+                 format!(r#"<span class="badge badge-outline">{}</span>"#, pred)
+            };
             format!(r#"<tr>
                 <td style="font-weight:600; color:var(--text-main);">{}</td>
                 <td>{}</td>
                 <td style="font-weight:600; color:var(--text-main);">{}</td>
-                <td class="text-muted">{}</td>
+                <td class="text-muted" style="font-size: 0.8em;">{}</td>
             </tr>"#, subj, pred_badge, obj, src)
         }).collect()
     };
@@ -206,16 +217,51 @@ pub async fn kg_page(
             .graphData(graphData)
             .nodeLabel('name')
             .nodeAutoColorBy('group')
+            .nodeVal('size')
             .linkDirectionalArrowLength(3.5)
             .linkDirectionalArrowRelPos(1)
             .linkCurvature(0.25)
             .backgroundColor('transparent')
-            .linkColor(() => 'rgba(255, 255, 255, 0.2)')
+            .linkColor(link => link.label === 'mentions' ? 'rgba(0, 196, 255, 0.1)' : 'rgba(255, 255, 255, 0.2)')
             .linkLabel(link => `<div style="background: rgba(0,0,0,0.8); padding: 4px; border-radius: 4px; font-family: var(--font-main); font-size: 12px; color: white;">${{link.label}}</div>`)
             .onNodeClick(node => {{
                 Graph.centerAt(node.x, node.y, 1000);
                 Graph.zoom(8, 2000);
             }});
+            
+        // Customize node drawing for Papers
+        Graph.nodeCanvasObject((node, ctx, globalScale) => {{
+            const label = node.name;
+            const fontSize = 12/globalScale;
+            ctx.font = `${{fontSize}}px Inter`;
+            const textWidth = ctx.measureText(label).width;
+            const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+
+            // Shape
+            if (node.group === 3) {{
+                // Hexagon for Papers
+                const r = node.size || 4;
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {{
+                    ctx.lineTo(node.x + r * Math.cos(Math.PI/3 * i), node.y + r * Math.sin(Math.PI/3 * i));
+                }}
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(0, 196, 255, 0.8)';
+                ctx.fill();
+            }} else {{
+                // Circle for Entities
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.size || 4, 0, 2 * Math.PI, false);
+                ctx.fillStyle = node.color || 'white';
+                ctx.fill();
+            }}
+
+            // Label
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(label, node.x, node.y + (node.size || 4) + 5);
+        }});
             
         // Initial zoom to fit
         setTimeout(() => {{ Graph.zoomToFit(400, 50); }}, 500);

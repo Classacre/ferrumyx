@@ -134,6 +134,8 @@ fn parse_pubmed_xml(xml: &str) -> anyhow::Result<Vec<PaperMetadata>> {
     let mut in_last_name  = false;
     let mut in_fore_name  = false;
     let mut in_journal    = false;
+    let mut in_doi        = false;
+    let mut in_pmc        = false;
     let mut current_last  = String::new();
     let mut current_fore  = String::new();
     let mut buf = Vec::new();
@@ -162,6 +164,19 @@ fn parse_pubmed_xml(xml: &str) -> anyhow::Result<Vec<PaperMetadata>> {
                     b"LastName"     => in_last_name = true,
                     b"ForeName"     => in_fore_name = true,
                     b"Title"        => in_journal = true,
+                    b"ArticleId"    => {
+                        for attr in e.attributes() {
+                            if let Ok(attr) = attr {
+                                if attr.key.as_ref() == b"IdType" {
+                                    if attr.value.as_ref() == b"doi" {
+                                        in_doi = true;
+                                    } else if attr.value.as_ref() == b"pmc" {
+                                        in_pmc = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -174,6 +189,8 @@ fn parse_pubmed_xml(xml: &str) -> anyhow::Result<Vec<PaperMetadata>> {
                     if in_last_name { current_last = text.clone(); }
                     if in_fore_name { current_fore = text.clone(); }
                     if in_journal   { p.journal = Some(text.clone()); }
+                    if in_doi       { p.doi = Some(text.clone()); }
+                    if in_pmc       { p.pmcid = Some(text.clone()); }
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -184,6 +201,7 @@ fn parse_pubmed_xml(xml: &str) -> anyhow::Result<Vec<PaperMetadata>> {
                     b"LastName"     => in_last_name = false,
                     b"ForeName"     => in_fore_name = false,
                     b"Title"        => in_journal = false,
+                    b"ArticleId"    => { in_doi = false; in_pmc = false; },
                     b"Author" => {
                         if in_author {
                             if let Some(ref mut p) = current {

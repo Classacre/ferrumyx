@@ -12,6 +12,7 @@ pub mod chembl;
 pub mod tcga;
 pub mod gtex;
 pub mod scihub;
+pub mod semanticscholar;
 
 use async_trait::async_trait;
 use crate::models::PaperMetadata;
@@ -24,6 +25,7 @@ pub use chembl::{ChemblClient, CompoundRecord, TargetRecord, ActivityRecord};
 pub use tcga::TcgaClient;
 pub use gtex::GtexClient;
 pub use scihub::SciHubClient;
+pub use semanticscholar::SemanticScholarClient;
 
 /// Common interface for all literature source clients.
 #[async_trait]

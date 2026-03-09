@@ -6,17 +6,12 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum EntityType {
     Gene,
-    Protein,
-    Disease,
-    Chemical,
     Mutation,
-    Species,
+    Disease,
+    CancerType,
+    Chemical,
     CellLine,
     Pathway,
-    Drug,
-    Person,
-    Organization,
-    Location,
     Other,
 }
 
@@ -24,17 +19,12 @@ impl EntityType {
     pub fn as_str(&self) -> &'static str {
         match self {
             EntityType::Gene => "GENE",
-            EntityType::Protein => "PROTEIN",
             EntityType::Disease => "DISEASE",
+            EntityType::CancerType => "CANCER_TYPE",
             EntityType::Chemical => "CHEMICAL",
             EntityType::Mutation => "MUTATION",
-            EntityType::Species => "SPECIES",
             EntityType::CellLine => "CELL_LINE",
             EntityType::Pathway => "PATHWAY",
-            EntityType::Drug => "DRUG",
-            EntityType::Person => "PERSON",
-            EntityType::Organization => "ORGANIZATION",
-            EntityType::Location => "LOCATION",
             EntityType::Other => "OTHER",
         }
     }
@@ -54,14 +44,13 @@ fn get_label_map() -> &'static HashMap<String, EntityType> {
     LABEL_MAP.get_or_init(|| {
         let mut m = HashMap::new();
         m.insert("Gene".to_string(), EntityType::Gene);
-        m.insert("Protein".to_string(), EntityType::Protein);
         m.insert("Disease".to_string(), EntityType::Disease);
         m.insert("Chemical".to_string(), EntityType::Chemical);
         m.insert("Mutation".to_string(), EntityType::Mutation);
         m.insert("DNA".to_string(), EntityType::Gene);
         m.insert("RNA".to_string(), EntityType::Gene);
-        m.insert("Cancer".to_string(), EntityType::Disease);
-        m.insert("Drug".to_string(), EntityType::Drug);
+        m.insert("Cancer".to_string(), EntityType::CancerType);
+        m.insert("CancerType".to_string(), EntityType::CancerType);
         m.insert("GGP".to_string(), EntityType::Gene);
         m
     })

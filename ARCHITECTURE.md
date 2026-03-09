@@ -4,8 +4,8 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 5 Complete)  
-**Date:** 2026-02-26
+**Status:** Active Implementation (Phase 3 Paper-Centric Refactor Complete)  
+**Date:** 2026-03-09
 
 ---
 
@@ -68,8 +68,8 @@ flowchart TD
     subgraph FerrumyxExt [Ferrumyx Extension Layer]
         direction TB
         F1[Ingestion Orchestrator]
-        F2[KG Builder + NER]
-        F3[Target Ranker + Query Engine]
+        F2[Paper-Centric KG Builder + TrieNer]
+        F3[Target Ranker + Relation Extraction]
         
         F4[Molecule Design Pipeline]
         F5[Self-Optimization Loop]
@@ -111,11 +111,13 @@ flowchart TD
 
 ### Orchestration Layer (Rust, IronClaw extension)
 
+| Crate | Description | Extends IronClaw? |
+|---|---|---|
 | `ferrumyx-agent` | Top-level agent loop, intent routing | Yes — registers custom intents |
 | `ferrumyx-common` | Shared types, utilities, and query definitions | No |
 | `ferrumyx-db` | Database schema, migrations, and access patterns | No |
 | `ferrumyx-ingestion` | Paper discovery, download, embeddings (Candle) | Tool implementations |
-| `ferrumyx-kg` | Knowledge graph build, NER (Aho-Corasick), and update | Storage abstraction |
+| `ferrumyx-kg` | Paper-centric Literature Graph, TrieNer (Aho-Corasick), Normalization | Storage abstraction |
 | `ferrumyx-molecules` | Molecular structure and docking logic | No |
 | `ferrumyx-ranker` | Target scoring, query execution, and shortlisting | Pure Rust scoring logic |
 | `ferrumyx-web` | Web UI and API Gateway | No |
@@ -128,10 +130,10 @@ flowchart TD
 | `IngestPubmedTool` | Rust HTTP client | Native integration with PubMed API |
 | `IngestEuropePmcTool` | Rust HTTP client | Native integration with Europe PMC API |
 | `IngestAllSourcesTool` | Rust Orchestration | Parallel multi-source ingestion |
-| `NerExtractTool` | Rust (Aho-Corasick) | Native dictionary-based biomedical NER |
+| `NerExtractTool` | Rust (Aho-Corasick) | Database-driven NER (HGNC, OncoTree) |
 | `ScoreTargetsTool` | Rust ranking logic | Multi-factor evidence scoring & DepMap |
-| `KgQueryTool` | Rust / LanceDB | Embedded vector DB graph queries |
-| `KgUpsertTool` | Rust / LanceDB | Knowledge graph construction |
+| `KgQueryTool` | Rust / LanceDB | Paper-centric provenance graph queries |
+| `KgUpsertTool` | Rust / LanceDB | Literature Graph construction |
 | `FetchStructureTool` | Rust HTTP / PDB | Fetch protein structures |
 | `DetectPocketsTool` | Rust (`fpocket` wrapper) | Detect binding pockets (structural) |
 | `DockMoleculeTool` | Rust (`vina` wrapper) | AutoDock Vina molecular docking |
@@ -170,13 +172,13 @@ flowchart TD
     end
     class EmbeddingPipeline pipeline
     
-    subgraph NER_KGPipeline [NER + KG CONSTRUCTION]
+    subgraph NER_KGPipeline [NER + LITERATURE GRAPH CONSTRUCTION]
         direction TB
-        N1[9. Aho-Corasick NER biomedical]
-        N2[10. Entity normalization]
-        N3[11. Fact triple extraction]
-        N4[12. Confidence scoring]
-        N5[13. Append to kg_facts]
+        N1[9. TrieNer: Case-insensitive AC matching]
+        N2[10. Normalization: HGNC / OncoTree API]
+        N3[11. RelationExtractor: Pattern-based extraction]
+        N4[12. Paper-as-Hub Linkage (Mentions)]
+        N5[13. Append to kg_facts (Provenance Hubs)]
         N1 --> N2 --> N3 --> N4 --> N5
     end
     class NER_KGPipeline pipeline
@@ -244,7 +246,8 @@ pub struct Paper {
     pub ingested_at: chrono::DateTime<chrono::Utc>,
     pub raw_json: Option<String>         // original API response (JSON string)
 }
-
+```
+```rust
 // Parsed document chunks (section-aware)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
@@ -258,39 +261,43 @@ pub struct Chunk {
     pub embedding: Option<Vec<f32>>,     // 768-dim (BiomedBERT-base) or 1024-dim
     pub created_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Biomedical entities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub id: uuid::Uuid,
-    pub canonical_id: Option<String>,    // HGNC:1100, MESH:D009374, etc.
-    pub entity_type: String,             // 'gene'|'mutation'|'cancer_type'|'compound'|'pathway'
+    pub external_id: String,             // HGNC:1100, OncoTree:LUAD
     pub name: String,
-    pub aliases: Option<Vec<String>>,
-    pub external_ids: Option<String>,    // JSON string {hgnc, uniprot, ensembl, chebi, ...}
+    pub canonical_name: Option<String>,
+    pub entity_type: String,             // 'GENE'|'CANCER_TYPE'
+    pub synonyms: Option<String>,        // Pipe-separated or JSON aliasing
+    pub source_db: String,               // 'HGNC'|'ONCOTREE'
     pub created_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Knowledge graph facts (append-only)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KgFact {
     pub id: uuid::Uuid,
+    pub paper_id: uuid::Uuid,            // The provenance hub
     pub subject_id: uuid::Uuid,
-    pub predicate: String,               // 'inhibits'|'activates'|'mutated_in'|'synthetic_lethal_with'
+    pub subject_name: String,
+    pub predicate: String,               // 'inhibits'|'activates'|'associated_with'
     pub object_id: uuid::Uuid,
+    pub object_name: String,
     pub confidence: f32,
-    pub evidence_type: String,           // 'experimental'|'computational'|'text_mined'
-    pub evidence_weight: f32,
-    pub source_pmid: Option<String>,
-    pub source_doi: Option<String>,
-    pub source_db: Option<String>,       // 'cosmic'|'depmap'|'chembl'|...
-    pub sample_size: Option<i64>,
-    pub study_type: Option<String>,      // 'rct'|'cohort'|'in_vitro'|'cell_line'|...
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub evidence: Option<String>,        // Supporting text snippet
+    pub evidence_type: String,           // 'text_mined'|'experimental'
+    pub sample_size: Option<i32>,
+    pub study_type: Option<String>,      // 'rct'|'cell_line'|...
     pub valid_from: chrono::DateTime<chrono::Utc>,
-    pub valid_until: Option<chrono::DateTime<chrono::Utc>>
+    pub valid_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Target scoring (versioned)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetScore {
@@ -305,7 +312,8 @@ pub struct TargetScore {
     pub scored_at: chrono::DateTime<chrono::Utc>,
     pub is_current: bool
 }
-
+```
+```rust
 // Molecular structures and docking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molecule {
@@ -324,7 +332,8 @@ pub struct Molecule {
     pub parent_id: Option<uuid::Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockingResult {
     pub id: uuid::Uuid,
@@ -339,7 +348,8 @@ pub struct DockingResult {
     pub run_params: Option<String>,      // JSON string
     pub docked_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Feedback and self-improvement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackEvent {
@@ -352,7 +362,8 @@ pub struct FeedbackEvent {
     pub evidence_source: Option<String>,
     pub recorded_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WeightUpdateLog {
     pub id: uuid::Uuid,
@@ -364,7 +375,8 @@ pub struct WeightUpdateLog {
     pub delta_summary: Option<String>,   // JSON string
     pub updated_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Audit log for all LLM calls
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmAuditLog {
@@ -379,7 +391,8 @@ pub struct LlmAuditLog {
     pub latency_ms: Option<i64>,
     pub called_at: chrono::DateTime<chrono::Utc>
 }
-
+```
+```rust
 // Ingestion audit log
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestionAudit {
@@ -548,11 +561,11 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 
 **Extension mechanisms used:**
 
-1. **Custom tool registration:** Ferrumyx registers its specialized domain tools (`IngestPubmedTool`, `KgQueryTool`, `DockMoleculeTool`, etc.) via IronClaw's tool registry.
-2. **Autonomous Tool Creation:** IronClaw agents can autonomously define and register temporary new tools or routines to solve specific scientific bottlenecks identified during the self-optimization cycle.
-3. **Core Agent Loop Orchestration:** Ferrumyx embeds the `Agent` runtime within `ferrumyx-agent`. The agent is the primary decision-maker, autonomously interpreting results, adjusting parameters, and executing complex multi-step workflows without human intervention.
-4. **Custom routines:** Ferrumyx leverages the IronClaw routines engine for continuous background optimization, with agents deciding when to re-score or re-prioritize based on incoming data streams.
-5. **LLM execution:** IronClaw's native LLM abstraction handles routing to local (Ollama) or remote (OpenAI/Anthropic) backends based on data classification and agent needs.
+1.  **Custom tool registration:** Ferrumyx registers its specialized domain tools (`IngestPubmedTool`, `KgQueryTool`, `DockMoleculeTool`, etc.) via IronClaw's tool registry.
+2.  **Autonomous Tool Creation:** IronClaw agents can autonomously define and register temporary new tools or routines to solve specific scientific bottlenecks identified during the self-optimization cycle.
+3.  **Core Agent Loop Orchestration:** Ferrumyx embeds the `Agent` runtime within `ferrumyx-agent`. The agent is the primary decision-maker, autonomously interpreting results, adjusting parameters, and executing complex multi-step workflows without human intervention.
+4.  **Custom routines:** Ferrumyx leverages the IronClaw routines engine for continuous background optimization, with agents deciding when to re-score or re-prioritize based on incoming data streams.
+5.  **LLM execution:** IronClaw's native LLM abstraction handles routing to local (Ollama) or remote (OpenAI/Anthropic) backends based on data classification and agent needs.
 
 **What requires direct IronClaw code changes (minimal, tracked):**
 - Potentially: exposing Docker sandbox orchestration as a stable API if not already public. This would be contributed back upstream rather than forked.
@@ -717,10 +730,10 @@ GET /graph/v1/paper/search
 
 ### Query Expansion Rules
 
-1. Gene aliases resolved from HGNC (e.g., KRAS → {KRAS, RASK2, c-Ki-ras})
-2. Mutation notation variants: G12D → {G12D, Gly12Asp, p.G12D, c.35G>A, rs121913529}
-3. Cancer synonyms from OncoTree: PDAC → {pancreatic adenocarcinoma, exocrine pancreatic cancer, pancreatic ductal carcinoma}
-4. Boolean logic: (gene OR alias1 OR alias2) AND (mutation OR notation2 OR notation3) AND (cancer OR synonym1 OR synonym2)
+1.  Gene aliases resolved from HGNC (e.g., KRAS → {KRAS, RASK2, c-Ki-ras})
+2.  Mutation notation variants: G12D → {G12D, Gly12Asp, p.G12D, c.35G>A, rs121913529}
+3.  Cancer synonyms from OncoTree: PDAC → {pancreatic adenocarcinoma, exocrine pancreatic cancer, pancreatic ductal carcinoma}
+4.  Boolean logic: (gene OR alias1 OR alias2) AND (mutation OR notation2 OR notation3) AND (cancer OR synonym1 OR synonym2)
 
 ### Deduplication on Ingestion
 
@@ -780,38 +793,45 @@ Ferrumyx operates a tiered retrieval strategy. The goal is to maximise the fract
 
 ```mermaid
 graph TD
-    A[Start Retrieval] --> B{PMC ID available?}
-    B -- Yes --> T1[Tier 1 (preferred): PMC XML<br/>Fetch via E-utilities]
-    B -- No --> C{OA Status?<br/>Gold/Green/Hybrid}
+    A[Start Retrieval] --> Explicit{Explicit OA URL?}
     
-    C -- Yes --> T2[Tier 2: Unpaywall PDF<br/>Fetch & Ferrules Parse]
+    Explicit -- Yes --> T1[Tier 1 (preferred): Direct PDF<br/>Fetch & Parse]
+    Explicit -- No --> B{PMCID available?}
+    
+    B -- Yes --> T2[Tier 2: PMC Direct PDF API<br/>Fetch & Parse]
+    B -- No --> C{OA Status via Unpaywall?}
+    
+    C -- Yes --> T3[Tier 3: Unpaywall PDF<br/>Fetch & Parse]
     C -- No --> D{Europe PMC ID?}
     
-    D -- Yes --> T3[Tier 3: Europe PMC XML<br/>Fetch via REST API]
+    D -- Yes --> T4[Tier 4: Europe PMC XML/PDF<br/>Fetch via REST]
     D -- No --> E{bioRxiv/medRxiv?}
     
-    E -- Yes --> T4[Tier 4: bioRxiv/medRxiv PDF<br/>Fetch & Ferrules Parse]
-    E -- No --> F{S2 OA URL?}
+    E -- Yes --> T5[Tier 5: Preprint PDF<br/>Fetch & Parse]
+    E -- No --> G{Sci-Hub fallback<br/>enabled?}
     
-    F -- Yes --> T5[Tier 5: Semantic Scholar PDF<br/>Fetch & Ferrules Parse]
-    F -- No --> G{Sci-Hub fallback<br/>enabled?}
+    G -- Yes --> SciHub[Initiate Sci-Hub Multi-Domain Loop]
+    SciHub --> SH1[Try sci-hub.se] --> SH2{Success?}
+    SH2 -- No --> SH3[Try sci-hub.st] --> SH4{Success?}
+    SH4 -- No --> SH5[Try sci-hub.ru...] --> T7[Tier 7: Sci-Hub PDF<br/>Scrape & Download]
+    SH2 -- Yes --> T7
+    SH4 -- Yes --> T7
+    SH5 -- Failed --> T6[Tier 6 (final): Abstract Only]
     
-    G -- Yes --> T7[Tier 7 (fallback): Sci-Hub PDF<br/>Scrape & Download]
-    G -- No --> T6[Tier 6 (final): Abstract Only]
-    T7 --> T6
+    G -- No --> T6
 ```
 
 **Tiered Retrieval Definitions:**
 
-1. **Tier 1: PMC XML** (Preferred). Direct fetch of structured NLM XML via Europe PMC or NCBI.
-2. **Tier 2: Unpaywall resolved OA PDF**. High-quality PDF retrieval from official publisher repositories.
-3. **Tier 3: Europe PMC full-text XML**. Fallback for papers not in PMC USA.
-4. **Tier 4: bioRxiv/medRxiv PDF**. Preprint retrieval (lower confidence score applied).
-5. **Tier 5: Semantic Scholar OA PDF**. Supplementary OA link source.
-6. **Tier 7: Sci-Hub Fallback**. (Optional) Scrapes active Sci-Hub mirrors for papers without existing OA links. Disabled by default.
-7. **Tier 6: Abstract Only**. Fallback when no full-text can be legally or technically retrieved.
+1.  **Tier 1: Explicit OA URL** (Preferred). Direct fetch of a publisher-provided PDF link included in search metadata.
+2.  **Tier 2: PMC Direct API**. Resolution of `PMCID` directly to the `europepmc.org/backend/ptpmcrender` endpoint for open-access PDF downloads.
+3.  **Tier 3: Unpaywall resolved OA PDF**. High-quality PDF retrieval from official publisher repositories via unpaywall.org.
+4.  **Tier 4: Europe PMC**. Fallback for papers not in PMC USA.
+5.  **Tier 5: bioRxiv/medRxiv PDF**. Preprint retrieval (lower confidence score applied).
+6.  **Tier 7: Sci-Hub Multi-Domain Fallback**. (Optional) Scrapes active Sci-Hub mirrors sequentially (se, st, ru, do, box, wf) for paywalled papers. Disabled by default.
+7.  **Tier 6: Abstract Only**. Fallback when no full-text can be legally or technically retrieved.
 
-**Decision stored in DB:** `papers.retrieval_tier` (1–7) enables retrospective analysis of corpus coverage. Typical expectation for recent oncology literature: ~60% Tier 1–3, ~20% Tier 4–5, ~20% abstract/fallback.
+**Decision stored in DB:** `papers.full_text_status` indicates if full-text was successfully assembled. Typical expectation for recent oncology literature with Sci-Hub enabled: >90% full-text coverage.
 
 ---
 
@@ -942,8 +962,8 @@ Heuristic-based section mapping from heading text:
 ### Future: Enhanced Table/Figure Extraction
 
 For papers where table/figure extraction is critical:
-1. Primary: Ferrules (fast, for text and entity extraction)
-2. Future: Custom Rust table extraction (for complex tables/figures when needed)
+1.  Primary: Ferrules (fast, for text and entity extraction)
+2.  Future: Custom Rust table extraction (for complex tables/figures when needed)
 
 ---
 
@@ -951,27 +971,29 @@ For papers where table/figure extraction is critical:
 
 ### Overview
 
-Fast biomedical entity recognition using Aho-Corasick trie matching against complete biomedical databases (HGNC, MeSH, ChEMBL).
+Fast, database-driven biomedical entity recognition using `TrieNer` (Aho-Corasick) for mention detection and `OncoTree`/`HGNC` normalizers for canonicalization.
 
 **Location:** `crates/ferrumyx-kg/src/ner/`
 
 ### Components
 
-1. **TrieNer** (`trie_ner.rs`)
-   - Aho-Corasick automaton for O(n) entity matching
-   - 10M+ characters/second throughput
-   - Embedded subset: 100+ common cancer genes/diseases/drugs
+1.  **TrieNer** (`trie_ner.rs`)
+    - Aho-Corasick automaton for O(n) streaming mention detection.
+    - Case-insensitive matching across 30k+ combined patterns.
+    - Normalization: Maps detected text to canonical IDs (HGNC Symbol, OncoTree Code).
 
-2. **EntityLoader** (`entity_loader.rs`)
-   - Unified database loader for HGNC, MeSH, ChEMBL
-   - Auto-downloads and caches databases (~105MB total)
-   - Refreshes monthly
-   - Cross-reference IDs: HGNC ↔ Entrez ↔ Ensembl ↔ UniProt
+2.  **CancerNormaliser** (`cancer_normaliser.rs`)
+    - Pulls from MSKCC OncoTree JSON API.
+    - Recursively parses 897 tumor types across 5 levels of the hierarchy.
+    - Provides canonical mapping for common cancer names and synonyms.
 
-3. **EntityAggregator** (`entity_aggregator.rs`)
-   - Builds knowledge graphs from extracted entities
-   - Detects co-occurrences and infers relationships
-   - Exports RDF triples for downstream analysis
+3.  **HgncNormaliser** (`hgnc_normaliser.rs`)
+    - Loads ~27,000 gene symbols and aliases from HGNC.
+    - Handles canonical symbol resolution (e.g., `HER2` -> `ERBB2`).
+
+4.  **RelationExtractor** (`relation_extractor.rs`)
+    - Pattern-based extraction of scientific relations (e.g., "associated_with", "inhibits").
+    - Extracts evidence snippets for every fact.
 
 ### Integration with Ingestion Pipeline
 
@@ -1246,10 +1268,10 @@ in both PubMed and Europe PMC). Three deduplication tiers are applied in sequenc
 - Computationally expensive; applied only to papers from the same year ± 1
 
 **Source priority for canonical record:**
-1. PubMed (richest structured metadata, MeSH terms)
-2. Europe PMC (good fallback, grants/patent cross-refs)
-3. bioRxiv/medRxiv (preprint; superseded when PubMed record appears)
-4. Semantic Scholar / CrossRef (metadata-only fallback)
+1.  PubMed (richest structured metadata, MeSH terms)
+2.  Europe PMC (good fallback, grants/patent cross-refs)
+3.  bioRxiv/medRxiv (preprint; superseded when PubMed record appears)
+4.  Semantic Scholar / CrossRef (metadata-only fallback)
 
 When a duplicate is detected across sources, the canonical record is updated to merge: all available IDs (PMID, PMCID, DOI, S2 paper ID), open-access URLs from all sources, and citation counts.
 
@@ -1319,8 +1341,6 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 
 ## 3.1 Entity Type Schemas
 
-```sql
--- Gene / Protein
 ```rust
 // Gene / Protein
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1461,43 +1481,38 @@ pub struct EntSyntheticLethality {
     pub created_at: chrono::DateTime<chrono::Utc>
 }
 ```
-```
 
-## 3.2 Confidence Scoring Model
+## 3.2 Deterministic NER Confidence Scoring Model
 
-Every `kg_facts` row has a `confidence` value in [0, 1] computed as:
+Every `kg_facts` mention and relationship has a `confidence` value in [0, 1] computed dynamically. During Phase 3.2, Ferrumyx moved away from hardcoded ML confidence estimates to a deterministic scaling formula evaluated directly within the Aho-Corasick `TrieNer`.
+
+### Confidence Modifiers (Calculated at Match Time)
 
 ```text
-confidence = base_weight × Π(applicable_modifiers)  [capped at 1.0]
+confidence = base_weight * tier_modifier * text_length_modifier * boundary_validation
 ```
 
-### Base Weights by Evidence Type
+| Entity & Match Type | Base Weight / Modifier | Rationale |
+|---|---|---|
+| **Gene (Preferred Symbol)** | 1.00 | Exact HGNC approved symbol (e.g., `KRAS`, `BRAF`) |
+| **Gene (Alias)** | 0.85 | Common historical alias (e.g., `c-Ki-ras`) |
+| **Gene (Previous)** | 0.75 | Outdated/Legacy symbol mapping |
+| **Cancer (OncoTree Code)** | 1.00 | Pure classification code (e.g., `LUAD`, `SKCM`) |
+| **Cancer (OncoTree Name)** | 0.90 | Textual description (e.g., `Lung Adenocarcinoma`) |
 
-| Evidence Type | Base Weight |
-|---|---|
-| Experimental in vivo | 1.00 |
-| Experimental in vitro | 0.85 |
-| Clinical trial Phase 3+ (positive outcome) | 1.00 |
-| Clinical trial Phase 1–2 | 0.75 |
-| Computational (ML-based prediction) | 0.50 |
-| Computational (rule-based / pathway inference) | 0.35 |
-| Text-mined (NER extraction, unverified) | 0.30 |
-| Database assertion (no traceable primary source) | 0.40 |
+### Ambiguity and Length Penalties
 
-### Modifiers (Multiplicative)
+Short acronyms frequently trigger false positives (e.g., `RB` matching inside `VERB`, or `ABL` inside `VARIABLE`). To counteract this:
 
-| Modifier Condition | Factor |
-|---|---|
-| Sample size > 1,000 | ×1.20 |
-| Replicated in ≥2 independent studies | ×1.15 |
-| Published in journal with IF > 10 | ×1.05 |
-| Preprint only (not peer-reviewed) | ×0.70 |
-| Single-cell line only (not in vivo) | ×0.85 |
-| Retracted paper | ×0.00 |
+1. **Length Penalty:** If a matched symbol length is `< 4` characters, an automatic `-0.15` penalty is applied to the confidence score (unless it's a structural OncoTree Code).
+2. **Word Boundary Check:** If a symbol's length is `<= 3`, `TrieNer` enforces a strict word-boundary check on the surrounding characters (must be space, punctuation, or string ends). If it fails the boundary check, the match is outright rejected (confidence = 0.0).
+3. **Hard Threshold:** Any match whose final calculated confidence drops below `0.75` is discarded before insertion into the Knowledge Graph to maintain high data fidelity.
 
-**Example:** An in vitro result (0.85) from a preprint (×0.70) with sample size 50 (no size modifier) = 0.85 × 0.70 = **0.595**
+**Example 1:** Finding "KRAS" (Preferred, Length=4) -> Score = 1.00
+**Example 2:** Finding "c-Ki-ras" (Alias, Length=8) -> Score = 0.85
+**Example 3:** Finding "RB1" (Preferred, Length=3) -> Boundary OK -> Score = 1.00 - 0.15 (short) = 0.85
 
-**Implementation:** Modifiers are computed at fact-insertion time in the `ferrumyx-kg` Rust module, using metadata from the `papers` table (journal IF from CrossRef, peer_review_status, retraction flag via RetractionWatch API).
+**Implementation:** Handled internally via `SymbolTier` and `CancerPatternKind` enums within `hgnc.rs` and `cancer_normaliser.rs`, resolving down to `PatternMeta` within the `TrieNer` automaton map.
 
 ## 3.3 Evidence Weighting & Aggregation
 
@@ -1584,23 +1599,6 @@ flowchart TD
 
 ## 3.7 Graph Traversal Query Patterns
 
-### Pattern 1: Multi-hop — Genes inhibited by existing drugs in KRAS-pathway cancers
-
-```sql
-SELECT DISTINCT g.symbol, g.hgnc_id,
-       COUNT(DISTINCT kf2.id) AS inhibitor_count
-FROM ent_genes g
--- Join to mutations in this gene
-JOIN kg_facts kf1 ON kf1.subject_id = g.id
-                 AND kf1.predicate = 'mutated_in'
-                 AND kf1.valid_until IS NULL
--- Cancer context: KRAS-associated
-JOIN ent_cancer_types ct ON kf1.object_id = ct.id
-                         AND ct.oncotree_code IN ('PAAD','LUAD','COAD')
--- Join to inhibitor relationships
-JOIN kg_facts kf2 ON kf2.object_id = g.id
-                 AND kf2.predicate = 'inhibits'
-                 AND kf2.valid_until IS NULL
 JOIN ent_compounds c ON kf2.subject_id = c.id
 WHERE kf1.confidence > 0.5
 GROUP BY g.symbol, g.hgnc_id
@@ -1931,7 +1929,6 @@ Database: `molecules` and `docking_results` (Phase 1 schema). Each job UUID link
 | ADMET tool timeout | Retry once; proceed without ADMET, flag "not assessed" |
 | No ChEMBL seed ligands | Start from built-in RDKit 1000-fragment library |
 
-
 ---
 
 # Phase 6: Autonomous Scientific Query Handling
@@ -1967,9 +1964,9 @@ The NL query is autonomously parsed by an IronClaw agent into a structured `Scie
 ```
 
 **Entity extraction pipeline:**
-1. Run NER on query text → gene (KRAS), mutation (G12D), cancer (pancreatic cancer), relationship (synthetic lethal)
-2. Normalise: KRAS → HGNC:6407; G12D → p.Gly12Asp / rs121913529; pancreatic cancer → PAAD
-3. Map filter intent: "structural druggability" → structural_tractability > 0.4; "low prior inhibitor" → ChEMBL count < 20
+1.  Run NER on query text → gene (KRAS), mutation (G12D), cancer (pancreatic cancer), relationship (synthetic lethal)
+2.  Normalise: KRAS → HGNC:6407; G12D → p.Gly12Asp / rs121913529; pancreatic cancer → PAAD
+3.  Map filter intent: "structural druggability" → structural_tractability > 0.4; "low prior inhibitor" → ChEMBL count < 20
 
 ## 6.3 Query Plan Generation
 
@@ -2141,16 +2138,16 @@ flowchart TD
 
 **Algorithm: Agent-Mediated Bayesian Update**
 
-The IronClaw agent evaluates the Bayesian proposals (§7.3) and decides whether to apply them based on the correlation strength and ranking stability. 
-- **Automatic Updates:** By default, the agent applies updates atomically if the `ranking_volatility` is within safe bounds. 
+The IronClaw agent evaluates the Bayesian proposals (§7.3) and decides whether to apply them based on the correlation strength and ranking stability.
+- **Automatic Updates:** By default, the agent applies updates atomically if the `ranking_volatility` is within safe bounds.
 - **Safety Gate:** This can be disabled in `ferrumyx.toml` to require human approval, but the system is designed for high-autonomy operation.
 
 ## 7.4 Agent-Driven Tool Creation
 
 When a specific ingestion or parsing bottleneck is identified (e.g., a new data format from a high-signal source), the IronClaw agent can autonomously:
-1. Draft a new Rust/WASM tool implementation.
-2. Register it within a temporary sandbox for validation.
-3. Propose its integration into the main pipeline if it improves `literature_recall` metrics.
+1.  Draft a new Rust/WASM tool implementation.
+2.  Register it within a temporary sandbox for validation.
+3.  Propose its integration into the main pipeline if it improves `literature_recall` metrics.
 
 ## 7.5 Audit Trail & Transparency
 
@@ -2169,9 +2166,9 @@ The system uses IronClaw's native multi-backend support to securely route reques
 - **Remote:** OpenAI, Anthropic, or custom HTTP backends (preferred for high-reasoning PUBLIC analysis).
 
 IronClaw agents autonomously select the model based on:
-1. **Data Class:** Redaction policies enforced before any remote call.
-2. **Context Needs:** Large context models chosen for multi-paper synthesis.
-3. **Hardware State:** Optimized Ollama model selection based on detected RAM/GPU.
+1.  **Data Class:** Redaction policies enforced before any remote call.
+2.  **Context Needs:** Large context models chosen for multi-paper synthesis.
+3.  **Hardware State:** Optimized Ollama model selection based on detected RAM/GPU.
 
 ## 8.2 Agent-Driven Data Classification
 
@@ -2197,7 +2194,10 @@ The agent loop enforces strict routing:
 | Secrets | AES-256-GCM encrypted retrieval | IronClaw Keychain |
 
 All agent activities, tool executions, and LLM calls are tracked in the **Audit Log** for full traceability of autonomous decisions.
-_tokens_per_day_openai    = 500000
+
+```toml
+[llm.limits]
+max_tokens_per_day_openai    = 500000
 max_tokens_per_day_anthropic = 500000
 max_cost_per_day_usd         = 20.0   # hard stop
 alert_cost_threshold_usd     = 15.0   # soft alert
@@ -2225,12 +2225,12 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 **Deliverable:** Full pipeline operational for KRAS G12D PAAD. Literature → KG → target scores → structural analysis → ranked output with citations. Retrospective validation: top-10 vs DrugBank known PDAC targets.
 - [x] Initialise Cargo workspace: `ferrumyx-agent`, `ferrumyx-common`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-molecules`, `ferrumyx-ranker`, `ferrumyx-web`, `ironclaw`
 - [x] LanceDB deployed; Phase 1 schema migrations run
-- [ ] PubMed E-utilities WASM tool (esearch + efetch XML) [/] (Implemented in `pubmed.rs`)
+- [x] PubMed E-utilities WASM tool (esearch + efetch XML) (Implemented in `pubmed.rs`)
 - [ ] Europe PMC WASM tool [/] (Implemented in `europepmc.rs`)
 - [ ] PMC XML section-aware parser (Rust, `quick-xml`) [ ]
 - [x] Ferrules PDF parser (Rust-native)
 - [ ] Section-aware chunker [/] (Implemented in `chunker.rs`)
-- [ ] BiomedBERT embedding Native tool (/crates/ferrumyx-ingestion) [/]
+- [x] BiomedBERT embedding Native tool (/crates/ferrumyx-ingestion)
 - [ ] LanceDB IVFFlat index setup [x]
 - [ ] Sci-Hub fallback client (Optional) [x] (Implemented in `scihub.rs`)
 
@@ -2331,7 +2331,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | PMC XML parser | Planned | Rust | Native | Open | quick-xml; section-aware |
 | Ferrules PDF parser | Implemented | Rust | Native | Open | lopdf-based text extraction |
 | BiomedBERT / PubMedBERT | Implemented | Rust | Native | Apache 2.0 | Candle; 768-dim embeddings (ferrumyx-ingestion) |
-| TrieNer en_core_sci_lg | Implemented | Rust | Native | MIT | Fast general biomedical NER (ferrumyx-kg) |
+| TrieNer | Implemented | Rust | Native | MIT | Fast AC-based matching (HGNC + OncoTree) |
 | Gene entity normaliser | Implemented | Rust | Native | — | HGNC cache subset |
 | fpocket wrapper | Implemented | Rust | Native | BSD | Pocket detection runtime execution |
 | AutoDock Vina wrapper| Implemented | Rust | Native | Apache 2.0 | Molecular docking runtime execution |
@@ -2409,14 +2409,13 @@ Target user: a computational biology research group wanting an auditable, privac
 
 | # | Step | Complexity | Notes |
 |---|---|---|---|
-| 1 | Initialise Cargo workspace: ferrumyx-agent, ferrumyx-ingestion, ferrumyx-kg, ferrumyx-ranker | S | Standard Rust workspace; IronClaw as dependency |
-| 2 | Initialize LanceDB embedded; run Phase 1 schema setup via Rust crate | S | Local file storage in workspace |
-| 3 | Implement PubMed E-utilities WASM tool (esearch + efetch XML) | M | quick-xml + reqwest; test with 100 KRAS PDAC papers |
+| 1 | Initialise Cargo workspace: ferrumyx-agent, ferrumyx-ingestion, ferrumyx-kg, ferrumyx-ranker | [x] | Standard Rust workspace |
+| 2 | Initialize LanceDB embedded; run Phase 1 schema setup via Rust crate | [x] | Local file storage in workspace |
+| 3 | Implement PubMed E-utilities WASM tool (esearch + efetch XML) | [x] | quick-xml + reqwest |
 | 4 | Implement PMC XML section-aware parser | M | Map sec-type → SectionType enum; extract tables separately |
-| 5 | Implement Ferrules PDF parser | M | Rust-native lopdf-based text extraction |
-| 6 | Implement BiomedBERT embedding native Rust tool | M | Candle-based inference; batch processing; LanceDB INSERT |
-| 7 | Implement TrieNer NER Docker tool | M | en_core_sci_lg + en_ner_bc5cdr_md pipeline |
+| 5 | Implement Ferrules PDF parser | [x] | Rust-native lopdf-based text extraction |
+| 6 | Implement BiomedBERT embedding native Rust tool | [x] | Candle-based inference |
+| 7 | Implement TrieNer NER Tool | [x] | Database-driven AC matching |
 | 8 | Build entity normalisation (HGNC + HGVS) | L | HGNC REST bulk download; HGVS regex; edge cases numerous |
 | 9 | Populate kg_facts from NER + external DB pulls (COSMIC, DepMap, ChEMBL) | L | Most complex ingestion step; each source needs separate parser |
 | 10 | Implement target_scores computation (9 components + composite formula + versioning) | L | Rank normalisation; penalties; confidence adjustment; atomic versioning |
-```

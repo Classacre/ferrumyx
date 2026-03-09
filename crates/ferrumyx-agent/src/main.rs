@@ -99,8 +99,9 @@ async fn main() -> anyhow::Result<()> {
     // Connect to LanceDB
     info!("Connecting to LanceDB...");
     let db = ferrumyx_db::Database::open(&config.database.url).await?;
+    db.initialize().await?;
     let db = std::sync::Arc::new(db);
-    info!("✅ LanceDB connected.");
+    info!("✅ LanceDB connected and initialized.");
 
     // Start Phase 3: Knowledge Graph Event Queue
     let kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());

@@ -3,11 +3,6 @@
 
 pub mod providers;
 pub mod scorer;
-//! ferrumyx-ranker — Target prioritization scoring engine.
-//! Implements Phase 4 of ARCHITECTURE.md.
-
-pub mod providers;
-pub mod scorer;
 pub mod normalise;
 pub mod depmap_provider;
 pub mod gtex_provider;
@@ -48,7 +43,7 @@ impl TargetQueryEngine {
             let conflicts = conflict_repo.find_by_fact_id(f.id).await.unwrap_or_default();
             let mut include = true;
             let mut confidence_adj = f.confidence as f64;
-            let mut flags = Vec::new();
+            let mut flags: Vec<String> = Vec::new();
             
             for conflict in conflicts {
                 let net = conflict.net_confidence as f64;
@@ -106,7 +101,7 @@ impl TargetQueryEngine {
                     confidence_adj: score_res.composite_score * conf_adj,
                     shortlist_tier: tier,
                     flags,
-                    metrics: cohort_metrics.iter().find(|(id, _)| *id == f.id).map(|(_, m)| m.clone()),
+                    metrics: cohort_metrics.iter().find(|(id, _)| *id == f.id).map(|(_, m): &(uuid::Uuid, TargetMetrics)| m.clone()),
                 });
             }
         }
