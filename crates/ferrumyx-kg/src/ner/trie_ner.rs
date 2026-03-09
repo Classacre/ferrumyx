@@ -33,13 +33,25 @@ pub struct ExtractedEntity {
 }
 
 impl TrieNer {
+    pub async fn with_complete_databases_async() -> anyhow::Result<Self> {
+        info!("Building TrieNer with complete databases (HGNC + OncoTree)...");
+        let hgnc = HgncNormaliser::from_download().await?;
+        let cancers = CancerNormaliser::from_download().await?;
+        Self::from_normalisers(hgnc, cancers)
+    }
+
     pub fn with_complete_databases() -> anyhow::Result<Self> {
         info!("Building TrieNer with complete databases (HGNC + OncoTree)...");
+        let hgnc = HgncNormaliser::from_download_blocking()?;
+        let cancers = CancerNormaliser::from_download_blocking()?;
+        Self::from_normalisers(hgnc, cancers)
+    }
+
+    fn from_normalisers(hgnc: HgncNormaliser, cancers: CancerNormaliser) -> anyhow::Result<Self> {
         let mut patterns = Vec::new();
         let mut pattern_info = Vec::new();
 
         // 1. Genes from HGNC
-        let hgnc = HgncNormaliser::from_download_blocking()?;
         for (sym, tier) in hgnc.all_patterns_with_tier() {
             let len = sym.len();
             let (confidence, req_word_bound) = match (tier, len) {
@@ -60,7 +72,6 @@ impl TrieNer {
         }
 
         // 2. Cancer Types from OncoTree
-        let cancers = CancerNormaliser::from_download_blocking()?;
         for (name, kind) in cancers.all_patterns_with_kind() {
             let len = name.len();
             let confidence = match kind {
@@ -98,7 +109,7 @@ impl TrieNer {
             .match_kind(MatchKind::LeftmostLongest)
             .ascii_case_insensitive(true)
             .build(&patterns)?;
-            
+
         Ok(Self { automaton, pattern_info, hgnc, cancers })
     }
 

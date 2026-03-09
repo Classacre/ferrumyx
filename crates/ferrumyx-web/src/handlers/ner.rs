@@ -5,7 +5,10 @@ use axum::{
     response::{Html, IntoResponse, Json},
     Form,
 };
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
 use ferrumyx_kg::ner::TrieNer;
@@ -38,6 +41,20 @@ pub struct NerStats {
     pub total_patterns: usize,
 }
 
+static NER_CACHE: OnceCell<Arc<TrieNer>> = OnceCell::const_new();
+
+async fn get_ner() -> Result<Arc<TrieNer>, String> {
+    let ner = NER_CACHE
+        .get_or_try_init(|| async {
+            TrieNer::with_complete_databases_async()
+                .await
+                .map(Arc::new)
+                .map_err(|e| e.to_string())
+        })
+        .await?;
+    Ok(Arc::clone(ner))
+}
+
 /// GET /ner — Show NER demo page
 pub async fn ner_page(State(_state): State<SharedState>) -> Html<String> {
     Html(render_ner_page(None, None))
@@ -48,7 +65,15 @@ pub async fn ner_extract(
     State(_state): State<SharedState>,
     Form(form): Form<NerForm>,
 ) -> Html<String> {
-    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
+    let ner = match get_ner().await {
+        Ok(ner) => ner,
+        Err(e) => {
+            return Html(render_ner_page(
+                None,
+                Some(format!("NER resources unavailable: {}", e)),
+            ));
+        }
+    };
     let extracted = ner.extract(&form.text);
     
     let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
@@ -69,7 +94,15 @@ pub async fn ner_extract(
 
 /// GET /api/ner/stats — Get NER database stats
 pub async fn api_ner_stats() -> impl IntoResponse {
-    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
+    let ner = match get_ner().await {
+        Ok(ner) => ner,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("NER resources unavailable: {}", e),
+            ).into_response();
+        }
+    };
     let stats = ner.stats();
     
     Json(NerStats {
@@ -77,14 +110,22 @@ pub async fn api_ner_stats() -> impl IntoResponse {
         disease_count: stats.disease_count,
         chemical_count: stats.chemical_count,
         total_patterns: stats.total_patterns,
-    })
+    }).into_response()
 }
 
 /// POST /api/ner/extract — API endpoint for entity extraction
 pub async fn api_ner_extract(
     Json(payload): Json<NerForm>,
 ) -> impl IntoResponse {
-    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
+    let ner = match get_ner().await {
+        Ok(ner) => ner,
+        Err(e) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("NER resources unavailable: {}", e),
+            ).into_response();
+        }
+    };
     let extracted = ner.extract(&payload.text);
     
     let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
@@ -98,12 +139,15 @@ pub async fn api_ner_extract(
     Json(NerResult {
         text: payload.text,
         entities,
-    })
+    }).into_response()
 }
 
 fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
-    let ner = TrieNer::with_complete_databases().expect("NER must load full dataset");
-    let stats = ner.stats();
+    let cached_stats = NER_CACHE.get().map(|ner| ner.stats());
+    let stats_gene_count = cached_stats.as_ref().map(|s| s.gene_count).unwrap_or(0);
+    let stats_disease_count = cached_stats.as_ref().map(|s| s.disease_count).unwrap_or(0);
+    let stats_chemical_count = cached_stats.as_ref().map(|s| s.chemical_count).unwrap_or(0);
+    let stats_total_patterns = cached_stats.as_ref().map(|s| s.total_patterns).unwrap_or(0);
     
     let entity_html = result.as_ref().map(|r| {
         let mut highlighted = r.text.clone();
@@ -234,7 +278,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                 <div class="card input-section">
                     <form method="POST" action="/ner/extract" class="d-flex flex-column gap-3">
                         <div>
-                            <label class="form-label" style="font-size: 1.1rem; color: var(--text-main);">Input Document Stream</label>
+                            <label class="form-label" style="font-size: 1.1rem;">Input Document Stream</label>
                             <textarea name="text" id="textInput" class="form-control mt-2" rows="6" placeholder="Enter biomedical text to initiate entity extraction sequence...">{}</textarea>
                         </div>
                         <div class="d-flex justify-end">
@@ -265,10 +309,10 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
 </body>
 </html>"##,
         NAV_HTML,
-        stats.gene_count,
-        stats.disease_count,
-        stats.chemical_count,
-        stats.total_patterns,
+        stats_gene_count,
+        stats_disease_count,
+        stats_chemical_count,
+        stats_total_patterns,
         result.as_ref().map(|r| r.text.clone()).unwrap_or_default(),
         entity_html,
         error.map(|e| format!(r#"<div class="alert alert-danger">{}</div>"#, e)).unwrap_or_default()
