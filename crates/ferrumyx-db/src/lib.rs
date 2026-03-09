@@ -40,6 +40,7 @@ pub mod entity_mentions;
 pub mod kg_conflicts;
 pub mod target_scores;
 pub mod ent_stage;
+pub mod phase4_signals;
 
 pub use database::{Database, DatabaseStats};
 pub use error::{DbError, Result};
@@ -56,3 +57,5 @@ pub use entity_mentions::EntityMentionRepository;
 pub use kg_conflicts::KgConflictRepository;
 pub use target_scores::TargetScoreRepository;
 pub use ent_stage::{EntEnrichment, EntStageRepository};
+pub use phase4_signals::Phase4SignalRepository;
+pub use schema::{EntChemblTarget, EntGtexExpression, EntReactomeGene, EntTcgaSurvival};

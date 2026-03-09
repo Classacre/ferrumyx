@@ -393,6 +393,7 @@ async fn async_main() -> anyhow::Result<()> {
     tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(db.clone())));
     tool_registry.register_sync(Arc::new(tools::workflow_status_tool::WorkflowStatusTool::new(db.clone())));
     tool_registry.register_sync(Arc::new(tools::scoring_tool::RecomputeTargetScoresTool::new(db.clone())));
+    tool_registry.register_sync(Arc::new(tools::provider_refresh_tool::RefreshProviderSignalsTool::new(db.clone())));
     tool_registry.register_sync(Arc::new(tools::molecule_tool::RunMoleculePipelineTool::new()));
     tool_registry.register_sync(Arc::new(tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone())));
 

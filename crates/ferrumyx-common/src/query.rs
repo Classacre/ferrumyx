@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct QueryRequest {
@@ -19,6 +20,7 @@ pub struct QueryResult {
     pub confidence_adj: f64,
     pub shortlist_tier: String,
     pub flags: Vec<String>,
+    pub component_sources: Option<BTreeMap<String, String>>,
     pub component_breakdown: Option<TargetScoreResult>,
     pub metrics: Option<TargetMetrics>,
 }

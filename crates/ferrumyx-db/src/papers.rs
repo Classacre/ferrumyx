@@ -308,6 +308,82 @@ impl PaperRepository {
 
         Ok(out)
     }
+
+    /// Resolve paper publication timestamps for a list of IDs in one query.
+    pub async fn find_published_at_by_ids(
+        &self,
+        ids: &[uuid::Uuid],
+    ) -> Result<HashMap<uuid::Uuid, chrono::DateTime<chrono::Utc>>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq: Vec<uuid::Uuid> = ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+
+        let in_clause = uniq
+            .iter()
+            .map(|id| format!("'{}'", id))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut stream = table
+            .query()
+            .only_if(&format!("id IN ({})", in_clause))
+            .select(lancedb::query::Select::columns(&["id", "published_at"]))
+            .execute()
+            .await?;
+
+        let mut out = HashMap::new();
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            let schema = batch.schema();
+            let id_idx = match schema.index_of("id") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let published_idx = match schema.index_of("published_at") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+
+            let ids_arr = match batch.column(id_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let published_arr =
+                match batch.column(published_idx).as_any().downcast_ref::<StringArray>() {
+                    Some(a) => a,
+                    None => continue,
+                };
+
+            let row_count = batch.num_rows();
+            for i in 0..row_count {
+                if ids_arr.is_null(i) || published_arr.is_null(i) {
+                    continue;
+                }
+
+                let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(i)) else {
+                    continue;
+                };
+                let Ok(dt) = chrono::DateTime::parse_from_rfc3339(published_arr.value(i)) else {
+                    continue;
+                };
+
+                out.insert(id, dt.with_timezone(&chrono::Utc));
+            }
+        }
+
+        Ok(out)
+    }
     
     /// Count papers by source.
     pub async fn count_by_source(&self, source: &str) -> Result<u64> {

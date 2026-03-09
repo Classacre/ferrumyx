@@ -316,6 +316,44 @@ pub struct EntSyntheticLethality {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntTcgaSurvival {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub cancer_code: String,
+    pub tcga_project_id: String,
+    pub survival_score: f64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntGtexExpression {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub expression_score: f64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntChemblTarget {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub inhibitor_count: i64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntReactomeGene {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub pathway_count: i64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
 // =============================================================================
 // Knowledge Graph Fact Schema
 // =============================================================================
@@ -533,4 +571,8 @@ pub const TABLE_ENT_COMPOUNDS: &str = "ent_compounds";
 pub const TABLE_ENT_STRUCTURES: &str = "ent_structures";
 pub const TABLE_ENT_DRUGGABILITY: &str = "ent_druggability";
 pub const TABLE_ENT_SYNTHETIC_LETHALITY: &str = "ent_synthetic_lethality";
+pub const TABLE_ENT_TCGA_SURVIVAL: &str = "ent_tcga_survival";
+pub const TABLE_ENT_GTEX_EXPRESSION: &str = "ent_gtex_expression";
+pub const TABLE_ENT_CHEMBL_TARGETS: &str = "ent_chembl_targets";
+pub const TABLE_ENT_REACTOME_GENES: &str = "ent_reactome_genes";
 

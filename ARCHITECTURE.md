@@ -1855,6 +1855,19 @@ Remaining Phase 4 hardening work:
 - [x] Add explicit percentile field and richer component breakdown in API output.
 - [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
   - Note: legacy databases without these columns are handled via backward-compatible runtime dedupe; new/updated tables use native `score_version` + `is_current`.
+- [x] CRISPR dependency (`n2`) now uses local DepMap cache when present (`data/depmap`) with deterministic proxy fallback.
+- [x] Query API output now includes per-component source provenance (`component_sources`) so source-backed vs proxy values are explicit.
+- [~] `n3` (survival) and `n4` (expression) now derive from KG semantic predicates when available (`kg_fact_semantic`), with bounded proxy fallback for sparse contexts.
+- [x] `n4` additionally supports GTEx-backed enrichment with persistent cache table (`ent_gtex_expression`) and bounded runtime fallback (`gtex_api`) for small cohorts.
+- [x] `n3` additionally supports TCGA-backed enrichment with persistent cache table (`ent_tcga_survival`) and bounded runtime fallback (`tcga_api`) for small cohorts with cancer context.
+- [x] `n7` now supports ChEMBL-backed inhibitor counts with persistent cache table (`ent_chembl_targets`) and bounded runtime fallback (`chembl_api`) for small cohorts.
+- [x] `n8` now supports Reactome-backed pathway counts with persistent cache table (`ent_reactome_genes`) and bounded runtime fallback (`reactome_api`) for small cohorts.
+- [x] Provider cache freshness controls added (TTL-based reads from persisted signal tables) to avoid stale long-lived values.
+- [x] Large-cohort mode now keeps query latency bounded while asynchronously prewarming top candidates into provider cache tables for subsequent source-backed runs.
+- [x] Explicit staged refresh path added (`refresh_provider_signals`) with bounded batch size, per-provider retries, and refresh telemetry for TCGA/GTEx/ChEMBL/Reactome.
+- [x] Autonomous cycle now runs provider refresh before ranking so iterative runs progressively replace proxy/semantic fallbacks with source-backed cache signals.
+- [~] `n9` (literature novelty) now derives from paper publication metadata (`papers.published_at`) when available (`papers_metadata`), with fallback to evidence-density proxy.
+- [~] Remaining: evolve staged refresh into background scheduled jobs with persistence of run history, alerting, and adaptive refresh cadence by provider staleness/error rate.
 
 ---
 

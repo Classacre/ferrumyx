@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ironclaw::context::JobContext;
-use ironclaw::tools::{require_str, Tool, ToolError, ToolOutput};
+use ironclaw::tools::{Tool, ToolError, ToolOutput};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use ferrumyx_common::query::QueryRequest;
 use ferrumyx_db::Database;
 use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionSourceSpec};
 use ferrumyx_ingestion::repository::IngestionRepository;
-use ferrumyx_ranker::TargetQueryEngine;
+use ferrumyx_ranker::{ProviderRefreshRequest, TargetQueryEngine};
 
 /// Tool to run a bounded autonomous loop over ingestion -> scoring -> ranking.
 pub struct AutonomousCycleTool {
@@ -123,6 +123,17 @@ impl Tool for AutonomousCycleTool {
                 .await
                 .map_err(|e| ToolError::ExecutionFailed(format!("cycle {cycle} scoring failed: {e}")))?;
 
+            let refresh = ranker
+                .refresh_provider_signals(ProviderRefreshRequest {
+                    genes: vec![gene.clone()],
+                    cancer_code: cancer_code.clone(),
+                    max_genes: 8,
+                    batch_size: 4,
+                    retries: 1,
+                })
+                .await
+                .map_err(|e| ToolError::ExecutionFailed(format!("cycle {cycle} provider refresh failed: {e}")))?;
+
             let query = QueryRequest {
                 query_text: query_text.clone(),
                 cancer_code: cancer_code.clone(),
@@ -149,6 +160,7 @@ impl Tool for AutonomousCycleTool {
                 "scoring": {
                     "target_scores_upserted": recomputed
                 },
+                "provider_refresh": refresh,
                 "ranking": {
                     "top_score": top_score,
                     "top_gene": ranked.first().map(|r| r.gene_symbol.clone()),
@@ -173,4 +185,12 @@ impl Tool for AutonomousCycleTool {
             started.elapsed(),
         ))
     }
+}
+
+fn require_str<'a>(params: &'a serde_json::Value, name: &str) -> Result<&'a str, ToolError> {
+    params
+        .get(name)
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| ToolError::InvalidParameters(format!("missing required string parameter: {name}")))
 }

@@ -120,6 +120,18 @@ impl Database {
         if !self.table_exists(schema::TABLE_ENT_SYNTHETIC_LETHALITY).await? {
             self.create_ent_synthetic_lethality_table().await?;
         }
+        if !self.table_exists(schema::TABLE_ENT_TCGA_SURVIVAL).await? {
+            self.create_ent_tcga_survival_table().await?;
+        }
+        if !self.table_exists(schema::TABLE_ENT_GTEX_EXPRESSION).await? {
+            self.create_ent_gtex_expression_table().await?;
+        }
+        if !self.table_exists(schema::TABLE_ENT_CHEMBL_TARGETS).await? {
+            self.create_ent_chembl_targets_table().await?;
+        }
+        if !self.table_exists(schema::TABLE_ENT_REACTOME_GENES).await? {
+            self.create_ent_reactome_genes_table().await?;
+        }
         
         Ok(())
     }
@@ -652,6 +664,64 @@ impl Database {
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
         self.conn.create_table(schema::TABLE_ENT_SYNTHETIC_LETHALITY, empty_iter).execute().await?;
+        Ok(())
+    }
+
+    pub async fn create_ent_tcga_survival_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("gene_symbol", DataType::Utf8, false),
+            Field::new("cancer_code", DataType::Utf8, false),
+            Field::new("tcga_project_id", DataType::Utf8, false),
+            Field::new("survival_score", DataType::Float64, false),
+            Field::new("source", DataType::Utf8, false),
+            Field::new("fetched_at", DataType::Utf8, false),
+        ].into();
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        self.conn.create_table(schema::TABLE_ENT_TCGA_SURVIVAL, empty_iter).execute().await?;
+        Ok(())
+    }
+
+    pub async fn create_ent_gtex_expression_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("gene_symbol", DataType::Utf8, false),
+            Field::new("expression_score", DataType::Float64, false),
+            Field::new("source", DataType::Utf8, false),
+            Field::new("fetched_at", DataType::Utf8, false),
+        ].into();
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        self.conn.create_table(schema::TABLE_ENT_GTEX_EXPRESSION, empty_iter).execute().await?;
+        Ok(())
+    }
+
+    pub async fn create_ent_chembl_targets_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("gene_symbol", DataType::Utf8, false),
+            Field::new("inhibitor_count", DataType::Int64, false),
+            Field::new("source", DataType::Utf8, false),
+            Field::new("fetched_at", DataType::Utf8, false),
+        ].into();
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        self.conn.create_table(schema::TABLE_ENT_CHEMBL_TARGETS, empty_iter).execute().await?;
+        Ok(())
+    }
+
+    pub async fn create_ent_reactome_genes_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("gene_symbol", DataType::Utf8, false),
+            Field::new("pathway_count", DataType::Int64, false),
+            Field::new("source", DataType::Utf8, false),
+            Field::new("fetched_at", DataType::Utf8, false),
+        ].into();
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        self.conn.create_table(schema::TABLE_ENT_REACTOME_GENES, empty_iter).execute().await?;
         Ok(())
     }
 
