@@ -142,6 +142,27 @@
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
 
+        async function waitForReply(threadId, userText, timeoutMs = 180000) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                try {
+                    const res = await fetch('/api/chat/history?thread_id=' + encodeURIComponent(threadId) + '&limit=50');
+                    if (res.ok) {
+                        const data = await res.json();
+                        const turns = Array.isArray(data.turns) ? data.turns : [];
+                        for (let i = turns.length - 1; i >= 0; i--) {
+                            const turn = turns[i];
+                            if (turn && turn.user_input === userText && turn.response && turn.response.trim()) {
+                                return turn.response;
+                            }
+                        }
+                    }
+                } catch (_) {}
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            return null;
+        }
+
         async function sendMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
@@ -168,8 +189,13 @@
                     currentThreadId = data.thread_id;
                 }
 
-                if (data.status === 'success' || data.response) {
+                if (data.status === 'success') {
                     appendMessage('agent', data.response || 'Task processing in background.');
+                } else if (data.status === 'accepted' && data.thread_id) {
+                    const reply = await waitForReply(data.thread_id, text);
+                    appendMessage('agent', reply || 'Task accepted and still processing. You can continue and I will respond when ready.');
+                } else if (data.response) {
+                    appendMessage('agent', data.response);
                 } else {
                     appendMessage('agent', "<span style='color:var(--danger)'>Error: " + (data.error || 'Unknown error') + '</span>');
                 }

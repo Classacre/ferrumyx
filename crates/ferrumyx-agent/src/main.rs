@@ -333,6 +333,7 @@ fn sync_ironclaw_env_from_config(config: &config::Config) {
 
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+use ironclaw::agent::SessionManager;
 
 fn main() -> anyhow::Result<()> {
     // Slightly larger per-thread stacks reduce risk of overflow under
@@ -425,6 +426,7 @@ async fn async_main() -> anyhow::Result<()> {
         document_extraction: None,
     };
 
+    let session_manager = Arc::new(SessionManager::new());
     let mut channels = ironclaw::channels::ChannelManager::new();
     let disable_repl = std::env::var("FERRUMYX_DISABLE_REPL")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -441,7 +443,10 @@ async fn async_main() -> anyhow::Result<()> {
         user_id: "User".to_string(),
         auth_token: Some("ferrumyx-local-dev-token".to_string()),
     };
-    channels.add(Box::new(ironclaw::channels::GatewayChannel::new(gw_config))).await;
+    let gateway = ironclaw::channels::GatewayChannel::new(gw_config)
+        .with_session_manager(session_manager.clone())
+        .with_llm_provider(ironclaw_llm.clone());
+    channels.add(Box::new(gateway)).await;
 
     let agent_config = ironclaw::config::AgentConfig {
         name: "Ferrumyx Drug Discovery Agent".to_string(),
@@ -468,7 +473,7 @@ async fn async_main() -> anyhow::Result<()> {
         None,
         None,
         None,
-        None,
+        Some(session_manager),
     );
 
     tokio::spawn(async move {

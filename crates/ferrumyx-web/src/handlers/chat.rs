@@ -35,7 +35,7 @@ pub async fn chat_submit(
     // Resolve a concrete thread so we can poll async completion reliably.
     let thread_id = match payload.thread_id.clone() {
         Some(t) => Some(t),
-        None => resolve_assistant_thread_id(&client).await,
+        None => resolve_or_create_thread_id(&client).await,
     };
 
     let pre_turn_marker = if let Some(ref tid) = thread_id {
@@ -128,6 +128,12 @@ struct HistoryResponse {
     turns: Vec<TurnInfoLite>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChatHistoryQuery {
+    thread_id: String,
+    limit: Option<usize>,
+}
+
 async fn resolve_assistant_thread_id(client: &Client) -> Option<String> {
     let url = format!("{GATEWAY_BASE_URL}/api/chat/threads");
     let resp = client
@@ -141,6 +147,26 @@ async fn resolve_assistant_thread_id(client: &Client) -> Option<String> {
         return Some(assistant.id);
     }
     threads.active_thread
+}
+
+async fn resolve_or_create_thread_id(client: &Client) -> Option<String> {
+    if let Some(existing) = resolve_assistant_thread_id(client).await {
+        return Some(existing);
+    }
+
+    let url = format!("{GATEWAY_BASE_URL}/api/chat/thread/new");
+    let resp = client
+        .post(url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    let thread = resp.json::<ThreadInfoLite>().await.ok()?;
+    Some(thread.id)
 }
 
 async fn fetch_turn_marker(client: &Client, thread_id: &str) -> Option<usize> {
@@ -195,4 +221,41 @@ async fn poll_for_response(client: &Client, thread_id: &str, before_turn_marker:
     }
 
     None
+}
+
+pub async fn chat_history(
+    State(_state): State<SharedState>,
+    axum::extract::Query(query): axum::extract::Query<ChatHistoryQuery>,
+) -> impl IntoResponse {
+    let client = Client::new();
+    let limit = query.limit.unwrap_or(40).clamp(1, 200);
+    let url = format!(
+        "{GATEWAY_BASE_URL}/api/chat/history?thread_id={}&limit={}",
+        query.thread_id, limit
+    );
+
+    match client
+        .get(url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
+            Ok(v) => axum::Json(v).into_response(),
+            Err(_) => (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "Invalid response from agent",
+            )
+                .into_response(),
+        },
+        Ok(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            "Agent gateway returned error status",
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to contact IronClaw Agent history endpoint: {}", e);
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
+        }
+    }
 }
