@@ -4,8 +4,8 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 3 Complete; entering Phase 4 hardening)  
-**Date:** 2026-03-09
+**Status:** Active Implementation (Phase 3 complete; Phase 4 hardening in progress)  
+**Date:** 2026-03-11
 
 ---
 
@@ -664,8 +664,8 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 | Authentication | API key (free, no approval required) |
 | Data formats | JSON |
 | Full-text access | Open-access PDFs linked via `openAccessPdf.url`; S2 corpus IDs for cross-reference |
-| Ferrumyx approach | WASM tool; citation graph traversal, influential paper detection via `influentialCitationCount`, embedding retrieval via `/paper/{id}/embedding` (SPECTER2 vectors) |
-| Notes | SPECTER2 embeddings are a useful secondary signal; `tldr` field provides model-generated abstract summaries; `fieldsOfStudy` for pre-filtering; citation velocity (citations per year) computable from `year` + `citationCount` |
+| Ferrumyx approach | Native Rust ingestion source; Graph API search + metadata retrieval + OA PDF URL resolution via `openAccessPdf` |
+| Notes | API key is now wired through Ferrumyx settings and ingestion tools; citation graph expansion and SPECTER2 embedding endpoint usage remain planned enhancements |
 
 ---
 
@@ -2324,7 +2324,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 **New capabilities:**
 - [ ] bioRxiv/medRxiv ingestion tools [x] (Implemented in `biorxiv.rs`)
 - [ ] ClinicalTrials.gov structured ingestion (trial outcomes → KG) [x] (Implemented in `clinicaltrials.rs`)
-- [ ] Semantic Scholar integration (citation graph + SPECTER2 embeddings) [ ]
+- [~] Semantic Scholar integration (core Graph API search/metadata implemented; citation graph + SPECTER2 embeddings pending)
 - [ ] arXiv ingestion tool [ ]
 - [ ] Unpaywall OA retrieval integration [ ]
 - [ ] Expand to 3 cancer subtypes: KRAS G12D PDAC + EGFR-mutant NSCLC + BRCA1/2 ovarian
@@ -2371,7 +2371,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | arXiv client | Planned | Rust | WASM | Open | Atom XML; quick-xml |
 | ClinicalTrials.gov v2 client | Implemented | Rust | WASM | Open | REST JSON |
 | CrossRef client | Implemented | Rust | WASM | Open | DOI resolution |
-| Semantic Scholar client | Planned | Rust | WASM | Open | SPECTER2 embeddings |
+| Semantic Scholar client | Implemented (core) | Rust | Native | Open | Graph API search + metadata + OA URL; SPECTER2 embeddings pending |
 | Unpaywall client | Planned | Rust | WASM | Open | OA detection |
 | Sci-Hub client | Implemented | Rust | Native | Open | (Optional) Fallback scraper |
 | PMC XML parser | Planned | Rust | Native | Open | quick-xml; section-aware |
