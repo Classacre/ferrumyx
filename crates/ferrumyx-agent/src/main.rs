@@ -409,6 +409,7 @@ async fn async_main() -> anyhow::Result<()> {
     tool_registry.register_sync(Arc::new(tools::provider_refresh_tool::RefreshProviderSignalsTool::new(db.clone())));
     tool_registry.register_sync(Arc::new(tools::molecule_tool::RunMoleculePipelineTool::new()));
     tool_registry.register_sync(Arc::new(tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone())));
+    tool_registry.register_sync(Arc::new(tools::system_command_tool::SystemCommandTool::new()));
 
     // Build Skill Registry
     let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(

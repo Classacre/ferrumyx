@@ -10,7 +10,8 @@ use anyhow::Result;
 use uuid::Uuid;
 use std::sync::Arc;
 use ferrumyx_db::{Database, papers::PaperRepository, chunks::ChunkRepository, schema::{Paper, Chunk}};
-use crate::models::{PaperMetadata, DocumentChunk};
+use crate::dedup::{check_fuzzy_duplicate, hamming_distance, simhash, DedupResult};
+use crate::models::{Author, DocumentChunk, IngestionSource, PaperMetadata};
 
 /// Result of a paper upsert.
 #[derive(Debug)]
@@ -70,8 +71,66 @@ impl IngestionRepository {
             }
         }
 
-        // Compute SimHash for abstract deduplication (TODO: move to ferrumyx-db or kg)
-        let simhash: Option<i64> = None; // meta.abstract_text.as_deref().map(|t| compute_simhash(t));
+        // Stage 2/3 dedup hardening:
+        // - SimHash near-duplicate on abstracts (fast lexical near-match)
+        // - Fuzzy title+author match (published/preprint/title-rewording pairs)
+        let recent = paper_repo.list(0, 500).await.unwrap_or_default();
+        if let Some(incoming_abstract) = meta
+            .abstract_text
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let incoming_hash = simhash(incoming_abstract);
+            if let Some(existing) = recent.iter().find(|p| {
+                p.abstract_simhash
+                    .map(|h| hamming_distance(incoming_hash, h) <= 10)
+                    .unwrap_or(false)
+            }) {
+                tracing::debug!(
+                    paper_id = %existing.id,
+                    "Paper deduplicated by abstract SimHash distance <= 10"
+                );
+                return Ok(PaperUpsertResult {
+                    paper_id: existing.id,
+                    was_new: false,
+                    duplicate_of: Some(existing.id),
+                });
+            }
+        }
+
+        let existing_meta: Vec<PaperMetadata> = recent.iter().map(paper_to_metadata).collect();
+        match check_fuzzy_duplicate(meta, existing_meta.iter()) {
+            DedupResult::ProbableDuplicate { method, similarity } => {
+                if let Some(existing) = existing_meta.iter().find(|p| {
+                    p.title.eq_ignore_ascii_case(&meta.title)
+                        || strsim::jaro_winkler(&meta.title.to_lowercase(), &p.title.to_lowercase())
+                            >= similarity
+                }) {
+                    if let Some(db_row) = recent.iter().find(|p| p.title == existing.title) {
+                        tracing::debug!(
+                            paper_id = %db_row.id,
+                            method = %method,
+                            similarity = similarity,
+                            "Paper deduplicated by fuzzy title/author"
+                        );
+                        return Ok(PaperUpsertResult {
+                            paper_id: db_row.id,
+                            was_new: false,
+                            duplicate_of: Some(db_row.id),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        let simhash: Option<i64> = meta
+            .abstract_text
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(simhash);
 
         let paper = Paper {
             id: Uuid::new_v4(),
@@ -280,5 +339,38 @@ impl IngestionRepository {
             count += 1;
         }
         Ok(count)
+    }
+}
+
+fn paper_to_metadata(paper: &Paper) -> PaperMetadata {
+    let authors = paper
+        .authors
+        .as_deref()
+        .map(|joined| {
+            joined
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|name| Author {
+                    name: name.to_string(),
+                    affiliation: None,
+                    orcid: None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    PaperMetadata {
+        doi: paper.doi.clone(),
+        pmid: paper.pmid.clone(),
+        pmcid: paper.source_id.clone(),
+        title: paper.title.clone(),
+        abstract_text: paper.abstract_text.clone(),
+        authors,
+        journal: paper.journal.clone(),
+        pub_date: paper.published_at.map(|d| d.date_naive()),
+        source: IngestionSource::PubMed,
+        open_access: paper.open_access,
+        full_text_url: None,
     }
 }

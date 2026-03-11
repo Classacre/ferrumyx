@@ -16,6 +16,7 @@ use ferrumyx_ingestion::embedding::{
 };
 use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionProgress, IngestionSourceSpec};
 use ferrumyx_ingestion::repository::IngestionRepository;
+use ferrumyx_ranker::{ProviderRefreshRequest, TargetQueryEngine};
 
 /// Tool to run the Ferrumyx end-to-end knowledge ingestion pipeline natively.
 pub struct IngestionTool {
@@ -282,6 +283,7 @@ impl Tool for IngestionTool {
         let defaults = load_runtime_defaults();
 
         let gene = require_str(&params, "gene")?.to_string();
+        let gene_for_refresh = gene.clone();
         let cancer_type = require_str(&params, "cancer_type")?.to_string();
 
         let mutation = params
@@ -329,6 +331,7 @@ impl Tool for IngestionTool {
             unpaywall_email: defaults.unpaywall_email,
             embedding_cfg: defaults.embedding_cfg.clone(),
             enable_scihub_fallback: false,
+            source_timeout_secs: Some(45),
         };
 
         let repo = Arc::new(IngestionRepository::new(self.db.clone()));
@@ -409,15 +412,37 @@ impl Tool for IngestionTool {
         let recomputed = ferrumyx_kg::compute_target_scores(self.db.clone())
             .await
             .unwrap_or(0);
+        let provider_refresh = TargetQueryEngine::new(self.db.clone())
+            .refresh_provider_signals(ProviderRefreshRequest {
+                genes: vec![gene_for_refresh],
+                cancer_code: None,
+                max_genes: 8,
+                batch_size: 4,
+                retries: 1,
+            })
+            .await
+            .ok();
+        let provider_refreshed_genes = provider_refresh
+            .as_ref()
+            .map(|r| r.genes_processed)
+            .unwrap_or(0);
+        let provider_errors = provider_refresh
+            .as_ref()
+            .map(|r| {
+                (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
+            })
+            .unwrap_or(0);
 
         let output_text = format!(
-            "Ingestion completed in {}ms. Found {} papers across sources. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} duplicates. Recomputed {} target scores. Watchdog policy: idle={}s, max_runtime={}s.",
+            "Ingestion completed in {}ms. Found {} papers across sources. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Watchdog policy: idle={}s, max_runtime={}s.",
             result.duration_ms,
             result.papers_found,
             result.papers_inserted,
             result.chunks_inserted,
             result.papers_duplicate,
             recomputed,
+            provider_refreshed_genes,
+            provider_errors,
             idle_timeout.as_secs(),
             max_runtime.as_secs(),
         );

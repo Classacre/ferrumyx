@@ -4,7 +4,7 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 3 complete; Phase 4 hardening in progress)  
+**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in progress)  
 **Date:** 2026-03-11
 
 ---
@@ -1370,10 +1370,11 @@ Implemented in production code:
 Partially implemented / pending:
 
 - [x] PMC XML strategy is active (PubMed/EuropePMC XML fetch hooks + section-aware parsing path using `quick-xml`, preferred before PDF fallback when PMCID is available).
-- [~] SimHash/fuzzy-title dedup hardening is not fully enforced end-to-end in repository writes (current upsert path relies primarily on DOI/PMID duplicate checks).
+- [x] SimHash/fuzzy-title dedup hardening is enforced in repository upsert flow (DOI/PMID exact + abstract SimHash + fuzzy title/author guardrail).
 - [x] arXiv ingestion source client is implemented (Atom API search + metadata mapping + PDF URL derivation).
 - [x] Unpaywall integration is implemented (DOI lookup tier with configured contact email).
-- [ ] Semantic Scholar citation-graph traversal and SPECTER2 embedding endpoint integration remain pending.
+- [x] Semantic Scholar citation-graph traversal is integrated with bounded expansion and final dedup.
+- [x] Semantic Scholar SPECTER2 embedding fetch support is implemented in the source client (`embedding.specter_v2` field path).
 
 Implementation note:
 - Several Phase 2 tables describe connectors as “WASM tools.” Current Ferrumyx implementation runs these connectors as native Rust modules in the ingestion crate and exposes them through Ferrumyx/IronClaw tools and web handlers.
@@ -1713,6 +1714,7 @@ Phase 3 is now treated as complete for the current codebase baseline.
   - `recompute_target_scores`
   - `run_molecule_pipeline`
   - `run_autonomous_cycle`
+  - `run_system_command` (guarded host command execution for autonomous diagnostics/remediation)
 - [x] Settings-driven provider/env sync into IronClaw is live (including OpenAI-compatible cached-chat toggle).
 
 These changes satisfy the Phase 3 target for autonomous KG-driven operation and transition readiness into Phase 4 scoring/quality work.
@@ -2366,8 +2368,8 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - [ ] bioRxiv/medRxiv ingestion tools [x] (Implemented in `biorxiv.rs`)
 - [ ] ClinicalTrials.gov structured ingestion (trial outcomes → KG) [x] (Implemented in `clinicaltrials.rs`)
 - [~] Semantic Scholar integration (core Graph API search/metadata implemented; citation graph + SPECTER2 embeddings pending)
-- [ ] arXiv ingestion tool [ ]
-- [ ] Unpaywall OA retrieval integration [ ]
+- [x] arXiv ingestion tool [x] (Implemented in `arxiv.rs`)
+- [x] Unpaywall OA retrieval integration [x] (Implemented in `unpaywall.rs`)
 - [ ] Expand to 3 cancer subtypes: KRAS G12D PDAC + EGFR-mutant NSCLC + BRCA1/2 ovarian
 - [ ] BERN2 high-recall NER for high-citation papers
 - [ ] Basic generative design (RDKit fragment growing)

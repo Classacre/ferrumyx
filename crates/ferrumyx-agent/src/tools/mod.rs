@@ -5,3 +5,4 @@ pub mod scoring_tool;
 pub mod molecule_tool;
 pub mod autonomous_cycle_tool;
 pub mod provider_refresh_tool;
+pub mod system_command_tool;

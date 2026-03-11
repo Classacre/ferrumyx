@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+use tokio::time::timeout;
 use tracing::{debug, info, warn, instrument};
 use uuid::Uuid;
 use tempfile::NamedTempFile;
@@ -64,6 +65,9 @@ pub struct IngestionJob {
     /// Whether to attempt downloading paywalled PDFs via Sci-Hub.
     /// WARNING: Use at your own risk. Disabled by default.
     pub enable_scihub_fallback: bool,
+    /// Per-source network timeout (seconds) for search calls.
+    /// Prevents a single upstream API stall from blocking the full run.
+    pub source_timeout_secs: Option<u64>,
 }
 
 /// Which literature sources to search.
@@ -101,6 +105,7 @@ impl Default for IngestionJob {
             unpaywall_email: None,
             embedding_cfg: None,
             enable_scihub_fallback: false,
+            source_timeout_secs: Some(45),
         }
     }
 }
@@ -238,40 +243,52 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
     let mut all_papers = Vec::new();
 
     for source in &job.sources {
-        let source_result = match source {
-            IngestionSourceSpec::PubMed => {
-                let client = PubMedClient::new(job.pubmed_api_key.clone());
-                client.search(&query, job.max_results).await
+        let source_timeout = std::time::Duration::from_secs(
+            job.source_timeout_secs.unwrap_or(45).clamp(5, 300),
+        );
+        let source_result = timeout(source_timeout, async {
+            match source {
+                IngestionSourceSpec::PubMed => {
+                    let client = PubMedClient::new(job.pubmed_api_key.clone());
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::EuropePmc => {
+                    let client = EuropePmcClient::new();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::BioRxiv => {
+                    let client = BioRxivClient::new_biorxiv();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::MedRxiv => {
+                    let client = BioRxivClient::new_medrxiv();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::Arxiv => {
+                    let client = ArxivClient::new();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::ClinicalTrials => {
+                    let client = ClinicalTrialsClient::new();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::CrossRef => {
+                    let client = CrossRefClient::new();
+                    client.search(&query, job.max_results).await
+                }
+                IngestionSourceSpec::SemanticScholar => {
+                    let client = SemanticScholarClient::new(job.semantic_scholar_api_key.clone());
+                    client.search(&query, job.max_results).await
+                }
             }
-            IngestionSourceSpec::EuropePmc => {
-                let client = EuropePmcClient::new();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::BioRxiv => {
-                let client = BioRxivClient::new_biorxiv();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::MedRxiv => {
-                let client = BioRxivClient::new_medrxiv();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::Arxiv => {
-                let client = ArxivClient::new();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::ClinicalTrials => {
-                let client = ClinicalTrialsClient::new();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::CrossRef => {
-                let client = CrossRefClient::new();
-                client.search(&query, job.max_results).await
-            }
-            IngestionSourceSpec::SemanticScholar => {
-                let client = SemanticScholarClient::new(job.semantic_scholar_api_key.clone());
-                client.search(&query, job.max_results).await
-            }
-        };
+        })
+        .await
+        .unwrap_or_else(|_| {
+            Err(anyhow::anyhow!(
+                "source request exceeded timeout ({}s)",
+                source_timeout.as_secs()
+            ))
+        });
 
         match source_result {
             Ok(papers) => {

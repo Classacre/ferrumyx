@@ -300,6 +300,7 @@ impl Tool for AutonomousCycleTool {
                     unpaywall_email: unpaywall_email.clone(),
                     embedding_cfg: embedding_cfg.clone(),
                     enable_scihub_fallback: false,
+                    source_timeout_secs: Some(45),
                 },
                 repo.clone(),
                 None,

@@ -124,9 +124,15 @@ impl RelationExtractor {
     pub fn extract_relations(&self, subject: &str, object: &str, text: &str) -> Vec<String> {
         let mut found = Vec::new();
         let text_lower = text.to_lowercase();
-        
+
         // Ensure both entities are present in the text (basic proximity check could be added here)
-        if !text_lower.contains(&subject.to_lowercase()) || !text_lower.contains(&object.to_lowercase()) {
+        if !text_lower.contains(&subject.to_lowercase()) {
+            return found;
+        }
+        let object_lower = object.to_lowercase();
+        let object_in_text = text_lower.contains(&object_lower)
+            || object_matches_cancer_code(&text_lower, &object_lower);
+        if !object_in_text {
             return found;
         }
 
@@ -138,6 +144,12 @@ impl RelationExtractor {
 
         found
     }
+}
+
+fn object_matches_cancer_code(text_lower: &str, object_lower: &str) -> bool {
+    CANCER_KEYWORDS
+        .iter()
+        .any(|(keyword, cancer_code)| cancer_code.eq_ignore_ascii_case(object_lower) && text_lower.contains(keyword))
 }
 
 /// Build KG facts from gene mentions and text.

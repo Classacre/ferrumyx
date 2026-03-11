@@ -80,6 +80,7 @@ pub async fn ingestion_run(
         unpaywall_email: resolve_unpaywall_email(),
         embedding_cfg:  resolve_embedding_cfg_for_form(&form),
         enable_scihub_fallback: form.enable_scihub.is_some() && form.enable_scihub.as_deref() == Some("on"),
+        source_timeout_secs: Some(45),
     };
 
     // Emit SSE start event immediately
