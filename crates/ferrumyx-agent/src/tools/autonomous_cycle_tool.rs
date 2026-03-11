@@ -2,10 +2,16 @@ use async_trait::async_trait;
 use ironclaw::context::JobContext;
 use ironclaw::tools::{Tool, ToolError, ToolOutput};
 use serde_json::json;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use ferrumyx_common::query::QueryRequest;
 use ferrumyx_db::Database;
+use ferrumyx_ingestion::embedding::{
+    EmbeddingBackend as IngestionEmbeddingBackend,
+    EmbeddingConfig as IngestionEmbeddingConfig,
+};
 use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionSourceSpec};
 use ferrumyx_ingestion::repository::IngestionRepository;
 use ferrumyx_ranker::{ProviderRefreshRequest, TargetQueryEngine};
@@ -19,6 +25,161 @@ impl AutonomousCycleTool {
     pub fn new(db: Arc<Database>) -> Self {
         Self { db }
     }
+}
+
+fn config_path() -> PathBuf {
+    std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"))
+}
+
+fn resolve_pubmed_api_key() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_PUBMED_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let content = fs::read_to_string(config_path()).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("pubmed"))
+        .and_then(|v| {
+            v.get("api_key")
+                .or_else(|| v.get("api_key_secret"))
+        })
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn resolve_semantic_scholar_api_key() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    if let Ok(v) = std::env::var("SEMANTIC_SCHOLAR_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let content = fs::read_to_string(config_path()).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("semanticscholar"))
+        .and_then(|v| {
+            v.get("api_key")
+                .or_else(|| v.get("api_key_secret"))
+        })
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn toml_string(root: &toml::Value, path: &[&str]) -> Option<String> {
+    let mut cur = root;
+    for p in path {
+        cur = cur.get(*p)?;
+    }
+    cur.as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn toml_u64(root: &toml::Value, path: &[&str], default: u64) -> u64 {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_integer()
+        .and_then(|v| if v >= 0 { Some(v as u64) } else { None })
+        .unwrap_or(default)
+}
+
+fn toml_bool(root: &toml::Value, path: &[&str], default: bool) -> bool {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_bool().unwrap_or(default)
+}
+
+fn resolve_default_embedding_cfg() -> Option<IngestionEmbeddingConfig> {
+    let path = config_path();
+    let content = fs::read_to_string(path).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    let enabled = toml_bool(
+        &root,
+        &["ingestion", "enable_embeddings"],
+        std::env::var("FERRUMYX_INGESTION_ENABLE_EMBEDDINGS")
+            .ok()
+            .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+    );
+    if !enabled {
+        return None;
+    }
+
+    let backend = toml_string(&root, &["embedding", "backend"])
+        .unwrap_or_else(|| "rust_native".to_string())
+        .to_lowercase();
+    let model = toml_string(&root, &["embedding", "embedding_model"])
+        .unwrap_or_else(|| "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string());
+    let base_url = toml_string(&root, &["embedding", "base_url"]);
+    let batch_size = toml_u64(&root, &["embedding", "batch_size"], 32).clamp(1, 256) as usize;
+    let dim = toml_u64(
+        &root,
+        &["embedding", "embedding_dim"],
+        if backend == "rust_native" || backend == "biomedbert" {
+            768
+        } else {
+            1536
+        },
+    )
+    .clamp(64, 8192) as usize;
+
+    let mapped_backend = match backend.as_str() {
+        "openai" => IngestionEmbeddingBackend::OpenAi,
+        "gemini" => IngestionEmbeddingBackend::Gemini,
+        "openai_compatible" => IngestionEmbeddingBackend::OpenAiCompatible,
+        "ollama" => IngestionEmbeddingBackend::Ollama,
+        "biomedbert" => IngestionEmbeddingBackend::BiomedBert,
+        _ => IngestionEmbeddingBackend::RustNative,
+    };
+
+    let api_key = toml_string(&root, &["embedding", "api_key"])
+        .or_else(|| match mapped_backend {
+            IngestionEmbeddingBackend::OpenAi => std::env::var("FERRUMYX_OPENAI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+            IngestionEmbeddingBackend::Gemini => std::env::var("FERRUMYX_GEMINI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok()),
+            IngestionEmbeddingBackend::OpenAiCompatible => std::env::var("FERRUMYX_COMPAT_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("LLM_API_KEY").ok()),
+            _ => None,
+        })
+        .filter(|v| !v.trim().is_empty());
+
+    Some(IngestionEmbeddingConfig {
+        backend: mapped_backend,
+        api_key,
+        model,
+        dim,
+        batch_size,
+        base_url,
+    })
 }
 
 #[async_trait]
@@ -92,6 +253,9 @@ impl Tool for AutonomousCycleTool {
         let started = std::time::Instant::now();
         let repo = Arc::new(IngestionRepository::new(self.db.clone()));
         let ranker = TargetQueryEngine::new(self.db.clone());
+        let pubmed_api_key = resolve_pubmed_api_key();
+        let semantic_scholar_api_key = resolve_semantic_scholar_api_key();
+        let embedding_cfg = resolve_default_embedding_cfg();
 
         let mut cycles = Vec::new();
         let mut previous_top_score = 0.0_f64;
@@ -106,12 +270,14 @@ impl Tool for AutonomousCycleTool {
                     sources: vec![
                         IngestionSourceSpec::PubMed,
                         IngestionSourceSpec::EuropePmc,
+                        IngestionSourceSpec::SemanticScholar,
                         IngestionSourceSpec::BioRxiv,
                         IngestionSourceSpec::MedRxiv,
                         IngestionSourceSpec::ClinicalTrials,
                     ],
-                    pubmed_api_key: None,
-                    embedding_cfg: None,
+                    pubmed_api_key: pubmed_api_key.clone(),
+                    semantic_scholar_api_key: semantic_scholar_api_key.clone(),
+                    embedding_cfg: embedding_cfg.clone(),
                     enable_scihub_fallback: false,
                 },
                 repo.clone(),

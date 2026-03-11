@@ -54,12 +54,17 @@ async function loadSettings() {
   byId('embedding_backend').value = data.embedding_backend;
   byId('embedding_model').value = data.embedding_model;
   byId('embedding_base_url').value = data.embedding_base_url;
+  byId('ingestion_default_max_results').value = data.ingestion_default_max_results;
+  byId('ingestion_idle_timeout_secs').value = data.ingestion_idle_timeout_secs;
+  byId('ingestion_max_runtime_secs').value = data.ingestion_max_runtime_secs;
+  byId('ingestion_enable_embeddings').checked = data.ingestion_enable_embeddings;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
   setProviderState('gemini_state', data.has_gemini_key);
   setProviderState('compat_state', data.has_compat_key);
   setProviderState('pubmed_state', data.has_pubmed_key);
+  setProviderState('semanticscholar_state', data.has_semanticscholar_key);
   setProviderState('embedding_state', data.has_embedding_key);
 
   byId('sync_backend').textContent = data.ironclaw_sync.llm_backend;
@@ -93,11 +98,16 @@ async function saveSettings() {
     embedding_backend: byId('embedding_backend').value,
     embedding_model: byId('embedding_model').value,
     embedding_base_url: byId('embedding_base_url').value,
+    ingestion_default_max_results: Number(byId('ingestion_default_max_results').value || 50),
+    ingestion_idle_timeout_secs: Number(byId('ingestion_idle_timeout_secs').value || 600),
+    ingestion_max_runtime_secs: Number(byId('ingestion_max_runtime_secs').value || 14400),
+    ingestion_enable_embeddings: byId('ingestion_enable_embeddings').checked,
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
     compat_api_key: byId('compat_api_key').value || null,
     pubmed_api_key: byId('pubmed_api_key').value || null,
+    semanticscholar_api_key: byId('semanticscholar_api_key').value || null,
     embedding_api_key: byId('embedding_api_key').value || null,
   };
 
@@ -113,7 +123,7 @@ async function saveSettings() {
     btn.innerHTML = 'Saved';
     btn.style.backgroundColor = 'var(--success)';
 
-    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','embedding_api_key']
+    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','embedding_api_key']
       .forEach((id) => { byId(id).value = ''; });
 
     await loadSettings();
@@ -228,6 +238,34 @@ __NAV__
             <input id="pubmed_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
             <div class="help-text">Used by ingestion pipeline for higher NCBI throughput.</div>
           </div>
+          <div class="form-group">
+            <label for="semanticscholar_api_key">Semantic Scholar API Key <span id="semanticscholar_state" class="state-pill">Not Set</span></label>
+            <input id="semanticscholar_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Used by Semantic Scholar Graph API source for higher throughput and quota.</div>
+          </div>
+        </div>
+        <h4 class="settings-section-title" style="margin-top:1rem;">Ingestion Runtime Policy</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="ingestion_default_max_results">Default Max Papers Per Run</label>
+            <input id="ingestion_default_max_results" type="number" min="1" max="5000" class="form-control" />
+            <div class="help-text">Fallback paper cap when the tool call does not set <code>max_results</code>.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_idle_timeout_secs">Idle Timeout (seconds)</label>
+            <input id="ingestion_idle_timeout_secs" type="number" min="60" max="3600" class="form-control" />
+            <div class="help-text">Abort only if no progress heartbeat arrives within this window.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_max_runtime_secs">Max Runtime Safety Cap (seconds)</label>
+            <input id="ingestion_max_runtime_secs" type="number" min="600" max="86400" class="form-control" />
+            <div class="help-text">Hard stop to prevent runaway jobs. Keep high for large corpora.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_enable_embeddings">Enable Embeddings During Ingestion</label>
+            <input id="ingestion_enable_embeddings" type="checkbox" />
+            <div class="help-text">When enabled, chunk embeddings run during ingestion using the Embeddings tab provider.</div>
+          </div>
         </div>
       </section>
 
@@ -283,11 +321,16 @@ pub struct SettingsView {
     embedding_backend: String,
     embedding_model: String,
     embedding_base_url: String,
+    ingestion_default_max_results: u64,
+    ingestion_idle_timeout_secs: u64,
+    ingestion_max_runtime_secs: u64,
+    ingestion_enable_embeddings: bool,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
     has_compat_key: bool,
     has_pubmed_key: bool,
+    has_semanticscholar_key: bool,
     has_embedding_key: bool,
     ironclaw_sync: IronclawSyncView,
 }
@@ -321,11 +364,16 @@ pub struct SettingsSaveRequest {
     embedding_backend: String,
     embedding_model: String,
     embedding_base_url: String,
+    ingestion_default_max_results: u64,
+    ingestion_idle_timeout_secs: u64,
+    ingestion_max_runtime_secs: u64,
+    ingestion_enable_embeddings: bool,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
     compat_api_key: Option<String>,
     pubmed_api_key: Option<String>,
+    semanticscholar_api_key: Option<String>,
     embedding_api_key: Option<String>,
 }
 
@@ -444,6 +492,19 @@ fn bool_at(root: &toml::Value, path: &[&str], default: bool) -> bool {
     cur.as_bool().unwrap_or(default)
 }
 
+fn int_at(root: &toml::Value, path: &[&str], default: u64) -> u64 {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_integer()
+        .and_then(|v| if v >= 0 { Some(v as u64) } else { None })
+        .unwrap_or(default)
+}
+
 fn set_str(map: &mut toml::map::Map<String, toml::Value>, key: &str, value: String) {
     map.insert(key.to_string(), toml::Value::String(value));
 }
@@ -478,11 +539,21 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
         embedding_backend: str_at(&root, &["embedding", "backend"], "rust_native"),
         embedding_model: str_at(&root, &["embedding", "embedding_model"], "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"),
         embedding_base_url: str_at(&root, &["embedding", "base_url"], ""),
+        ingestion_default_max_results: int_at(&root, &["ingestion", "default_max_results"], 50),
+        ingestion_idle_timeout_secs: int_at(&root, &["ingestion", "watchdog", "idle_timeout_secs"], 600),
+        ingestion_max_runtime_secs: int_at(&root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400),
+        ingestion_enable_embeddings: bool_at(&root, &["ingestion", "enable_embeddings"], false),
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"]) || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"]) || std::env::var("FERRUMYX_ANTHROPIC_API_KEY").is_ok(),
         has_gemini_key: has_nonempty(&root, &["llm", "gemini", "api_key"]) || std::env::var("FERRUMYX_GEMINI_API_KEY").is_ok(),
         has_compat_key: has_nonempty(&root, &["llm", "openai_compatible", "api_key"]) || std::env::var("FERRUMYX_COMPAT_API_KEY").is_ok(),
-        has_pubmed_key: has_nonempty(&root, &["ingestion", "pubmed", "api_key"]) || std::env::var("FERRUMYX_PUBMED_API_KEY").is_ok(),
+        has_pubmed_key: has_nonempty(&root, &["ingestion", "pubmed", "api_key"])
+            || has_nonempty(&root, &["ingestion", "pubmed", "api_key_secret"])
+            || std::env::var("FERRUMYX_PUBMED_API_KEY").is_ok(),
+        has_semanticscholar_key: has_nonempty(&root, &["ingestion", "semanticscholar", "api_key"])
+            || has_nonempty(&root, &["ingestion", "semanticscholar", "api_key_secret"])
+            || std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY").is_ok_and(|v| !v.trim().is_empty())
+            || std::env::var("SEMANTIC_SCHOLAR_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
         ironclaw_sync: IronclawSyncView {
             llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
@@ -532,8 +603,29 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     maybe_set_secret(compat, "api_key", &payload.compat_api_key);
 
     let ingestion = table_mut(&mut root, "ingestion");
+    ingestion.insert(
+        "enable_embeddings".to_string(),
+        toml::Value::Boolean(payload.ingestion_enable_embeddings),
+    );
+    ingestion.insert(
+        "default_max_results".to_string(),
+        toml::Value::Integer(payload.ingestion_default_max_results.clamp(1, 5000) as i64),
+    );
+    let watchdog = nested_table_mut(ingestion, "watchdog");
+    watchdog.insert(
+        "idle_timeout_secs".to_string(),
+        toml::Value::Integer(payload.ingestion_idle_timeout_secs.clamp(60, 3600) as i64),
+    );
+    watchdog.insert(
+        "max_runtime_secs".to_string(),
+        toml::Value::Integer(payload.ingestion_max_runtime_secs.clamp(600, 86_400) as i64),
+    );
     let pubmed = nested_table_mut(ingestion, "pubmed");
     maybe_set_secret(pubmed, "api_key", &payload.pubmed_api_key);
+    maybe_set_secret(pubmed, "api_key_secret", &payload.pubmed_api_key);
+    let semanticscholar = nested_table_mut(ingestion, "semanticscholar");
+    maybe_set_secret(semanticscholar, "api_key", &payload.semanticscholar_api_key);
+    maybe_set_secret(semanticscholar, "api_key_secret", &payload.semanticscholar_api_key);
 
     let embedding = table_mut(&mut root, "embedding");
     set_str(embedding, "backend", payload.embedding_backend);
@@ -601,4 +693,43 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         "LLM_COMPAT_CACHED_CHAT",
         if compat_cached_chat { "1" } else { "0" },
     );
+
+    let ingestion_default_max_results = int_at(root, &["ingestion", "default_max_results"], 50);
+    let ingestion_idle_timeout_secs = int_at(root, &["ingestion", "watchdog", "idle_timeout_secs"], 600);
+    let ingestion_max_runtime_secs = int_at(root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400);
+    std::env::set_var(
+        "FERRUMYX_INGESTION_DEFAULT_MAX_RESULTS",
+        ingestion_default_max_results.to_string(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_IDLE_TIMEOUT_SECS",
+        ingestion_idle_timeout_secs.to_string(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_MAX_RUNTIME_SECS",
+        ingestion_max_runtime_secs.to_string(),
+    );
+    let ingestion_enable_embeddings = bool_at(root, &["ingestion", "enable_embeddings"], false);
+    std::env::set_var(
+        "FERRUMYX_INGESTION_ENABLE_EMBEDDINGS",
+        if ingestion_enable_embeddings { "1" } else { "0" },
+    );
+
+    let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
+    if !pubmed_key.is_empty() {
+        std::env::set_var("FERRUMYX_PUBMED_API_KEY", &pubmed_key);
+    }
+
+    let semanticscholar_key = {
+        let k = str_at(root, &["ingestion", "semanticscholar", "api_key"], "");
+        if !k.is_empty() {
+            k
+        } else {
+            str_at(root, &["ingestion", "semanticscholar", "api_key_secret"], "")
+        }
+    };
+    if !semanticscholar_key.is_empty() {
+        std::env::set_var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY", &semanticscholar_key);
+        std::env::set_var("SEMANTIC_SCHOLAR_API_KEY", &semanticscholar_key);
+    }
 }

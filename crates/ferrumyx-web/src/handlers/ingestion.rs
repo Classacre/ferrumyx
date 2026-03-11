@@ -12,6 +12,10 @@ use std::path::PathBuf;
 use ferrumyx_ingestion::pipeline::{
     IngestionJob, IngestionSourceSpec, run_ingestion,
 };
+use ferrumyx_ingestion::embedding::{
+    EmbeddingBackend as IngestionEmbeddingBackend,
+    EmbeddingConfig as IngestionEmbeddingConfig,
+};
 use ferrumyx_ingestion::repository::IngestionRepository;
 
 use crate::state::{SharedState, AppEvent};
@@ -70,7 +74,8 @@ pub async fn ingestion_run(
         max_results:    form.max_results.unwrap_or(100),
         sources,
         pubmed_api_key: resolve_pubmed_api_key(),
-        embedding_cfg:  None,
+        semantic_scholar_api_key: resolve_semantic_scholar_api_key(),
+        embedding_cfg:  resolve_embedding_cfg_for_form(&form),
         enable_scihub_fallback: form.enable_scihub.is_some() && form.enable_scihub.as_deref() == Some("on"),
     };
 
@@ -169,11 +174,180 @@ fn resolve_pubmed_api_key() -> Option<String> {
     let root = toml::from_str::<toml::Value>(&content).ok()?;
     root.get("ingestion")
         .and_then(|v| v.get("pubmed"))
-        .and_then(|v| v.get("api_key"))
+        .and_then(|v| v.get("api_key").or_else(|| v.get("api_key_secret")))
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
+}
+
+fn resolve_semantic_scholar_api_key() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    if let Ok(v) = std::env::var("SEMANTIC_SCHOLAR_API_KEY") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let path = std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"));
+    let content = std::fs::read_to_string(path).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("semanticscholar"))
+        .and_then(|v| v.get("api_key").or_else(|| v.get("api_key_secret")))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn toml_string(root: &toml::Value, path: &[&str]) -> Option<String> {
+    let mut cur = root;
+    for p in path {
+        cur = cur.get(*p)?;
+    }
+    cur.as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn toml_u64(root: &toml::Value, path: &[&str], default: u64) -> u64 {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_integer()
+        .and_then(|v| if v >= 0 { Some(v as u64) } else { None })
+        .unwrap_or(default)
+}
+
+fn toml_bool(root: &toml::Value, path: &[&str], default: bool) -> bool {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_bool().unwrap_or(default)
+}
+
+fn parse_embedding_backend(s: &str) -> IngestionEmbeddingBackend {
+    match s.trim().to_lowercase().as_str() {
+        "openai" => IngestionEmbeddingBackend::OpenAi,
+        "gemini" => IngestionEmbeddingBackend::Gemini,
+        "openai_compatible" | "compat" => IngestionEmbeddingBackend::OpenAiCompatible,
+        "ollama" => IngestionEmbeddingBackend::Ollama,
+        "biomedbert" => IngestionEmbeddingBackend::BiomedBert,
+        _ => IngestionEmbeddingBackend::RustNative,
+    }
+}
+
+fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbeddingConfig> {
+    let path = std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"));
+    let root = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| toml::from_str::<toml::Value>(&content).ok());
+
+    let default_enabled = root
+        .as_ref()
+        .map(|r| toml_bool(r, &["ingestion", "enable_embeddings"], false))
+        .unwrap_or(false);
+
+    let explicit_backend = form
+        .embed_backend
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    if explicit_backend.is_none() && !default_enabled {
+        return None;
+    }
+
+    let backend_str = explicit_backend
+        .map(ToString::to_string)
+        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "backend"])))
+        .unwrap_or_else(|| "rust_native".to_string());
+    let backend = parse_embedding_backend(&backend_str);
+
+    let model = form
+        .embed_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "embedding_model"])))
+        .unwrap_or_else(|| "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string());
+
+    let base_url = root
+        .as_ref()
+        .and_then(|r| toml_string(r, &["embedding", "base_url"]));
+    let batch_size = root
+        .as_ref()
+        .map(|r| toml_u64(r, &["embedding", "batch_size"], 32))
+        .unwrap_or(32)
+        .clamp(1, 256) as usize;
+    let dim = root
+        .as_ref()
+        .map(|r| {
+            toml_u64(
+                r,
+                &["embedding", "embedding_dim"],
+                if matches!(backend, IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert) {
+                    768
+                } else {
+                    1536
+                },
+            )
+        })
+        .unwrap_or(if matches!(backend, IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert) {
+            768
+        } else {
+            1536
+        })
+        .clamp(64, 8192) as usize;
+
+    let api_key = form
+        .embed_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "api_key"])))
+        .or_else(|| match backend {
+            IngestionEmbeddingBackend::OpenAi => std::env::var("FERRUMYX_OPENAI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+            IngestionEmbeddingBackend::Gemini => std::env::var("FERRUMYX_GEMINI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok()),
+            IngestionEmbeddingBackend::OpenAiCompatible => std::env::var("FERRUMYX_COMPAT_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("LLM_API_KEY").ok()),
+            _ => None,
+        })
+        .filter(|v| !v.trim().is_empty());
+
+    Some(IngestionEmbeddingConfig {
+        backend,
+        api_key,
+        model,
+        dim,
+        batch_size,
+        base_url,
+    })
 }
 
 // ── Source parser ─────────────────────────────────────────────────────────────
@@ -187,6 +361,7 @@ fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
             "medrxiv"        => Some(IngestionSourceSpec::MedRxiv),
             "clinicaltrials" => Some(IngestionSourceSpec::ClinicalTrials),
             "crossref"       => Some(IngestionSourceSpec::CrossRef),
+            "semanticscholar"=> Some(IngestionSourceSpec::SemanticScholar),
             _                => None,
         })
         .collect();

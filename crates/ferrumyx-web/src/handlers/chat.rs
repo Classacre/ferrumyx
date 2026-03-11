@@ -261,6 +261,70 @@ pub async fn chat_history(
     }
 }
 
+pub async fn chat_threads(
+    State(_state): State<SharedState>,
+) -> impl IntoResponse {
+    let client = Client::new();
+    let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/threads");
+
+    match client
+        .get(gateway_url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
+            Ok(v) => axum::Json(v).into_response(),
+            Err(_) => (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "Invalid response from agent",
+            )
+                .into_response(),
+        },
+        Ok(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            "Agent gateway returned error status",
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to contact IronClaw Agent threads endpoint: {}", e);
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
+        }
+    }
+}
+
+pub async fn chat_thread_new(
+    State(_state): State<SharedState>,
+) -> impl IntoResponse {
+    let client = Client::new();
+    let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/thread/new");
+
+    match client
+        .post(gateway_url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
+            Ok(v) => axum::Json(v).into_response(),
+            Err(_) => (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "Invalid response from agent",
+            )
+                .into_response(),
+        },
+        Ok(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            "Agent gateway returned error status",
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to contact IronClaw Agent new-thread endpoint: {}", e);
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
+        }
+    }
+}
+
 pub async fn chat_events_proxy(
     State(_state): State<SharedState>,
 ) -> impl IntoResponse {

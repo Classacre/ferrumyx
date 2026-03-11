@@ -25,9 +25,10 @@ pub struct CrossRefClient {
 
 impl CrossRefClient {
     pub fn new() -> Self {
-        let mut client = Client::new();
-        // Allow adding specific headers or handling user agents if needed by SandboxClient,
-        // but for now SandboxClient encapsulates reqwest configuration.
+        let client = Client::builder()
+            .user_agent(USER_AGENT)
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self { client }
     }
 

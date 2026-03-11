@@ -11,20 +11,125 @@
             display: flex;
             flex-direction: column;
             min-height: calc(100vh - 10rem);
+            overflow: hidden;
+        }
+
+        .chat-layout {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        .thread-drawer {
+            width: 320px;
+            border-right: 1px solid var(--border-color);
+            background: rgba(9, 14, 24, 0.92);
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.22s ease;
+            margin-left: -320px;
+        }
+
+        .thread-drawer.open {
+            margin-left: 0;
+        }
+
+        .thread-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .thread-list {
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .thread-item {
+            border: 1px solid rgba(98, 122, 163, 0.35);
+            background: rgba(17, 24, 36, 0.86);
+            border-radius: 10px;
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        .thread-item.active {
+            border-color: rgba(115, 175, 255, 0.8);
+            box-shadow: inset 0 0 0 1px rgba(115, 175, 255, 0.3);
+        }
+
+        .thread-item-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .thread-title {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .thread-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .thread-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 6px;
+        }
+
+        .thread-remove {
+            border: 1px solid rgba(179, 111, 111, 0.55);
+            color: #ffb5b5;
+            background: transparent;
+            border-radius: 7px;
+            padding: 2px 8px;
+            font-size: 0.72rem;
+            cursor: pointer;
+        }
+
+        .chat-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-topbar {
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(17, 24, 37, 0.55);
+            gap: 10px;
         }
 
         .chat-history {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 18px;
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            min-height: 420px;
+            gap: 12px;
+            min-height: 320px;
         }
 
         .chat-message {
-            max-width: min(860px, 86%);
+            max-width: min(900px, 88%);
             padding: 12px 14px;
             border-radius: 12px;
             line-height: 1.5;
@@ -32,55 +137,14 @@
             box-shadow: 0 6px 20px rgba(7, 11, 22, 0.35);
         }
 
-        .chat-message-body > :first-child {
-            margin-top: 0;
-        }
-
-        .chat-message-body > :last-child {
-            margin-bottom: 0;
-        }
-
-        .chat-message-body h1,
-        .chat-message-body h2,
-        .chat-message-body h3 {
-            margin: 0.45rem 0 0.35rem;
-            line-height: 1.25;
-        }
-
-        .chat-message-body p,
-        .chat-message-body ul,
-        .chat-message-body ol,
-        .chat-message-body pre,
-        .chat-message-body blockquote {
-            margin: 0.35rem 0;
-        }
-
-        .chat-message-body code {
-            font-family: "JetBrains Mono", "Consolas", monospace;
-            font-size: 0.85em;
-            background: rgba(129, 161, 205, 0.18);
-            border-radius: 5px;
-            padding: 0.12rem 0.3rem;
-        }
-
-        .chat-message-body pre {
-            background: rgba(9, 14, 23, 0.88);
-            border: 1px solid rgba(118, 138, 168, 0.35);
-            border-radius: 8px;
-            padding: 0.65rem 0.75rem;
-            overflow-x: auto;
-        }
-
-        .chat-message-body pre code {
-            background: transparent;
-            border-radius: 0;
-            padding: 0;
-        }
-
-        .chat-message-body a {
-            color: #7eb9ff;
-            text-decoration: underline;
-        }
+        .chat-message-body > :first-child { margin-top: 0; }
+        .chat-message-body > :last-child { margin-bottom: 0; }
+        .chat-message-body h1, .chat-message-body h2, .chat-message-body h3 { margin: 0.45rem 0 0.35rem; line-height: 1.25; }
+        .chat-message-body p, .chat-message-body ul, .chat-message-body ol, .chat-message-body pre, .chat-message-body blockquote { margin: 0.35rem 0; }
+        .chat-message-body code { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 0.85em; background: rgba(129, 161, 205, 0.18); border-radius: 5px; padding: 0.12rem 0.3rem; }
+        .chat-message-body pre { background: rgba(9, 14, 23, 0.88); border: 1px solid rgba(118, 138, 168, 0.35); border-radius: 8px; padding: 0.65rem 0.75rem; overflow-x: auto; }
+        .chat-message-body pre code { background: transparent; border-radius: 0; padding: 0; }
+        .chat-message-body a { color: #7eb9ff; text-decoration: underline; }
 
         .message-user {
             align-self: flex-end;
@@ -92,10 +156,19 @@
 
         .message-agent {
             align-self: flex-start;
-            background: rgba(18, 25, 38, 0.85);
+            background: rgba(18, 25, 38, 0.86);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
             border-bottom-left-radius: 4px;
+        }
+
+        .message-activity {
+            align-self: flex-start;
+            background: rgba(77, 131, 215, 0.12);
+            border: 1px solid rgba(108, 154, 227, 0.38);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+            max-width: min(900px, 92%);
         }
 
         .chat-input-area {
@@ -119,11 +192,6 @@
             min-height: 48px;
             max-height: 140px;
             outline: none;
-            transition: border-color 0.2s ease;
-        }
-
-        .chat-input:focus {
-            border-color: rgba(110, 168, 255, 0.8);
         }
 
         .typing-indicator {
@@ -134,10 +202,14 @@
             letter-spacing: 0.07em;
         }
 
-        @media (max-width: 860px) {
-            .chat-message {
-                max-width: 100%;
+        @media (max-width: 920px) {
+            .thread-drawer {
+                position: absolute;
+                z-index: 5;
+                height: 100%;
+                box-shadow: 16px 0 42px rgba(1, 3, 8, 0.6);
             }
+            .chat-message { max-width: 100%; }
         }
     </style>
 </head>
@@ -153,23 +225,38 @@
                     </svg>
                     IronClaw Agent Chat
                 </h1>
-                <p class="text-muted">Autonomous conversational interface connected to Ferrumyx backend services.</p>
+                <p class="text-muted">Autonomous conversational control with live tool telemetry.</p>
             </div>
         </div>
 
         <section class="card chat-shell">
-            <div class="card-header border-bottom">
-                <div>Live Session</div>
-            </div>
-            <div class="chat-history" id="chatHistory">
-                <div class="chat-message message-agent">
-                    <div class="typing-indicator">Ferrumyx Agent</div>
-                    <div>Ready. Ask me to run ingestion jobs, inspect targets, or summarize current state.</div>
+            <div class="chat-layout">
+                <aside id="threadDrawer" class="thread-drawer">
+                    <div class="thread-head">
+                        <strong>Threads</strong>
+                        <button id="newThreadBtn" class="btn btn-secondary" type="button">New</button>
+                    </div>
+                    <div id="threadList" class="thread-list"></div>
+                </aside>
+
+                <div class="chat-main">
+                    <div class="chat-topbar">
+                        <button id="threadToggleBtn" class="btn btn-secondary" type="button">Threads</button>
+                        <div class="text-muted" id="threadStatus">No active thread</div>
+                    </div>
+
+                    <div class="chat-history" id="chatHistory">
+                        <div class="chat-message message-agent">
+                            <div class="typing-indicator">Ferrumyx Agent</div>
+                            <div class="chat-message-body">Ready. Ask me to run ingestion jobs, inspect targets, or summarize the current state.</div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <textarea id="chatInput" class="chat-input" placeholder="Type a request and press Enter..."></textarea>
+                        <button id="sendBtn" class="btn btn-primary" type="button">Send</button>
+                    </div>
                 </div>
-            </div>
-            <div class="chat-input-area">
-                <textarea id="chatInput" class="chat-input" placeholder="Type a request and press Enter..."></textarea>
-                <button id="sendBtn" class="btn btn-primary" type="button">Send</button>
             </div>
         </section>
     </main>
@@ -180,15 +267,24 @@
         const chatInput = document.getElementById('chatInput');
         const chatHistory = document.getElementById('chatHistory');
         const sendBtn = document.getElementById('sendBtn');
+        const threadDrawer = document.getElementById('threadDrawer');
+        const threadListEl = document.getElementById('threadList');
+        const threadStatusEl = document.getElementById('threadStatus');
+
         let currentThreadId = null;
         let chatEventSource = null;
         let activeReply = null;
+        let assistantThreadId = null;
+
+        const hiddenThreadsKey = 'ferrumyx_hidden_threads_v1';
+        const hiddenThreads = new Set(JSON.parse(localStorage.getItem(hiddenThreadsKey) || '[]'));
+
+        function persistHiddenThreads() {
+            localStorage.setItem(hiddenThreadsKey, JSON.stringify(Array.from(hiddenThreads)));
+        }
 
         if (window.marked && window.marked.setOptions) {
-            window.marked.setOptions({
-                breaks: true,
-                gfm: true
-            });
+            window.marked.setOptions({ breaks: true, gfm: true });
         }
 
         function escapeHtml(text) {
@@ -205,9 +301,7 @@
             const parsed = (window.marked && window.marked.parse)
                 ? window.marked.parse(source)
                 : `<p>${escapeHtml(source).replace(/\n/g, '<br>')}</p>`;
-            if (window.DOMPurify && window.DOMPurify.sanitize) {
-                return window.DOMPurify.sanitize(parsed);
-            }
+            if (window.DOMPurify && window.DOMPurify.sanitize) return window.DOMPurify.sanitize(parsed);
             return parsed;
         }
 
@@ -216,10 +310,10 @@
             div.className = 'chat-message message-' + role;
             if (options.id) div.id = options.id;
 
-            const label = role === 'agent' ? 'Ferrumyx Agent' : 'You';
+            const label = role === 'agent' ? 'Ferrumyx Agent' : role === 'activity' ? 'Agent Activity' : 'You';
             const body = document.createElement('div');
             body.className = 'chat-message-body';
-            if (options.markdown && role === 'agent') {
+            if (options.markdown && role !== 'user') {
                 body.innerHTML = renderMarkdown(content);
             } else if (options.rawHtml) {
                 body.innerHTML = content;
@@ -229,104 +323,235 @@
 
             div.innerHTML = `<div class="typing-indicator">${label}</div>`;
             div.appendChild(body);
-
             chatHistory.appendChild(div);
             chatHistory.scrollTop = chatHistory.scrollHeight;
             return { container: div, body };
         }
 
-        function setMessageContent(messageEl, text, { markdown = false, rawHtml = false } = {}) {
+        function setMessageContent(messageEl, text, { markdown = false } = {}) {
             if (!messageEl) return;
-            if (markdown) {
-                messageEl.innerHTML = renderMarkdown(text);
-            } else if (rawHtml) {
-                messageEl.innerHTML = text;
-            } else {
-                messageEl.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
-            }
+            messageEl.innerHTML = markdown ? renderMarkdown(text) : escapeHtml(text).replace(/\n/g, '<br>');
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
 
-        function animateAgentText(messageEl, text, done) {
-            const full = String(text || '');
-            const total = full.length;
-            if (!total) {
-                setMessageContent(messageEl, '');
-                if (done) done();
-                return;
-            }
-            let idx = 0;
-            const step = Math.max(2, Math.floor(total / 70));
-            const tick = () => {
-                idx = Math.min(total, idx + step);
-                setMessageContent(messageEl, full.slice(0, idx), { markdown: true });
-                if (idx < total) {
-                    requestAnimationFrame(tick);
-                } else if (done) {
-                    done();
+        function toolLink(name) {
+            const n = String(name || '').toLowerCase();
+            if (n.includes('ingest')) return '/ingestion';
+            if (n.includes('query')) return '/query';
+            if (n.includes('kg') || n.includes('graph')) return '/kg';
+            if (n.includes('molecule') || n.includes('vina') || n.includes('dock')) return '/molecules';
+            if (n.includes('ner') || n.includes('entity')) return '/ner';
+            if (n.includes('depmap')) return '/depmap';
+            if (n.includes('rank')) return '/ranker';
+            if (n.includes('setting') || n.includes('sync')) return '/settings';
+            return '/system';
+        }
+
+        function appendActivity(text, toolName = null) {
+            const link = toolName ? toolLink(toolName) : null;
+            const html = link
+                ? `${escapeHtml(text)} <a href="${link}">Open page</a>`
+                : escapeHtml(text);
+            appendMessage('activity', html, { rawHtml: true });
+        }
+
+        async function fetchJson(url, options = {}) {
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(await res.text());
+            return await res.json();
+        }
+
+        function relativeTime(iso) {
+            if (!iso) return '';
+            const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+            if (mins < 1) return 'now';
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            return `${Math.floor(hrs / 24)}d ago`;
+        }
+
+        function threadTitle(t) {
+            if (t.title && String(t.title).trim()) return String(t.title).trim();
+            if (t.thread_type === 'assistant') return 'Assistant';
+            return String(t.id || '').slice(0, 8) || 'New thread';
+        }
+
+        async function loadThreads() {
+            try {
+                const data = await fetchJson('/api/chat/threads');
+                const all = [];
+                if (data.assistant_thread) {
+                    assistantThreadId = data.assistant_thread.id;
+                    all.push(data.assistant_thread);
                 }
-            };
-            requestAnimationFrame(tick);
+                const regular = Array.isArray(data.threads) ? data.threads : [];
+                for (const t of regular) all.push(t);
+
+                threadListEl.innerHTML = '';
+                for (const thread of all) {
+                    if (hiddenThreads.has(thread.id)) continue;
+                    const item = document.createElement('div');
+                    item.className = 'thread-item' + (thread.id === currentThreadId ? ' active' : '');
+
+                    const row = document.createElement('div');
+                    row.className = 'thread-item-row';
+                    row.innerHTML = `
+                        <div class="thread-title" title="${escapeHtml(threadTitle(thread))}">${escapeHtml(threadTitle(thread))}</div>
+                        <div class="thread-meta">${escapeHtml(relativeTime(thread.updated_at))}</div>
+                    `;
+                    item.appendChild(row);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'thread-actions';
+                    const rm = document.createElement('button');
+                    rm.type = 'button';
+                    rm.className = 'thread-remove';
+                    rm.textContent = 'Delete';
+                    rm.title = 'Remove from sidebar';
+                    rm.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        hiddenThreads.add(thread.id);
+                        persistHiddenThreads();
+                        if (currentThreadId === thread.id) {
+                            currentThreadId = assistantThreadId || null;
+                            if (currentThreadId) loadHistory(currentThreadId);
+                        }
+                        loadThreads();
+                    });
+                    actions.appendChild(rm);
+                    item.appendChild(actions);
+
+                    item.addEventListener('click', () => {
+                        currentThreadId = thread.id;
+                        loadHistory(thread.id);
+                        loadThreads();
+                    });
+                    threadListEl.appendChild(item);
+                }
+
+                if (!currentThreadId) {
+                    currentThreadId = assistantThreadId || regular[0]?.id || null;
+                    if (currentThreadId) loadHistory(currentThreadId);
+                }
+                threadStatusEl.textContent = currentThreadId ? `Thread: ${String(currentThreadId).slice(0, 8)}` : 'No active thread';
+            } catch (_) {
+                appendActivity('Could not load thread list from gateway.');
+            }
+        }
+
+        async function createThread() {
+            try {
+                const created = await fetchJson('/api/chat/thread/new', { method: 'POST' });
+                currentThreadId = created.id || null;
+                chatHistory.innerHTML = '';
+                appendMessage('agent', 'New thread ready. What should we run next?');
+                await loadThreads();
+            } catch (err) {
+                appendActivity(`Failed to create thread: ${err.message || 'unknown error'}`);
+            }
+        }
+
+        async function loadHistory(threadId) {
+            if (!threadId) return;
+            try {
+                const data = await fetchJson('/api/chat/history?thread_id=' + encodeURIComponent(threadId) + '&limit=80');
+                const turns = Array.isArray(data.turns) ? data.turns : [];
+                chatHistory.innerHTML = '';
+                if (!turns.length) {
+                    appendMessage('agent', 'Thread loaded. Ask me to continue from here.');
+                } else {
+                    for (const turn of turns) {
+                        if (turn.user_input) appendMessage('user', turn.user_input);
+                        if (turn.response) appendMessage('agent', turn.response, { markdown: true });
+                        else if (turn.error) appendActivity(`Previous error: ${turn.error}`);
+                    }
+                }
+                threadStatusEl.textContent = `Thread: ${String(threadId).slice(0, 8)}`;
+            } catch (_) {
+                appendActivity('Failed to load chat history for this thread.');
+            }
         }
 
         function startEventStream() {
             if (chatEventSource) return;
             chatEventSource = new EventSource('/api/chat/events');
 
-            const parseEventPayload = (evt) => {
-                if (!evt || !evt.data) return null;
-                try {
-                    return JSON.parse(evt.data);
-                } catch (_) {
-                    return null;
-                }
+            const parse = (evt) => {
+                try { return evt && evt.data ? JSON.parse(evt.data) : null; } catch (_) { return null; }
             };
 
-            const shouldHandle = (payload) => {
-                if (!activeReply) return false;
+            const isCurrent = (payload) => {
                 if (!payload) return false;
-                if (!payload.thread_id || !activeReply.threadId) return true;
-                return payload.thread_id === activeReply.threadId;
+                if (!payload.thread_id || !currentThreadId) return true;
+                return payload.thread_id === currentThreadId;
             };
 
-            const onStreamChunk = (evt) => {
-                const payload = parseEventPayload(evt);
-                if (!shouldHandle(payload) || !payload.content) return;
-                activeReply.buffer += String(payload.content);
+            chatEventSource.addEventListener('stream_chunk', (evt) => {
+                const payload = parse(evt);
+                if (!activeReply || !isCurrent(payload)) return;
+                activeReply.buffer += String(payload.content || '');
                 setMessageContent(activeReply.bodyEl, activeReply.buffer, { markdown: true });
-                activeReply.lastEventAt = Date.now();
-            };
+            });
 
-            const onResponse = (evt) => {
-                const payload = parseEventPayload(evt);
-                if (!shouldHandle(payload)) return;
-                const finalText = String(payload.content || activeReply.buffer || '');
-                const hadChunks = activeReply.buffer && activeReply.buffer.length > 0;
-                activeReply.buffer = finalText;
-                if (hadChunks) {
+            chatEventSource.addEventListener('response', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                const finalText = String(payload?.content || activeReply?.buffer || '');
+                if (activeReply) {
                     setMessageContent(activeReply.bodyEl, finalText, { markdown: true });
                     activeReply.done = true;
-                    sendBtn.disabled = false;
                 } else {
-                    animateAgentText(activeReply.bodyEl, finalText, () => {
-                        if (activeReply) activeReply.done = true;
-                        sendBtn.disabled = false;
-                    });
+                    appendMessage('agent', finalText, { markdown: true });
                 }
-            };
-
-            const onErrorEvent = (evt) => {
-                const payload = parseEventPayload(evt);
-                if (!shouldHandle(payload)) return;
-                const msg = payload && payload.message ? payload.message : 'Agent stream error.';
-                setMessageContent(activeReply.bodyEl, `Agent failed: ${msg}`, { markdown: false });
-                activeReply.done = true;
                 sendBtn.disabled = false;
-            };
+                loadThreads();
+            });
 
-            chatEventSource.addEventListener('stream_chunk', onStreamChunk);
-            chatEventSource.addEventListener('response', onResponse);
-            chatEventSource.addEventListener('error', onErrorEvent);
+            chatEventSource.addEventListener('thinking', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                appendActivity(payload?.message || 'Thinking...');
+            });
+
+            chatEventSource.addEventListener('status', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                if (payload?.message) appendActivity(`Status: ${payload.message}`);
+                if (payload?.message === 'Done' || payload?.message === 'Awaiting approval') sendBtn.disabled = false;
+            });
+
+            chatEventSource.addEventListener('tool_started', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                const tool = payload?.name || 'tool';
+                appendActivity(`Running tool: ${tool}`, tool);
+            });
+
+            chatEventSource.addEventListener('tool_completed', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                const tool = payload?.name || 'tool';
+                if (payload?.success) appendActivity(`Tool completed: ${tool}`, tool);
+                else appendActivity(`Tool failed: ${tool}${payload?.error ? ` — ${payload.error}` : ''}`, tool);
+            });
+
+            chatEventSource.addEventListener('tool_result', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                const tool = payload?.name || 'tool';
+                const preview = payload?.preview ? ` (${String(payload.preview).slice(0, 140)})` : '';
+                appendActivity(`Tool output: ${tool}${preview}`, tool);
+            });
+
+            chatEventSource.addEventListener('error', (evt) => {
+                const payload = parse(evt);
+                if (!isCurrent(payload)) return;
+                const msg = payload?.message || 'Agent stream error.';
+                appendActivity(msg);
+                sendBtn.disabled = false;
+            });
+
             chatEventSource.onerror = () => {
                 if (chatEventSource) {
                     chatEventSource.close();
@@ -334,43 +559,6 @@
                 }
                 setTimeout(startEventStream, 1200);
             };
-        }
-
-        async function waitForReply(threadId, userText, timeoutMs = 180000) {
-            const deadline = Date.now() + timeoutMs;
-            while (Date.now() < deadline) {
-                try {
-                    const res = await fetch('/api/chat/history?thread_id=' + encodeURIComponent(threadId) + '&limit=50');
-                    if (res.ok) {
-                        const data = await res.json();
-                        const turns = Array.isArray(data.turns) ? data.turns : [];
-                        for (let i = turns.length - 1; i >= 0; i--) {
-                            const turn = turns[i];
-                            if (!turn || turn.user_input !== userText) continue;
-                            if (turn.response && turn.response.trim()) {
-                                return { ok: true, text: turn.response };
-                            }
-                            if (turn.error && String(turn.error).trim().length > 0) {
-                                return { ok: false, text: `Agent failed: ${turn.error}` };
-                            }
-                            if (Array.isArray(turn.tool_calls) && turn.tool_calls.length > 0) {
-                                const lastErr = turn.tool_calls.find(t => t && t.has_error && t.error);
-                                if (lastErr && lastErr.error) {
-                                    if (turn.state === 'Processing') {
-                                        return { ok: false, text: `Agent hit a tool error while processing: ${lastErr.error}` };
-                                    }
-                                    return { ok: false, text: `No assistant output returned (state: ${turn.state || 'unknown'}). ${lastErr.error}` };
-                                }
-                            }
-                            if (turn.state && turn.state !== 'Processing') {
-                                return { ok: false, text: `No assistant output returned (state: ${turn.state}).` };
-                            }
-                        }
-                    }
-                } catch (_) {}
-                await new Promise(resolve => setTimeout(resolve, 1500));
-            }
-            return { ok: false, text: null };
         }
 
         async function sendMessage() {
@@ -382,15 +570,12 @@
             chatInput.value = '';
             sendBtn.disabled = true;
 
-            const thinkingId = 'thinking-' + Date.now();
-            const agentMessage = appendMessage('agent', 'Thinking...', { id: thinkingId, markdown: false });
+            const agentMessage = appendMessage('agent', 'Thinking...');
             activeReply = {
                 threadId: currentThreadId,
-                userText: text,
                 bodyEl: agentMessage.body,
                 buffer: '',
-                done: false,
-                lastEventAt: Date.now()
+                done: false
             };
 
             try {
@@ -404,51 +589,30 @@
                 if (data.thread_id) {
                     currentThreadId = data.thread_id;
                     if (activeReply) activeReply.threadId = data.thread_id;
+                    threadStatusEl.textContent = `Thread: ${String(data.thread_id).slice(0, 8)}`;
                 }
 
-                if (data.status === 'success') {
-                    const txt = data.response || 'Task processing in background.';
-                    if (activeReply) {
-                        setMessageContent(activeReply.bodyEl, txt, { markdown: true });
-                        activeReply.done = true;
-                    }
+                if (data.status === 'success' && data.response) {
+                    setMessageContent(agentMessage.body, data.response, { markdown: true });
+                    activeReply.done = true;
                     sendBtn.disabled = false;
-                } else if (data.status === 'accepted' && data.thread_id) {
-                    // Fallback path in case streaming events are delayed or unavailable.
-                    const snapshot = activeReply;
-                    setTimeout(async () => {
-                        if (!snapshot || snapshot.done) return;
-                        const idleMs = Date.now() - snapshot.lastEventAt;
-                        if (idleMs < 12000) return;
-                        const reply = await waitForReply(data.thread_id, text);
-                        if (!snapshot.done && reply.text) {
-                            setMessageContent(snapshot.bodyEl, reply.text, { markdown: !!reply.ok });
-                            snapshot.done = true;
-                            sendBtn.disabled = false;
-                        }
-                    }, 15000);
-                } else if (data.response) {
-                    if (activeReply) {
-                        setMessageContent(activeReply.bodyEl, data.response, { markdown: true });
-                        activeReply.done = true;
-                    }
-                    sendBtn.disabled = false;
-                } else {
-                    if (activeReply) {
-                        setMessageContent(activeReply.bodyEl, "Error: " + (data.error || 'Unknown error'));
-                        activeReply.done = true;
-                    }
+                } else if (data.status !== 'accepted' && !data.thread_id) {
+                    setMessageContent(agentMessage.body, data.response || 'No response from agent.');
+                    activeReply.done = true;
                     sendBtn.disabled = false;
                 }
             } catch (_) {
-                if (activeReply) {
-                    setMessageContent(activeReply.bodyEl, 'Network error.');
-                    activeReply.done = true;
-                }
+                setMessageContent(agentMessage.body, 'Network error.');
+                activeReply.done = true;
                 sendBtn.disabled = false;
             }
             chatInput.focus();
         }
+
+        document.getElementById('threadToggleBtn').addEventListener('click', () => {
+            threadDrawer.classList.toggle('open');
+        });
+        document.getElementById('newThreadBtn').addEventListener('click', createThread);
 
         sendBtn.addEventListener('click', sendMessage);
         chatInput.addEventListener('keydown', function (event) {
@@ -457,6 +621,9 @@
                 sendMessage();
             }
         });
+
+        startEventStream();
+        loadThreads();
     </script>
 </body>
 </html>

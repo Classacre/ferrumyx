@@ -52,6 +52,8 @@ pub struct IngestionJob {
     pub sources: Vec<IngestionSourceSpec>,
     /// Optional NCBI API key for higher rate limits.
     pub pubmed_api_key: Option<String>,
+    /// Optional Semantic Scholar API key for higher throughput/quotas.
+    pub semantic_scholar_api_key: Option<String>,
     /// If provided, chunks are embedded immediately after insert.
     /// If None, a separate embed pass is needed (e.g. scheduled background job).
     pub embedding_cfg: Option<EmbeddingConfig>,
@@ -89,6 +91,7 @@ impl Default for IngestionJob {
                 IngestionSourceSpec::CrossRef,
             ],
             pubmed_api_key: None,
+            semantic_scholar_api_key: None,
             embedding_cfg: None,
             enable_scihub_fallback: false,
         }
@@ -165,6 +168,9 @@ pub async fn run_ingestion(
         }
     };
 
+    let mut base_progress = IngestionProgress::new(job_id, "init", "");
+    emit("init", "Ingestion pipeline initialized", base_progress.clone());
+
     // Build embedding client once if configured
     let embed_client = job.embedding_cfg.as_ref().map(|cfg| {
         info!("Embedding enabled: {:?} / {}", cfg.backend, cfg.model);
@@ -172,6 +178,7 @@ pub async fn run_ingestion(
     });
 
     // Initialize NER once for the entire pipeline (loads real databases)
+    emit("init", "Loading biomedical NER databases", base_progress.clone());
     info!("Initializing NER with complete biomedical databases...");
     let ner = match tokio::task::spawn_blocking(|| {
         TrieNer::with_complete_databases()
@@ -194,6 +201,12 @@ pub async fn run_ingestion(
         }
     };
     info!("NER initialized: {}patterns loaded", ner.stats().total_patterns);
+    base_progress.message = "NER initialized".to_string();
+    emit(
+        "init",
+        &format!("NER initialized: {} patterns", ner.stats().total_patterns),
+        base_progress.clone(),
+    );
     
     let cancer_normaliser = ner.cancers();
     let entity_repo = EntityRepository::new(repo.db());
@@ -244,7 +257,7 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                 client.search(&query, job.max_results).await
             }
             IngestionSourceSpec::SemanticScholar => {
-                let client = SemanticScholarClient::new();
+                let client = SemanticScholarClient::new(job.semantic_scholar_api_key.clone());
                 client.search(&query, job.max_results).await
             }
         };

@@ -26,7 +26,7 @@ use crate::handlers::{
     depmap::{depmap_page, api_depmap_gene, api_depmap_celllines},
     ranker::{ranker_page, api_ranker_score, api_ranker_top, api_ranker_stats},
     settings::{settings_page, settings_get, settings_save},
-    chat::{chat_page, chat_submit, chat_history, chat_events_proxy},
+    chat::{chat_page, chat_submit, chat_history, chat_events_proxy, chat_threads, chat_thread_new},
 };
 use crate::sse::sse_handler;
 
@@ -72,6 +72,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ranker/stats",  get(api_ranker_stats))
         .route("/api/chat",          post(chat_submit))
         .route("/api/chat/history",  get(chat_history))
+        .route("/api/chat/threads",  get(chat_threads))
+        .route("/api/chat/thread/new", post(chat_thread_new))
         .route("/api/chat/events",   get(chat_events_proxy))
         .route("/api/settings",      get(settings_get).post(settings_save))
 
