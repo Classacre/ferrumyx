@@ -1,8 +1,9 @@
 //! Chat endpoint handler proxying requests to the IronClaw GatewayChannel.
 
 use axum::{
+    body::Body,
     extract::{State, Json},
-    response::{IntoResponse, Html},
+    response::{IntoResponse, Html, Response},
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -255,6 +256,49 @@ pub async fn chat_history(
             .into_response(),
         Err(e) => {
             tracing::error!("Failed to contact IronClaw Agent history endpoint: {}", e);
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
+        }
+    }
+}
+
+pub async fn chat_events_proxy(
+    State(_state): State<SharedState>,
+) -> impl IntoResponse {
+    let client = Client::new();
+    let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/events");
+
+    match client
+        .get(gateway_url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            let stream = resp.bytes_stream();
+            let mut out = Response::new(Body::from_stream(stream));
+            *out.status_mut() = axum::http::StatusCode::OK;
+            let headers = out.headers_mut();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/event-stream"),
+            );
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-cache"),
+            );
+            headers.insert(
+                axum::http::header::CONNECTION,
+                axum::http::HeaderValue::from_static("keep-alive"),
+            );
+            out
+        }
+        Ok(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            "Agent gateway returned error status",
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to proxy IronClaw SSE events: {}", e);
             (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
         }
     }

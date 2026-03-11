@@ -56,6 +56,21 @@ use self::server::GatewayState;
 use self::sse::SseManager;
 use self::types::SseEvent;
 
+fn split_for_stream_chunks(content: &str) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut buf = String::new();
+    for piece in content.split_inclusive(char::is_whitespace) {
+        buf.push_str(piece);
+        if buf.len() >= 48 {
+            chunks.push(std::mem::take(&mut buf));
+        }
+    }
+    if !buf.is_empty() {
+        chunks.push(buf);
+    }
+    chunks
+}
+
 /// Web gateway channel implementing the Channel trait.
 pub struct GatewayChannel {
     config: GatewayConfig,
@@ -292,6 +307,20 @@ impl Channel for GatewayChannel {
                 return Ok(());
             }
         };
+
+        // Emit stream chunks first so the web UI can progressively render.
+        // Note: this is chunked delivery from a completed response, not true
+        // token streaming from the provider layer.
+        let chunks = split_for_stream_chunks(&response.content);
+        if chunks.len() > 1 {
+            for chunk in chunks {
+                self.state.sse.broadcast(SseEvent::StreamChunk {
+                    content: chunk,
+                    thread_id: Some(thread_id.clone()),
+                });
+                tokio::task::yield_now().await;
+            }
+        }
 
         self.state.sse.broadcast(SseEvent::Response {
             content: response.content,

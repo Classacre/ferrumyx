@@ -9,6 +9,7 @@ use std::io::IsTerminal;
 mod config;
 mod tools;
 use rig::providers::openai::Client as OpenAiClient;
+use rig::providers::openai::CompletionsClient as OpenAiCompletionsClient;
 use rig::providers::anthropic::Client as AnthropicClient;
 use rig::providers::gemini::Client as GeminiClient;
 use rig::client::CompletionClient;
@@ -143,7 +144,9 @@ fn try_build_openai_compatible(config: &config::Config) -> anyhow::Result<Option
             compat.base_url,
             compat.cached_chat
         );
-        let client: OpenAiClient = OpenAiClient::builder()
+        // OpenAI-compatible backends (e.g. Poe, many proxies) may not support
+        // the newer Responses API. Force Chat Completions for compatibility.
+        let client: OpenAiCompletionsClient = OpenAiCompletionsClient::builder()
             .base_url(&compat.base_url)
             .api_key(&api_key)
             .build()?;
@@ -155,9 +158,18 @@ fn try_build_openai_compatible(config: &config::Config) -> anyhow::Result<Option
 async fn try_build_ollama(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref ollama) = config.llm.ollama {
         let model = ensure_ollama_ready(&ollama.base_url, &ollama.model).await;
+        let tags_url = format!("{}/api/tags", ollama.base_url.trim_end_matches('/'));
+        let client = reqwest::Client::new();
+        if !ollama_healthy(&client, &tags_url).await {
+            tracing::warn!(
+                "Ollama is unavailable at {} after startup check. Falling back to other providers.",
+                ollama.base_url
+            );
+            return Ok(None);
+        }
         // Fallback to local Ollama (OpenAI compatible API)
         tracing::info!("Using Local Ollama: {}", model);
-        let client: OpenAiClient = OpenAiClient::builder()
+        let client: OpenAiCompletionsClient = OpenAiCompletionsClient::builder()
             .base_url(&format!("{}/v1", ollama.base_url))
             .api_key("ollama")
             .build()?;

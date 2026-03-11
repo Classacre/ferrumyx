@@ -385,6 +385,12 @@ impl Agent {
                 })
             }
             Err(e) => {
+                tracing::error!(
+                    thread_id = %thread_id,
+                    user_id = %message.user_id,
+                    "Turn failed in process_user_input: {}",
+                    e
+                );
                 thread.fail_turn(e.to_string());
                 // User message already persisted at turn start; nothing else to save
                 Ok(SubmissionResult::error(e.to_string()))
@@ -1213,6 +1219,12 @@ impl Agent {
                     })
                 }
                 Err(e) => {
+                    tracing::error!(
+                        thread_id = %thread_id,
+                        user_id = %message.user_id,
+                        "Turn failed after approval/deferred path: {}",
+                        e
+                    );
                     thread.fail_turn(e.to_string());
                     // User message already persisted at turn start
                     Ok(SubmissionResult::error(e.to_string()))

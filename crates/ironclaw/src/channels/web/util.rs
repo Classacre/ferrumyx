@@ -34,6 +34,7 @@ pub fn build_turns_from_db_messages(
                 turn_number,
                 user_input: msg.content.clone(),
                 response: None,
+                error: None,
                 state: "Completed".to_string(),
                 started_at: msg.created_at.to_rfc3339(),
                 completed_at: None,
@@ -79,6 +80,7 @@ pub fn build_turns_from_db_messages(
             // Incomplete turn (user message without response)
             if turn.response.is_none() {
                 turn.state = "Failed".to_string();
+                turn.error = Some("No assistant response recorded".to_string());
             }
 
             turns.push(turn);
@@ -90,6 +92,7 @@ pub fn build_turns_from_db_messages(
                 turn_number,
                 user_input: String::new(),
                 response: Some(msg.content.clone()),
+                error: None,
                 state: "Completed".to_string(),
                 started_at: msg.created_at.to_rfc3339(),
                 completed_at: Some(msg.created_at.to_rfc3339()),
