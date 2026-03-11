@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn test_chembl_client_new() {
         let client = ChemblClient::new();
-        assert!(client.client.get("https://example.com").unwrap().build().is_ok());
+        assert!(client.client.get("https://example.com").build().is_ok());
     }
 
     #[test]

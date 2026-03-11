@@ -35,6 +35,7 @@ struct IngestionRuntimeDefaults {
     max_runtime_secs: u64,
     pubmed_api_key: Option<String>,
     semantic_scholar_api_key: Option<String>,
+    unpaywall_email: Option<String>,
     enable_embeddings: bool,
     embedding_cfg: Option<IngestionEmbeddingConfig>,
 }
@@ -51,6 +52,9 @@ impl Default for IngestionRuntimeDefaults {
             semantic_scholar_api_key: std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY")
                 .ok()
                 .or_else(|| std::env::var("SEMANTIC_SCHOLAR_API_KEY").ok())
+                .filter(|v| !v.trim().is_empty()),
+            unpaywall_email: std::env::var("FERRUMYX_UNPAYWALL_EMAIL")
+                .ok()
                 .filter(|v| !v.trim().is_empty()),
             enable_embeddings: std::env::var("FERRUMYX_INGESTION_ENABLE_EMBEDDINGS")
                 .ok()
@@ -143,6 +147,12 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
                 &["ingestion", "semanticscholar", "api_key"],
                 &["ingestion", "semanticscholar", "api_key_secret"],
             ],
+        );
+    }
+    if defaults.unpaywall_email.is_none() {
+        defaults.unpaywall_email = first_nonempty_toml_string(
+            &root,
+            &[&["ingestion", "unpaywall", "email"]],
         );
     }
     defaults.enable_embeddings = toml_bool(
@@ -309,12 +319,14 @@ impl Tool for IngestionTool {
                 IngestionSourceSpec::PubMed,
                 IngestionSourceSpec::EuropePmc,
                 IngestionSourceSpec::SemanticScholar,
+                IngestionSourceSpec::Arxiv,
                 IngestionSourceSpec::BioRxiv,
                 IngestionSourceSpec::MedRxiv,
                 IngestionSourceSpec::ClinicalTrials,
             ],
             pubmed_api_key: defaults.pubmed_api_key,
             semantic_scholar_api_key: defaults.semantic_scholar_api_key,
+            unpaywall_email: defaults.unpaywall_email,
             embedding_cfg: defaults.embedding_cfg.clone(),
             enable_scihub_fallback: false,
         };

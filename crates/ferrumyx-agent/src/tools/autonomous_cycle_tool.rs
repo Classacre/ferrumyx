@@ -81,6 +81,24 @@ fn resolve_semantic_scholar_api_key() -> Option<String> {
         .map(ToString::to_string)
 }
 
+fn resolve_unpaywall_email() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_UNPAYWALL_EMAIL") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let content = fs::read_to_string(config_path()).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("unpaywall"))
+        .and_then(|v| v.get("email"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
 fn toml_string(root: &toml::Value, path: &[&str]) -> Option<String> {
     let mut cur = root;
     for p in path {
@@ -255,6 +273,7 @@ impl Tool for AutonomousCycleTool {
         let ranker = TargetQueryEngine::new(self.db.clone());
         let pubmed_api_key = resolve_pubmed_api_key();
         let semantic_scholar_api_key = resolve_semantic_scholar_api_key();
+        let unpaywall_email = resolve_unpaywall_email();
         let embedding_cfg = resolve_default_embedding_cfg();
 
         let mut cycles = Vec::new();
@@ -271,12 +290,14 @@ impl Tool for AutonomousCycleTool {
                         IngestionSourceSpec::PubMed,
                         IngestionSourceSpec::EuropePmc,
                         IngestionSourceSpec::SemanticScholar,
+                        IngestionSourceSpec::Arxiv,
                         IngestionSourceSpec::BioRxiv,
                         IngestionSourceSpec::MedRxiv,
                         IngestionSourceSpec::ClinicalTrials,
                     ],
                     pubmed_api_key: pubmed_api_key.clone(),
                     semantic_scholar_api_key: semantic_scholar_api_key.clone(),
+                    unpaywall_email: unpaywall_email.clone(),
                     embedding_cfg: embedding_cfg.clone(),
                     enable_scihub_fallback: false,
                 },

@@ -34,6 +34,7 @@ pub struct IngestionForm {
     pub src_europepmc: Option<String>,
     pub src_biorxiv: Option<String>,
     pub src_medrxiv: Option<String>,
+    pub src_arxiv: Option<String>,
     pub src_clinicaltrials: Option<String>,
     pub src_crossref: Option<String>,
     pub src_semanticscholar: Option<String>,
@@ -61,6 +62,7 @@ pub async fn ingestion_run(
     if form.src_europepmc.is_some() { sources.push(IngestionSourceSpec::EuropePmc); }
     if form.src_biorxiv.is_some() { sources.push(IngestionSourceSpec::BioRxiv); }
     if form.src_medrxiv.is_some() { sources.push(IngestionSourceSpec::MedRxiv); }
+    if form.src_arxiv.is_some() { sources.push(IngestionSourceSpec::Arxiv); }
     if form.src_clinicaltrials.is_some() { sources.push(IngestionSourceSpec::ClinicalTrials); }
     if form.src_crossref.is_some() { sources.push(IngestionSourceSpec::CrossRef); }
     if form.src_semanticscholar.is_some() { sources.push(IngestionSourceSpec::SemanticScholar); }
@@ -75,6 +77,7 @@ pub async fn ingestion_run(
         sources,
         pubmed_api_key: resolve_pubmed_api_key(),
         semantic_scholar_api_key: resolve_semantic_scholar_api_key(),
+        unpaywall_email: resolve_unpaywall_email(),
         embedding_cfg:  resolve_embedding_cfg_for_form(&form),
         enable_scihub_fallback: form.enable_scihub.is_some() && form.enable_scihub.as_deref() == Some("on"),
     };
@@ -202,6 +205,27 @@ fn resolve_semantic_scholar_api_key() -> Option<String> {
     root.get("ingestion")
         .and_then(|v| v.get("semanticscholar"))
         .and_then(|v| v.get("api_key").or_else(|| v.get("api_key_secret")))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn resolve_unpaywall_email() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_UNPAYWALL_EMAIL") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let path = std::env::var("FERRUMYX_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("ferrumyx.toml"));
+    let content = std::fs::read_to_string(path).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    root.get("ingestion")
+        .and_then(|v| v.get("unpaywall"))
+        .and_then(|v| v.get("email"))
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -359,6 +383,7 @@ fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
             "europepmc"      => Some(IngestionSourceSpec::EuropePmc),
             "biorxiv"        => Some(IngestionSourceSpec::BioRxiv),
             "medrxiv"        => Some(IngestionSourceSpec::MedRxiv),
+            "arxiv"          => Some(IngestionSourceSpec::Arxiv),
             "clinicaltrials" => Some(IngestionSourceSpec::ClinicalTrials),
             "crossref"       => Some(IngestionSourceSpec::CrossRef),
             "semanticscholar"=> Some(IngestionSourceSpec::SemanticScholar),
@@ -578,6 +603,9 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                         </label>
                         <label class="source-chip">
                             <input type="checkbox" name="src_medrxiv" id="src_medrxiv"> <span style="font-weight:500">medRxiv</span>
+                        </label>
+                        <label class="source-chip">
+                            <input type="checkbox" name="src_arxiv" id="src_arxiv"> <span style="font-weight:500">arXiv</span>
                         </label>
                         <label class="source-chip">
                             <input type="checkbox" name="src_clinicaltrials" id="src_clinicaltrials"> <span style="font-weight:500">ClinicalTrials</span>

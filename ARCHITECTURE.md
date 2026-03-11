@@ -572,6 +572,23 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 
 ---
 
+## 1.9 Phase 1 Implementation Audit (2026-03-11)
+
+Reality check against current codebase (`crates/ferrumyx-*` + vendored `ironclaw`):
+
+- [x] Workspace/crate topology matches Phase 1 modular design (`ferrumyx-agent`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-ranker`, `ferrumyx-web`, `ironclaw`).
+- [x] LanceDB core tables are present and initialized (`papers`, `chunks`, `entities`, `entity_mentions`, `kg_facts`, `kg_conflicts`, `target_scores`, `ingestion_audit`).
+- [x] Target score history semantics are implemented (`score_version`, `is_current`) with backward-compatible handling for legacy tables.
+- [x] IronClaw extension model is in active use (custom Ferrumyx tools are registered into IronClaw tool registry; no fork-only orchestration path).
+- [x] Web gateway + live event streaming are implemented (`/api/events` SSE), including chat-thread endpoints and history-backed async chat UX.
+- [x] Secrets/security primitives are available through IronClaw (`SecretsStore`, crypto/keychain-backed paths, sandbox/WASM runtime support).
+- [~] Earlier text in this document labels most connectors as “WASM tools”; current runtime implementation is predominantly native Rust modules exposed through Ferrumyx/IronClaw handlers.
+
+Added capabilities now present in code:
+- Settings-driven provider/env sync into IronClaw runtime (OpenAI/Anthropic/Gemini/OpenAI-compatible/Ollama).
+- OpenAI-compatible cached-chat toggle persisted in settings and synced to runtime env.
+- Secure key save behavior in web settings (keys are not returned to browser after save).
+
 # Phase 2: Literature Ingestion
 
 ## 2.1 Source Evaluation
@@ -783,7 +800,7 @@ score = jaro_winkler(query_title, result_title)
 Threshold: score >= 0.92 to accept
 ```
 
-**Unpaywall integration** is a WASM tool calling `https://api.unpaywall.org/v2/{doi}?email=...`; the `best_oa_location.url_for_pdf` field, when non-null, feeds directly into the full-text retrieval pipeline. No authentication required; polite usage enforced by IronClaw rate-limiter (3 req/sec).
+**Unpaywall integration** is now implemented as a native Rust connector targeting `https://api.unpaywall.org/v2/{doi}?email=...`; `best_oa_location.url_for_pdf` is used as an OA full-text retrieval tier when configured with contact email.
 
 ---
 
@@ -1336,6 +1353,30 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 | PMC XML parser | **Build** (Rust, `quick-xml`) | Ferrumyx-specific section mapping |
 
 ---
+
+## 2.12 Phase 2 Implementation Audit (2026-03-11)
+
+Implemented in production code:
+
+- [x] Multi-source ingestion orchestrator (`run_ingestion`) with source fan-out and stage progress events.
+- [x] Source clients: PubMed, Europe PMC, bioRxiv, medRxiv, ClinicalTrials.gov, CrossRef, Semantic Scholar (core Graph API search + metadata + OA PDF URL resolution).
+- [x] Optional Sci-Hub fallback client and pipeline path (`enable_scihub_fallback`).
+- [x] Deduplication at ingestion with DOI/PMID checks and repository-level guardrails; SimHash utilities exist (`dedup.rs`) and schema support exists (`papers.abstract_simhash`).
+- [x] Ferrules/lopdf-based PDF parsing integrated in pipeline (`parse_pdf_sections`).
+- [x] Section-aware chunking + optional embedding pass with pluggable backends (Rust-native BiomedBERT, OpenAI, Gemini, OpenAI-compatible, Ollama).
+- [x] Ingestion watchdog controls (idle timeout + max runtime) and settings exposure.
+- [x] Ingestion API key settings include PubMed + Semantic Scholar and are wired to agent + web ingestion paths.
+
+Partially implemented / pending:
+
+- [x] PMC XML strategy is active (PubMed/EuropePMC XML fetch hooks + section-aware parsing path using `quick-xml`, preferred before PDF fallback when PMCID is available).
+- [~] SimHash/fuzzy-title dedup hardening is not fully enforced end-to-end in repository writes (current upsert path relies primarily on DOI/PMID duplicate checks).
+- [x] arXiv ingestion source client is implemented (Atom API search + metadata mapping + PDF URL derivation).
+- [x] Unpaywall integration is implemented (DOI lookup tier with configured contact email).
+- [ ] Semantic Scholar citation-graph traversal and SPECTER2 embedding endpoint integration remain pending.
+
+Implementation note:
+- Several Phase 2 tables describe connectors as “WASM tools.” Current Ferrumyx implementation runs these connectors as native Rust modules in the ingestion crate and exposes them through Ferrumyx/IronClaw tools and web handlers.
 
 # Phase 3: Knowledge Graph & Target Intelligence
 
@@ -2368,13 +2409,13 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | PubMed E-utilities client | Implemented | Rust | WASM | Open | esearch + efetch; API key optional |
 | Europe PMC client | Implemented | Rust | WASM | Open | fullTextXML for OA papers |
 | bioRxiv/medRxiv client | Implemented | Rust | WASM | Open | PDF metadata only |
-| arXiv client | Planned | Rust | WASM | Open | Atom XML; quick-xml |
+| arXiv client | Implemented | Rust | Native | Open | Atom XML; quick-xml |
 | ClinicalTrials.gov v2 client | Implemented | Rust | WASM | Open | REST JSON |
 | CrossRef client | Implemented | Rust | WASM | Open | DOI resolution |
 | Semantic Scholar client | Implemented (core) | Rust | Native | Open | Graph API search + metadata + OA URL; SPECTER2 embeddings pending |
-| Unpaywall client | Planned | Rust | WASM | Open | OA detection |
+| Unpaywall client | Implemented | Rust | Native | Open | DOI OA lookup + PDF URL resolution |
 | Sci-Hub client | Implemented | Rust | Native | Open | (Optional) Fallback scraper |
-| PMC XML parser | Planned | Rust | Native | Open | quick-xml; section-aware |
+| PMC XML parser | Implemented (core) | Rust | Native | Open | quick-xml section extraction integrated in ingestion pipeline |
 | Ferrules PDF parser | Implemented | Rust | Native | Open | lopdf-based text extraction |
 | BiomedBERT / PubMedBERT | Implemented | Rust | Native | Apache 2.0 | Candle; 768-dim embeddings (ferrumyx-ingestion) |
 | TrieNer | Implemented | Rust | Native | MIT | Fast AC-based matching (HGNC + OncoTree) |

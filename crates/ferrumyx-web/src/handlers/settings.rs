@@ -58,6 +58,7 @@ async function loadSettings() {
   byId('ingestion_idle_timeout_secs').value = data.ingestion_idle_timeout_secs;
   byId('ingestion_max_runtime_secs').value = data.ingestion_max_runtime_secs;
   byId('ingestion_enable_embeddings').checked = data.ingestion_enable_embeddings;
+  byId('unpaywall_email').value = data.unpaywall_email;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -102,6 +103,7 @@ async function saveSettings() {
     ingestion_idle_timeout_secs: Number(byId('ingestion_idle_timeout_secs').value || 600),
     ingestion_max_runtime_secs: Number(byId('ingestion_max_runtime_secs').value || 14400),
     ingestion_enable_embeddings: byId('ingestion_enable_embeddings').checked,
+    unpaywall_email: byId('unpaywall_email').value,
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
@@ -243,6 +245,11 @@ __NAV__
             <input id="semanticscholar_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
             <div class="help-text">Used by Semantic Scholar Graph API source for higher throughput and quota.</div>
           </div>
+          <div class="form-group">
+            <label for="unpaywall_email">Unpaywall Contact Email</label>
+            <input id="unpaywall_email" class="form-control" placeholder="you@domain.com" />
+            <div class="help-text">Optional but recommended. Enables Unpaywall DOI->PDF OA resolution tier.</div>
+          </div>
         </div>
         <h4 class="settings-section-title" style="margin-top:1rem;">Ingestion Runtime Policy</h4>
         <div class="form-grid">
@@ -325,6 +332,7 @@ pub struct SettingsView {
     ingestion_idle_timeout_secs: u64,
     ingestion_max_runtime_secs: u64,
     ingestion_enable_embeddings: bool,
+    unpaywall_email: String,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
@@ -368,6 +376,7 @@ pub struct SettingsSaveRequest {
     ingestion_idle_timeout_secs: u64,
     ingestion_max_runtime_secs: u64,
     ingestion_enable_embeddings: bool,
+    unpaywall_email: String,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
@@ -543,6 +552,14 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
         ingestion_idle_timeout_secs: int_at(&root, &["ingestion", "watchdog", "idle_timeout_secs"], 600),
         ingestion_max_runtime_secs: int_at(&root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400),
         ingestion_enable_embeddings: bool_at(&root, &["ingestion", "enable_embeddings"], false),
+        unpaywall_email: {
+            let toml_value = str_at(&root, &["ingestion", "unpaywall", "email"], "");
+            if toml_value.trim().is_empty() {
+                std::env::var("FERRUMYX_UNPAYWALL_EMAIL").unwrap_or_default()
+            } else {
+                toml_value
+            }
+        },
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"]) || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"]) || std::env::var("FERRUMYX_ANTHROPIC_API_KEY").is_ok(),
         has_gemini_key: has_nonempty(&root, &["llm", "gemini", "api_key"]) || std::env::var("FERRUMYX_GEMINI_API_KEY").is_ok(),
@@ -623,6 +640,8 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     let pubmed = nested_table_mut(ingestion, "pubmed");
     maybe_set_secret(pubmed, "api_key", &payload.pubmed_api_key);
     maybe_set_secret(pubmed, "api_key_secret", &payload.pubmed_api_key);
+    let unpaywall = nested_table_mut(ingestion, "unpaywall");
+    set_str(unpaywall, "email", payload.unpaywall_email.trim().to_string());
     let semanticscholar = nested_table_mut(ingestion, "semanticscholar");
     maybe_set_secret(semanticscholar, "api_key", &payload.semanticscholar_api_key);
     maybe_set_secret(semanticscholar, "api_key_secret", &payload.semanticscholar_api_key);
@@ -718,6 +737,10 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
     if !pubmed_key.is_empty() {
         std::env::set_var("FERRUMYX_PUBMED_API_KEY", &pubmed_key);
+    }
+    let unpaywall_email = str_at(root, &["ingestion", "unpaywall", "email"], "");
+    if !unpaywall_email.is_empty() {
+        std::env::set_var("FERRUMYX_UNPAYWALL_EMAIL", &unpaywall_email);
     }
 
     let semanticscholar_key = {

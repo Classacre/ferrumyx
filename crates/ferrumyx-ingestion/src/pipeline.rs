@@ -26,8 +26,10 @@ use tempfile::NamedTempFile;
 use crate::sources::pubmed::PubMedClient;
 use crate::sources::europepmc::EuropePmcClient;
 use crate::sources::biorxiv::BioRxivClient;
+use crate::sources::arxiv::ArxivClient;
 use crate::sources::clinicaltrials::ClinicalTrialsClient;
 use crate::sources::crossref::CrossRefClient;
+use crate::sources::unpaywall::UnpaywallClient;
 use crate::sources::semanticscholar::SemanticScholarClient;
 use crate::sources::LiteratureSource;
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
@@ -54,6 +56,8 @@ pub struct IngestionJob {
     pub pubmed_api_key: Option<String>,
     /// Optional Semantic Scholar API key for higher throughput/quotas.
     pub semantic_scholar_api_key: Option<String>,
+    /// Optional Unpaywall contact email used for DOI OA resolution.
+    pub unpaywall_email: Option<String>,
     /// If provided, chunks are embedded immediately after insert.
     /// If None, a separate embed pass is needed (e.g. scheduled background job).
     pub embedding_cfg: Option<EmbeddingConfig>,
@@ -70,6 +74,7 @@ pub enum IngestionSourceSpec {
     EuropePmc,
     BioRxiv,
     MedRxiv,
+    Arxiv,
     ClinicalTrials,
     CrossRef,
     SemanticScholar,
@@ -87,11 +92,13 @@ impl Default for IngestionJob {
                 IngestionSourceSpec::EuropePmc,
                 IngestionSourceSpec::BioRxiv,
                 IngestionSourceSpec::MedRxiv,
+                IngestionSourceSpec::Arxiv,
                 IngestionSourceSpec::ClinicalTrials,
                 IngestionSourceSpec::CrossRef,
             ],
             pubmed_api_key: None,
             semantic_scholar_api_key: None,
+            unpaywall_email: None,
             embedding_cfg: None,
             enable_scihub_fallback: false,
         }
@@ -248,6 +255,10 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                 let client = BioRxivClient::new_medrxiv();
                 client.search(&query, job.max_results).await
             }
+            IngestionSourceSpec::Arxiv => {
+                let client = ArxivClient::new();
+                client.search(&query, job.max_results).await
+            }
             IngestionSourceSpec::ClinicalTrials => {
                 let client = ClinicalTrialsClient::new();
                 client.search(&query, job.max_results).await
@@ -328,31 +339,71 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
         // Build sections from abstract (always available)
         let mut sections = build_sections_from_abstract(&paper);
         
-        // ── 3. Fetch full-text PDF if available ───────────────────────────────
-        let mut pdf_sections = Vec::new();
+        // ── 3. Fetch full-text (PMC XML preferred, then PDF tiers) ───────────
+        let mut full_text_sections = Vec::new();
 
         // Strategy 1: Explicit open-access URL
         if let Some(ref pdf_url) = paper.full_text_url {
             info!(paper_id = %upsert.paper_id, url = %pdf_url, "Attempting explicit full-text URL");
             if let Ok(sections) = fetch_and_parse_pdf(pdf_url).await {
-                pdf_sections = sections;
+                full_text_sections = sections;
             }
         }
 
-        // Strategy 2: PMC Direct API if PMCID is known
-        if pdf_sections.is_empty() {
+        // Strategy 2: PMC XML (preferred when PMCID is known)
+        if full_text_sections.is_empty() {
+            if let Some(ref pmcid) = paper.pmcid {
+                let clean_pmcid = if pmcid.starts_with("PMC") {
+                    pmcid.clone()
+                } else {
+                    format!("PMC{}", pmcid)
+                };
+                let epmc = EuropePmcClient::new();
+                if let Ok(Some(xml)) = epmc.fetch_full_text(&clean_pmcid).await {
+                    let sections = parse_pmc_xml_sections(&xml);
+                    if !sections.is_empty() {
+                        info!(
+                            paper_id = %upsert.paper_id,
+                            pmcid = %clean_pmcid,
+                            n_sections = sections.len(),
+                            "Parsed PMC XML full-text"
+                        );
+                        full_text_sections = sections;
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: PMC direct PDF if XML path did not produce sections
+        if full_text_sections.is_empty() {
             if let Some(ref pmcid) = paper.pmcid {
                 let clean_pmcid = if pmcid.starts_with("PMC") { pmcid.clone() } else { format!("PMC{}", pmcid) };
                 let epmc_url = format!("https://europepmc.org/backend/ptpmcrender.fcgi?accid={}&blobtype=pdf", clean_pmcid);
                 info!(paper_id = %upsert.paper_id, url = %epmc_url, "Attempting EuropePMC direct PDF");
                 if let Ok(sections) = fetch_and_parse_pdf(&epmc_url).await {
-                    pdf_sections = sections;
+                    full_text_sections = sections;
                 }
             }
         }
 
-        // Strategy 3: Sci-Hub Fallback
-        if pdf_sections.is_empty() && job.enable_scihub_fallback {
+        // Strategy 4: Unpaywall DOI resolution (if email configured)
+        if full_text_sections.is_empty() {
+            if let (Some(doi), Some(email)) = (paper.doi.as_deref(), job.unpaywall_email.as_deref()) {
+                let email = email.trim();
+                if !email.is_empty() {
+                    let unpaywall = UnpaywallClient::new(email);
+                    if let Ok(Some(pdf_url)) = unpaywall.resolve_pdf_url(doi).await {
+                        info!(paper_id = %upsert.paper_id, doi = %doi, "Attempting Unpaywall-resolved PDF");
+                        if let Ok(sections) = fetch_and_parse_pdf(&pdf_url).await {
+                            full_text_sections = sections;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Strategy 5: Sci-Hub fallback
+        if full_text_sections.is_empty() && job.enable_scihub_fallback {
             let identifier = paper.doi.as_ref().or(paper.pmid.as_ref());
             if let Some(id) = identifier {
                 info!(paper_id = %upsert.paper_id, id = %id, "Attempting Sci-Hub fallback");
@@ -360,19 +411,19 @@ let prog_base = IngestionProgress::new(job_id, "search", "");
                 if let Ok(Some(pdf_bytes)) = scihub.download_pdf(id).await {
                     info!(paper_id = %upsert.paper_id, "Sci-Hub fallback attempted successfully");
                     if let Ok(sections) = parse_pdf_bytes(&pdf_bytes).await {
-                        pdf_sections = sections;
+                        full_text_sections = sections;
                     }
                 }
             }
         }
 
-        if !pdf_sections.is_empty() {
+        if !full_text_sections.is_empty() {
             info!(
                 paper_id = %upsert.paper_id,
-                n_sections = pdf_sections.len(),
-                "Full-text PDF parsed successfully"
+                n_sections = full_text_sections.len(),
+                "Full-text parsed successfully"
             );
-            sections.extend(pdf_sections);
+            sections.extend(full_text_sections);
             // Mark as full-text available
             let _ = repo.set_full_text_status(upsert.paper_id, true).await;
         } else {
@@ -713,6 +764,105 @@ async fn parse_pdf_bytes(pdf_bytes: &[u8]) -> anyhow::Result<Vec<DocumentSection
     Ok(parsed.sections)
 }
 
+fn parse_pmc_xml_sections(xml: &str) -> Vec<DocumentSection> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut sections = Vec::new();
+    let mut in_abstract = false;
+    let mut in_sec = false;
+    let mut in_title = false;
+    let mut in_p = false;
+    let mut sec_heading: Option<String> = None;
+    let mut sec_text = String::new();
+    let mut abstract_text = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => match e.local_name().as_ref() {
+                b"abstract" => in_abstract = true,
+                b"sec" => {
+                    in_sec = true;
+                    sec_heading = None;
+                    sec_text.clear();
+                }
+                b"title" => in_title = true,
+                b"p" => in_p = true,
+                _ => {}
+            },
+            Ok(Event::Text(t)) => {
+                let text = t.unescape().map(|v| v.to_string()).unwrap_or_default();
+                let text = text.trim();
+                if text.is_empty() {
+                    buf.clear();
+                    continue;
+                }
+                if in_abstract && in_p {
+                    if !abstract_text.is_empty() {
+                        abstract_text.push(' ');
+                    }
+                    abstract_text.push_str(text);
+                } else if in_sec && in_title {
+                    if sec_heading.is_none() {
+                        sec_heading = Some(text.to_string());
+                    }
+                } else if in_sec && in_p {
+                    if !sec_text.is_empty() {
+                        sec_text.push(' ');
+                    }
+                    sec_text.push_str(text);
+                }
+            }
+            Ok(Event::End(e)) => match e.local_name().as_ref() {
+                b"title" => in_title = false,
+                b"p" => in_p = false,
+                b"abstract" => in_abstract = false,
+                b"sec" => {
+                    in_sec = false;
+                    if !sec_text.trim().is_empty() {
+                        let heading = sec_heading.clone();
+                        let section_type = heading
+                            .as_deref()
+                            .map(SectionType::from_heading)
+                            .unwrap_or(SectionType::Other);
+                        sections.push(DocumentSection {
+                            section_type,
+                            heading,
+                            text: sec_text.trim().to_string(),
+                            page_number: None,
+                        });
+                    }
+                    sec_heading = None;
+                    sec_text.clear();
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if !abstract_text.trim().is_empty() {
+        sections.insert(
+            0,
+            DocumentSection {
+                section_type: SectionType::Abstract,
+                heading: Some("Abstract".to_string()),
+                text: abstract_text.trim().to_string(),
+                page_number: None,
+            },
+        );
+    }
+
+    sections
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -761,5 +911,14 @@ mod tests {
         let sections = build_sections_from_abstract(&paper);
         assert!(sections.iter().any(|s| s.section_type == SectionType::Abstract));
         assert!(sections.iter().any(|s| s.heading.as_deref() == Some("Title")));
+    }
+
+    #[test]
+    fn test_parse_pmc_xml_sections() {
+        let xml = r#"<article><front><abstract><p>Abstract body text.</p></abstract></front><body><sec><title>Methods</title><p>Method A.</p><p>Method B.</p></sec><sec><title>Results</title><p>Result text.</p></sec></body></article>"#;
+        let sections = parse_pmc_xml_sections(xml);
+        assert!(sections.iter().any(|s| s.section_type == SectionType::Abstract));
+        assert!(sections.iter().any(|s| s.heading.as_deref() == Some("Methods")));
+        assert!(sections.iter().any(|s| s.heading.as_deref() == Some("Results")));
     }
 }

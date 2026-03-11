@@ -3,8 +3,10 @@
 pub mod pubmed;
 pub mod europepmc;
 pub mod biorxiv;
+pub mod arxiv;
 pub mod clinicaltrials;
 pub mod crossref;
+pub mod unpaywall;
 pub mod depmap;
 pub mod depmap_cache;
 pub mod cosmic;
@@ -20,12 +22,14 @@ use crate::models::PaperMetadata;
 // Re-export types for convenience
 pub use depmap::{DepMapClient, GeneDependency};
 pub use depmap_cache::DepMapCache;
+pub use arxiv::ArxivClient;
 pub use cosmic::{CosmicClient, MutationRecord, MutationType};
 pub use chembl::{ChemblClient, CompoundRecord, TargetRecord, ActivityRecord};
 pub use tcga::TcgaClient;
 pub use gtex::GtexClient;
 pub use scihub::SciHubClient;
 pub use semanticscholar::SemanticScholarClient;
+pub use unpaywall::UnpaywallClient;
 
 /// Common interface for all literature source clients.
 #[async_trait]
