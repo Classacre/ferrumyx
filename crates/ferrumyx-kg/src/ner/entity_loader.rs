@@ -1,8 +1,6 @@
 //! Unified biomedical entity database loader.
 
-use anyhow::{Context, Result};
-use std::collections::HashMap;
-use std::path::PathBuf;
+use anyhow::Result;
 use tracing::{info, warn};
 
 pub struct BiomedicalDatabase {

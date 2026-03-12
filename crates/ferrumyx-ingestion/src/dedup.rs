@@ -237,7 +237,7 @@ mod tests {
         ];
 
         for text in &texts {
-            let hash = simhash(text);
+            let _hash = simhash(text);
             // Verify it's within valid i64 range (should never fail if clamp works)
         }
     }

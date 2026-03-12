@@ -16,14 +16,11 @@
 //!   - probability: Probability gene is a dependency
 
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
 use super::LiteratureSource;
 use crate::models::PaperMetadata;
-
-const DEPMAP_API_URL: &str = "https://depmap.org/portal/api";
 
 /// Gene dependency record from DepMap CRISPR data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,21 +35,16 @@ pub struct GeneDependency {
 
 /// DepMap client for fetching CRISPR dependency data.
 pub struct DepMapClient {
-    client: Client,
     api_key: Option<String>,
 }
 
 impl DepMapClient {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-            api_key: None,
-        }
+        Self { api_key: None }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
         Self {
-            client: Client::new(),
             api_key: Some(api_key.into()),
         }
     }
@@ -81,6 +73,7 @@ impl DepMapClient {
             gene = gene_symbol,
             cancer_type = cancer_type,
             threshold = score_threshold,
+            has_api_key = self.api_key.as_ref().is_some_and(|k| !k.is_empty()),
             "Fetching DepMap dependencies"
         );
 

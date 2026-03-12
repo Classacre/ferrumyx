@@ -1,10 +1,8 @@
 //! PDB and AlphaFold structure fetching.
 
 use anyhow::Result;
-use async_trait::async_trait;
 use reqwest::Client;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use tokio::fs;
 use tracing::{debug, info};
 

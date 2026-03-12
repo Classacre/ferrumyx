@@ -2,13 +2,11 @@
 
 use anyhow::Result;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::admet::AdmetPredictor;
-use crate::docking::{DockingConfig, VinaRunner};
-use crate::ligand::{LigandGenerator, Molecule};
+use crate::ligand::LigandGenerator;
 use crate::pdb::StructureFetcher;
-use crate::pocket::FPocketRunner;
 use crate::scoring::{MoleculeScorer, ScoredMolecule};
 
 pub struct MoleculesPipeline {
@@ -26,7 +24,7 @@ impl MoleculesPipeline {
         info!("Running molecules pipeline for target {}", uniprot_id);
 
         let fetcher = StructureFetcher::new(&self.cache_dir);
-        let pdb_path = match fetcher.fetch_alphafold(uniprot_id).await {
+        let _pdb_path = match fetcher.fetch_alphafold(uniprot_id).await {
             Ok(p) => p,
             Err(e) => {
                 warn!(

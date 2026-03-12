@@ -2,7 +2,6 @@
 
 use crate::admet::AdmetProperties;
 use crate::ligand::Molecule;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// A scored molecule with its docking and ADMET results.

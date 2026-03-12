@@ -1,10 +1,5 @@
 //! Entity aggregation for knowledge graph construction.
 
-use anyhow::Result;
-use std::collections::HashMap;
-use tracing::info;
-use uuid::Uuid;
-
 pub struct EntityAggregator;
 
 impl EntityAggregator {

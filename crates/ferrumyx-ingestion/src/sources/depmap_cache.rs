@@ -40,8 +40,6 @@ pub struct DepMapCache {
     cancer_cell_lines: HashMap<String, Vec<String>>,
     /// When the cache was loaded
     loaded_at: DateTime<Utc>,
-    /// Source file paths
-    source_files: Vec<PathBuf>,
 }
 
 impl DepMapCache {
@@ -108,7 +106,6 @@ impl DepMapCache {
             cell_line_cancers,
             cancer_cell_lines,
             loaded_at: Utc::now(),
-            source_files: vec![gene_effect_file, model_file],
         })
     }
 
@@ -350,8 +347,6 @@ fn load_gene_effect_csv(path: &Path) -> Result<HashMap<String, HashMap<String, f
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_parse_gene_symbol() {
         let gene_col = "KRAS (3845)";

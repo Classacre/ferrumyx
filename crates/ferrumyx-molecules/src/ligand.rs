@@ -1,7 +1,6 @@
 //! Ligand generation and retrieval.
 
 use anyhow::Result;
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -53,21 +52,6 @@ pub struct LigandGenerator {
 }
 
 #[derive(Deserialize)]
-struct ChemblTargetResponse {
-    target_components: Vec<ChemblTargetComponent>,
-}
-
-#[derive(Deserialize)]
-struct ChemblTargetComponent {
-    targets: Vec<ChemblTargetData>,
-}
-
-#[derive(Deserialize)]
-struct ChemblTargetData {
-    target_chembl_id: String,
-}
-
-#[derive(Deserialize)]
 struct ChemblMechanismResponse {
     mechanisms: Vec<ChemblMechanism>,
 }
@@ -100,7 +84,6 @@ struct ChemblMoleculeStructures {
 struct ChemblMoleculeProperties {
     full_mwt: Option<String>,
     alogp: Option<String>,
-    num_ro5_violations: Option<u32>,
     psa: Option<String>,
 }
 

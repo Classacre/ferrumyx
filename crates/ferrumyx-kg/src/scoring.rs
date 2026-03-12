@@ -174,8 +174,6 @@ fn is_gene_like(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_score_bounds() {
         // Verify scores are bounded [0, 1]

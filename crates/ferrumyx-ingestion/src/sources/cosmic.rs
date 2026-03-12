@@ -19,14 +19,11 @@
 //!   - frequency: Mutation frequency in cancer type
 
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
 use super::LiteratureSource;
 use crate::models::PaperMetadata;
-
-const COSMIC_API_URL: &str = "https://cancer.sanger.ac.uk/cosmic/api";
 
 /// Mutation record from COSMIC database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,21 +85,16 @@ impl MutationType {
 
 /// COSMIC client for fetching mutation data.
 pub struct CosmicClient {
-    client: Client,
     api_key: Option<String>,
 }
 
 impl CosmicClient {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-            api_key: None,
-        }
+        Self { api_key: None }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
         Self {
-            client: Client::new(),
             api_key: Some(api_key.into()),
         }
     }
@@ -122,6 +114,7 @@ impl CosmicClient {
         debug!(
             gene = gene_symbol,
             cancer_type = cancer_type,
+            has_api_key = self.api_key.as_ref().is_some_and(|k| !k.is_empty()),
             "Fetching COSMIC mutations"
         );
 

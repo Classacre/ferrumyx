@@ -17,7 +17,6 @@ enum ConfidenceClass {
 #[derive(Clone, Debug)]
 struct PatternMeta {
     pub entity_type: EntityType,
-    pub text: String,
     pub class: ConfidenceClass,
     pub requires_word_boundary: bool,
 }
@@ -65,7 +64,6 @@ impl TrieNer {
             patterns.push(sym.clone());
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::Gene,
-                text: sym,
                 class: ConfidenceClass::Gene(tier),
                 requires_word_boundary: req_word_bound,
             });
@@ -78,7 +76,6 @@ impl TrieNer {
             patterns.push(name.clone());
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::CancerType,
-                text: name,
                 class: ConfidenceClass::Cancer(kind),
                 requires_word_boundary: kind == CancerPatternKind::Code || len <= 4,
             });
@@ -87,10 +84,9 @@ impl TrieNer {
         // 3. Mutations
         let mutations = HgvsMutationNormaliser::new();
         for mut_p in mutations.all_patterns() {
-            patterns.push(mut_p.clone());
+            patterns.push(mut_p);
             pattern_info.push(PatternMeta {
                 entity_type: EntityType::Mutation,
-                text: mut_p.clone(),
                 class: ConfidenceClass::Mutation,
                 requires_word_boundary: true,
             });
