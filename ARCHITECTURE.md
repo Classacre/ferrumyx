@@ -4,8 +4,8 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in progress)  
-**Date:** 2026-03-11
+**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening and performance optimization in progress)  
+**Date:** 2026-03-12
 
 ---
 
@@ -25,6 +25,18 @@
 8. [Phase 8: Security & LLM Strategy](#phase-8-security--llm-strategy)
 9. [Phase 9: Roadmap](#phase-9-roadmap)
 10. [Deliverables](#deliverables)
+
+---
+
+## Current Implementation Snapshot (2026-03-12)
+
+- Phase 1-3 functionality is operational end-to-end with IronClaw as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
+- Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
+- Settings are tab-organized and now drive secure API configuration for active providers (Ollama, OpenAI, Anthropic, Gemini, OpenAI-compatible), including cached-chat toggle support for compatible providers.
+- Ingestion performance hardening is active: source caching, negative full-text cache, chunk fingerprint cache, DOI/PMID batch prefetch dedupe, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
+- Metrics include live ingestion performance telemetry (`/api/metrics/perf`) and persisted snapshots for run-to-run benchmarking.
+- KG/query surfaces now use bounded/aggregated paths to avoid large table scans and keep UI/API latency stable under larger corpora.
+- Sci-Hub support is multi-domain and settings-driven (domain list + timeout), aligned to currently active mirrors.
 
 ---
 
@@ -488,7 +500,7 @@ In Phase 3, we transitioned from a scaffolded LLM backend to leveraging **Ollama
 ```mermaid
 flowchart TD
     classDef stage fill:#1e1e24,stroke:#81c784,stroke-width:2px
-    classDef human fill:#1e1e24,stroke:#ffb74d,stroke-width:2px,stroke-dasharray: 5 5
+    classDef policy fill:#1e1e24,stroke:#ffb74d,stroke-width:2px,stroke-dasharray: 5 5
 
     subgraph Feedback [FEEDBACK COLLECTION LAYER]
         direction TB
@@ -519,14 +531,14 @@ flowchart TD
     end
     class Threshold stage
 
-    subgraph Human [HUMAN-IN-THE-LOOP CHECKPOINT]
+    subgraph Policy [OPTIONAL POLICY CHECKPOINT]
         direction TB
-        H1[Proposal presented to operator via:<br/>REPL / Web Gateway notification]
-        H2[Detailed diff of old vs new weights]
-        H3[Projected impact on current shortlist]
-        H4((REQUIRED APPROVAL<br/>before weights applied))
+        H1[Autonomous default: apply if within safety bounds]
+        H2[Optional manual gate via settings/policy]
+        H3[Projected impact and diff shown in UI]
+        H4((Escalate to operator only on high-risk deltas))
     end
-    class Human human
+    class Policy policy
 
     subgraph Update [WEIGHT APPLICATION + AUDIT]
         direction TB
@@ -538,9 +550,11 @@ flowchart TD
 
     Feedback --> Metric
     Metric --> Threshold
-    T2 --> Human
-    Human --> Update
+    T2 --> Policy
+    Policy --> Update
 ```
+
+Current runtime policy is autonomy-first: parameter updates are applied automatically when safety constraints are met, with optional operator gating for stricter environments.
 
 ## 1.7 Security Boundary Definitions
 
@@ -572,7 +586,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 
 ---
 
-## 1.9 Phase 1 Implementation Audit (2026-03-11)
+## 1.9 Phase 1 Implementation Audit (2026-03-12)
 
 Reality check against current codebase (`crates/ferrumyx-*` + vendored `ironclaw`):
 
@@ -588,6 +602,8 @@ Added capabilities now present in code:
 - Settings-driven provider/env sync into IronClaw runtime (OpenAI/Anthropic/Gemini/OpenAI-compatible/Ollama).
 - OpenAI-compatible cached-chat toggle persisted in settings and synced to runtime env.
 - Secure key save behavior in web settings (keys are not returned to browser after save).
+- Streaming chat delivery and markdown-safe rendering in the web chat surface.
+- Chat thread lifecycle endpoints/UI (create/list/switch/delete) with persisted history-backed async polling.
 
 # Phase 2: Literature Ingestion
 
@@ -682,7 +698,7 @@ Added capabilities now present in code:
 | Data formats | JSON |
 | Full-text access | Open-access PDFs linked via `openAccessPdf.url`; S2 corpus IDs for cross-reference |
 | Ferrumyx approach | Native Rust ingestion source; Graph API search + metadata retrieval + OA PDF URL resolution via `openAccessPdf` |
-| Notes | API key is now wired through Ferrumyx settings and ingestion tools; citation graph expansion and SPECTER2 embedding endpoint usage remain planned enhancements |
+| Notes | API key is wired through Ferrumyx settings and ingestion tools; citation graph expansion and SPECTER2 embedding endpoint usage are implemented with bounded expansion controls |
 
 ---
 
@@ -828,9 +844,9 @@ graph TD
     E -- No --> G{Sci-Hub fallback<br/>enabled?}
     
     G -- Yes --> SciHub[Initiate Sci-Hub Multi-Domain Loop]
-    SciHub --> SH1[Try sci-hub.se] --> SH2{Success?}
-    SH2 -- No --> SH3[Try sci-hub.st] --> SH4{Success?}
-    SH4 -- No --> SH5[Try sci-hub.ru...] --> T7[Tier 7: Sci-Hub PDF<br/>Scrape & Download]
+    SciHub --> SH1[Try sci-hub.al] --> SH2{Success?}
+    SH2 -- No --> SH3[Try sci-hub.mk] --> SH4{Success?}
+    SH4 -- No --> SH5[Try sci-hub.ee / sci-hub.vg / sci-hub.st] --> T7[Tier 7: Sci-Hub PDF<br/>Scrape & Download]
     SH2 -- Yes --> T7
     SH4 -- Yes --> T7
     SH5 -- Failed --> T6[Tier 6 (final): Abstract Only]
@@ -845,7 +861,7 @@ graph TD
 3.  **Tier 3: Unpaywall resolved OA PDF**. High-quality PDF retrieval from official publisher repositories via unpaywall.org.
 4.  **Tier 4: Europe PMC**. Fallback for papers not in PMC USA.
 5.  **Tier 5: bioRxiv/medRxiv PDF**. Preprint retrieval (lower confidence score applied).
-6.  **Tier 7: Sci-Hub Multi-Domain Fallback**. (Optional) Scrapes active Sci-Hub mirrors sequentially (se, st, ru, do, box, wf) for paywalled papers. Disabled by default.
+6.  **Tier 7: Sci-Hub Multi-Domain Fallback**. (Optional) Scrapes active Sci-Hub mirrors sequentially (default list: `sci-hub.al`, `sci-hub.mk`, `sci-hub.ee`, `sci-hub.vg`, `sci-hub.st`; configurable in Settings). Disabled by default.
 7.  **Tier 6: Abstract Only**. Fallback when no full-text can be legally or technically retrieved.
 
 **Decision stored in DB:** `papers.full_text_status` indicates if full-text was successfully assembled. Typical expectation for recent oncology literature with Sci-Hub enabled: >90% full-text coverage.
@@ -1333,14 +1349,14 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 
 | Component | Decision | Justification |
 |---|---|---|
-| PubMed E-utilities client | **Build** (Rust, WASM tool) | Simple REST; Rust HTTP client sufficient |
-| Europe PMC client | **Build** (Rust, WASM tool) | Same |
-| bioRxiv/medRxiv client | **Build** (Rust, WASM tool) | Simple JSON API |
-| arXiv client | **Build** (Rust, WASM tool) | Atom XML; `quick-xml` crate |
-| ClinicalTrials.gov client | **Build** (Rust, WASM tool) | REST JSON API |
-| CrossRef client | **Build** (Rust, WASM tool) | DOI resolution; simple REST |
-| Semantic Scholar client | **Build** (Rust, WASM tool) | REST; SPECTER2 embeddings bonus |
-| Unpaywall client | **Build** (Rust, WASM tool) | DOI OA lookup |
+| PubMed E-utilities client | **Build** (Rust native module) | Simple REST; Rust HTTP client sufficient |
+| Europe PMC client | **Build** (Rust native module) | Same |
+| bioRxiv/medRxiv client | **Build** (Rust native module) | Simple JSON API |
+| arXiv client | **Build** (Rust native module) | Atom XML; `quick-xml` crate |
+| ClinicalTrials.gov client | **Build** (Rust native module) | REST JSON API |
+| CrossRef client | **Build** (Rust native module) | DOI resolution; simple REST |
+| Semantic Scholar client | **Build** (Rust native module) | REST; citation expansion + SPECTER2 field support |
+| Unpaywall client | **Build** (Rust native module) | DOI OA lookup |
 | PDF parser | **Build** (Rust, lopdf) | Ferrules - fast, Rust-native text extraction |
 | BiomedBERT embeddings | **Build** (Rust, Candle) | HuggingFace models run natively via Candle framework |
 | TrieNer NER | **Build** (Rust, Aho-Corasick) | 100% native Rust memory-safe fast NER |
@@ -1354,7 +1370,7 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 
 ---
 
-## 2.12 Phase 2 Implementation Audit (2026-03-11)
+## 2.12 Phase 2 Implementation Audit (2026-03-12)
 
 Implemented in production code:
 
@@ -1366,6 +1382,12 @@ Implemented in production code:
 - [x] Section-aware chunking + optional embedding pass with pluggable backends (Rust-native BiomedBERT, OpenAI, Gemini, OpenAI-compatible, Ollama).
 - [x] Ingestion watchdog controls (idle timeout + max runtime) and settings exposure.
 - [x] Ingestion API key settings include PubMed + Semantic Scholar and are wired to agent + web ingestion paths.
+- [x] Source-search cache + TTL controls and persistence are active.
+- [x] Full-text negative cache + TTL controls are active to avoid repeated dead-end fetch attempts.
+- [x] Chunk-fingerprint cache + TTL controls are active to skip redundant heavy NER/relation passes.
+- [x] Batch DOI/PMID prefetch dedup is implemented to reduce per-paper DB round-trips.
+- [x] Adaptive worker tuning and fast-lane/heavy-lane async enrichment are implemented for higher sustained throughput.
+- [x] Ingestion performance snapshots are persisted and exposed via `/api/metrics/perf`.
 
 Partially implemented / pending:
 
@@ -1700,7 +1722,7 @@ Rationale: For the MVP cancer domain (KRAS G12D PDAC), the knowledge graph will 
 
 **Trigger for dedicated graph adoption:** If at Month 12, path traversal queries on >5M facts exceed 500ms P95 latency for common patterns. If adopted, the graph DB is a read-only analytical mirror updated via CDC; LanceDB remains the write-primary source of truth.
 
-## 3.9 Completion Status (2026-03-09)
+## 3.9 Completion Status (2026-03-12)
 
 Phase 3 is now treated as complete for the current codebase baseline.
 
@@ -1885,13 +1907,14 @@ OUTPUT FIELDS (per candidate):
   component_score_breakdown[9], shortlist_tier, flags[], warnings[]
 ```
 
-## 4.6 Phase 4 Kickoff Status (2026-03-09)
+## 4.6 Phase 4 Kickoff Status (2026-03-12)
 
 - [x] Cohort scoring now runs at **gene-level** rather than per-fact row expansion.
 - [x] Random/hash fallback metrics removed from target query path.
 - [x] Ranking metrics now derived deterministically from KG evidence aggregates (with explicit proxy fields where external providers are not yet fully wired).
 - [x] Shortlist tiering now enforces the architecture hard exclusion rule for saturated/low-novelty targets.
 - [x] DISPUTED and quality-risk flags are surfaced directly in query results.
+- [x] Ranker/targets/metrics handlers now avoid large full-table scans and use bounded reads + aggregated counters for stable latency on larger corpora.
 
 Remaining Phase 4 hardening work:
 - [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
@@ -2314,13 +2337,13 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - [x] Initialise Cargo workspace: `ferrumyx-agent`, `ferrumyx-common`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-molecules`, `ferrumyx-ranker`, `ferrumyx-web`, `ironclaw`
 - [x] LanceDB deployed; Phase 1 schema migrations run
 - [x] PubMed E-utilities WASM tool (esearch + efetch XML) (Implemented in `pubmed.rs`)
-- [ ] Europe PMC WASM tool [/] (Implemented in `europepmc.rs`)
-- [ ] PMC XML section-aware parser (Rust, `quick-xml`) [ ]
+- [x] Europe PMC WASM tool (Implemented in `europepmc.rs`)
+- [x] PMC XML section-aware parser (Rust, `quick-xml`)
 - [x] Ferrules PDF parser (Rust-native)
-- [ ] Section-aware chunker [/] (Implemented in `chunker.rs`)
+- [x] Section-aware chunker (Implemented in `chunker.rs`)
 - [x] BiomedBERT embedding Native tool (/crates/ferrumyx-ingestion)
-- [ ] LanceDB IVFFlat index setup [x]
-- [ ] Sci-Hub fallback client (Optional) [x] (Implemented in `scihub.rs`)
+- [x] LanceDB IVFFlat index setup
+- [x] Sci-Hub fallback client (Optional) (Implemented in `scihub.rs`)
 
 **Deliverable:** Ingest a PubMed query result, parse full text, chunk, embed, store in LanceDB. Manual verification of 50 KRAS PDAC papers.
 
@@ -2365,18 +2388,18 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 **Expansion criteria:** MVP retrospective Recall@20 > 0.55 for PDAC domain.
 
 **New capabilities:**
-- [ ] bioRxiv/medRxiv ingestion tools [x] (Implemented in `biorxiv.rs`)
-- [ ] ClinicalTrials.gov structured ingestion (trial outcomes → KG) [x] (Implemented in `clinicaltrials.rs`)
-- [~] Semantic Scholar integration (core Graph API search/metadata implemented; citation graph + SPECTER2 embeddings pending)
-- [x] arXiv ingestion tool [x] (Implemented in `arxiv.rs`)
-- [x] Unpaywall OA retrieval integration [x] (Implemented in `unpaywall.rs`)
+- [x] bioRxiv/medRxiv ingestion tools (Implemented in `biorxiv.rs`)
+- [x] ClinicalTrials.gov structured ingestion (trial outcomes → KG) (Implemented in `clinicaltrials.rs`)
+- [x] Semantic Scholar integration (Graph API search/metadata + citation graph expansion + SPECTER2 field support)
+- [x] arXiv ingestion tool (Implemented in `arxiv.rs`)
+- [x] Unpaywall OA retrieval integration (Implemented in `unpaywall.rs`)
 - [ ] Expand to 3 cancer subtypes: KRAS G12D PDAC + EGFR-mutant NSCLC + BRCA1/2 ovarian
 - [ ] BERN2 high-recall NER for high-citation papers
 - [ ] Basic generative design (RDKit fragment growing)
 - [ ] DeepPurpose binding affinity prediction
 - [ ] Feedback metrics collection activated (weights NOT yet auto-updated)
 - [ ] Deduplication pipeline hardened (preprint→published pairing)
-- [ ] Web Gateway basic query interface
+- [x] Web Gateway query interface with async/streaming chat and thread management
 
 **Validation strategy:** For each new cancer subtype, run retrospective Recall@20 vs DrugBank before declaring that domain operational.
 
@@ -2388,10 +2411,10 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - ≥3 complete feedback cycles collected
 - Docking-IC50 Pearson r > 0.40 on ≥2 target genes
 - Recall@20 stable (±0.05) for 2 consecutive months
-- Human operator approved ≥1 weight update proposal
+- Safety policy configured for deployment mode (autonomous-default or manual-gated)
 
 **New capabilities:**
-- [ ] Self-improvement loop fully active (weight proposals + human approval)
+- [ ] Self-improvement loop fully active (autonomous-default with optional manual gate)
 - [ ] Reinvent4 generative molecule design (CUDA GPU required)
 - [ ] Expand to 10+ cancer subtypes; pan-cancer analysis
 - [ ] Retrospective validation against all FDA oncology approvals (1990–present)
@@ -2414,7 +2437,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | arXiv client | Implemented | Rust | Native | Open | Atom XML; quick-xml |
 | ClinicalTrials.gov v2 client | Implemented | Rust | WASM | Open | REST JSON |
 | CrossRef client | Implemented | Rust | WASM | Open | DOI resolution |
-| Semantic Scholar client | Implemented (core) | Rust | Native | Open | Graph API search + metadata + OA URL; SPECTER2 embeddings pending |
+| Semantic Scholar client | Implemented | Rust | Native | Open | Graph API search + metadata + OA URL + bounded citation expansion + SPECTER2 field support |
 | Unpaywall client | Implemented | Rust | Native | Open | DOI OA lookup + PDF URL resolution |
 | Sci-Hub client | Implemented | Rust | Native | Open | (Optional) Fallback scraper |
 | PMC XML parser | Implemented (core) | Rust | Native | Open | quick-xml section extraction integrated in ingestion pipeline |
