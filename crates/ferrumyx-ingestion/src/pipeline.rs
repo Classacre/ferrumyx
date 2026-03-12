@@ -46,6 +46,7 @@ use crate::sources::semanticscholar::SemanticScholarClient;
 use crate::sources::unpaywall::UnpaywallClient;
 use crate::sources::LiteratureSource;
 use ferrumyx_db::entities::EntityRepository;
+use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType, KgFact};
 use ferrumyx_kg::extraction::build_facts;
 use ferrumyx_kg::ner::{EntityType as NerEntityType, TrieNer};
@@ -462,7 +463,39 @@ pub async fn run_ingestion(
     let chunker_cfg = ChunkerConfig::default();
     let t_upsert = std::time::Instant::now();
     let mut queued_new_papers: Vec<(crate::models::PaperMetadata, Uuid)> = Vec::new();
+    let paper_repo = PaperRepository::new(repo.db());
+    let candidate_dois: Vec<String> = all_papers
+        .iter()
+        .filter_map(|p| p.doi.as_ref().map(|v| v.trim().to_string()))
+        .filter(|v| !v.is_empty())
+        .collect();
+    let candidate_pmids: Vec<String> = all_papers
+        .iter()
+        .filter_map(|p| p.pmid.as_ref().map(|v| v.trim().to_string()))
+        .filter(|v| !v.is_empty())
+        .collect();
+    let mut existing_by_doi = paper_repo
+        .find_ids_by_dois(&candidate_dois, 200)
+        .await
+        .unwrap_or_default();
+    let mut existing_by_pmid = paper_repo
+        .find_ids_by_pmids(&candidate_pmids, 200)
+        .await
+        .unwrap_or_default();
     for paper in &all_papers {
+        let doi_hit = paper
+            .doi
+            .as_ref()
+            .and_then(|d| existing_by_doi.get(d.trim()).copied());
+        let pmid_hit = paper
+            .pmid
+            .as_ref()
+            .and_then(|p| existing_by_pmid.get(p.trim()).copied());
+        if doi_hit.is_some() || pmid_hit.is_some() {
+            result.papers_duplicate += 1;
+            continue;
+        }
+
         let upsert = match repo.upsert_paper(paper).await {
             Ok(u) => u,
             Err(e) => {
@@ -483,6 +516,12 @@ pub async fn run_ingestion(
             continue;
         }
         result.papers_inserted += 1;
+        if let Some(doi) = paper.doi.as_ref().map(|d| d.trim().to_string()) {
+            existing_by_doi.insert(doi, upsert.paper_id);
+        }
+        if let Some(pmid) = paper.pmid.as_ref().map(|p| p.trim().to_string()) {
+            existing_by_pmid.insert(pmid, upsert.paper_id);
+        }
         queued_new_papers.push((paper.clone(), upsert.paper_id));
     }
 
@@ -562,8 +601,9 @@ pub async fn run_ingestion(
 
     let mut processing_set = tokio::task::JoinSet::new();
     let mut completed = 0usize;
+    let mut adaptive_process_limit = paper_worker_limit.clamp(1, 16);
     while prefetch_rx.is_closed() == false || !processing_set.is_empty() {
-        while processing_set.len() < paper_worker_limit {
+        while processing_set.len() < adaptive_process_limit {
             let maybe_payload = prefetch_rx.recv().await;
             let Some((paper, paper_id, full_text_sections)) = maybe_payload else {
                 break;
@@ -607,6 +647,14 @@ pub async fn run_ingestion(
                             p
                         },
                     );
+                    let backlog = prefetch_rx.len();
+                    if backlog > adaptive_process_limit.saturating_mul(2)
+                        && adaptive_process_limit < paper_worker_limit
+                    {
+                        adaptive_process_limit += 1;
+                    } else if backlog == 0 && adaptive_process_limit > 1 {
+                        adaptive_process_limit = adaptive_process_limit.saturating_sub(1);
+                    }
                 }
                 Err(e) => {
                     let msg = format!("paper worker join error: {e}");
@@ -770,6 +818,26 @@ fn resolve_full_text_negative_cache_ttl_secs() -> u64 {
         .clamp(60, 7 * 24 * 60 * 60)
 }
 
+fn resolve_chunk_fingerprint_cache_enabled() -> bool {
+    std::env::var("FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+}
+
+fn resolve_chunk_fingerprint_cache_ttl_secs() -> u64 {
+    std::env::var("FERRUMYX_CHUNK_FINGERPRINT_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(2 * 24 * 60 * 60)
+        .clamp(300, 14 * 24 * 60 * 60)
+}
+
+fn resolve_heavy_lane_async_enabled() -> bool {
+    std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_ASYNC")
+        .ok()
+        .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
 fn resolve_max_relation_genes_per_chunk() -> usize {
     std::env::var("FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK")
         .ok()
@@ -823,6 +891,11 @@ struct FullTextNegativeCacheEntry {
     reason: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChunkFingerprintCacheEntry {
+    cached_at_epoch_secs: u64,
+}
+
 fn source_cache_ttl(source_cache_ttl_secs: Option<u64>) -> std::time::Duration {
     std::time::Duration::from_secs(source_cache_ttl_secs.unwrap_or(30 * 60).clamp(60, 86_400))
 }
@@ -844,6 +917,16 @@ fn full_text_negative_cache_path(key: &str) -> PathBuf {
     key.hash(&mut hasher);
     let digest = hasher.finish();
     full_text_negative_cache_dir().join(format!("{digest:016x}.json"))
+}
+
+fn chunk_fingerprint_cache_dir() -> PathBuf {
+    std::env::var("FERRUMYX_CHUNK_FINGERPRINT_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("data/cache/chunk_fingerprint"))
+}
+
+fn chunk_fingerprint_cache_path(hash: &str) -> PathBuf {
+    chunk_fingerprint_cache_dir().join(format!("{hash}.json"))
 }
 
 fn now_epoch_secs() -> u64 {
@@ -890,6 +973,33 @@ fn clear_full_text_negative(key: &str) {
         return;
     }
     let _ = std::fs::remove_file(full_text_negative_cache_path(key));
+}
+
+fn chunk_fingerprint_seen_or_mark(hash: &str) -> bool {
+    if !resolve_chunk_fingerprint_cache_enabled() {
+        return false;
+    }
+    let ttl = resolve_chunk_fingerprint_cache_ttl_secs();
+    let path = chunk_fingerprint_cache_path(hash);
+    let now = now_epoch_secs();
+
+    if let Ok(payload) = std::fs::read_to_string(&path) {
+        if let Ok(entry) = serde_json::from_str::<ChunkFingerprintCacheEntry>(&payload) {
+            if now.saturating_sub(entry.cached_at_epoch_secs) <= ttl {
+                return true;
+            }
+        }
+    }
+
+    let dir = chunk_fingerprint_cache_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let entry = ChunkFingerprintCacheEntry {
+        cached_at_epoch_secs: now,
+    };
+    if let Ok(payload) = serde_json::to_string(&entry) {
+        let _ = std::fs::write(path, payload);
+    }
+    false
 }
 
 fn source_cache_path(source: &IngestionSourceSpec, query: &str, max_results: usize) -> PathBuf {
@@ -1326,6 +1436,52 @@ async fn process_single_paper(
         return out;
     }
 
+    if resolve_heavy_lane_async_enabled() {
+        let repo_bg = repo.clone();
+        let ner_bg = ner.clone();
+        let paper_bg = paper.clone();
+        let chunks_bg = chunks.clone();
+        let embed_bg = embed_client.clone();
+        tokio::spawn(async move {
+            let _ =
+                run_heavy_enrichment_for_chunks(paper_bg, paper_id, chunks_bg, repo_bg, ner_bg, embed_bg)
+                    .await;
+        });
+        let _ = repo.set_parse_status(paper_id, "parsed_fast").await;
+        return out;
+    }
+
+    let heavy = run_heavy_enrichment_for_chunks(paper, paper_id, chunks, repo, ner, embed_client).await;
+    out.chunks_embedded += heavy.chunks_embedded;
+    out.errors.extend(heavy.errors);
+
+    out
+}
+
+#[derive(Debug, Clone)]
+struct MentionFactSeed {
+    entity_type: DbEntityType,
+    object_name: String,
+    confidence: f32,
+}
+
+#[derive(Debug, Clone)]
+struct RelationFactSeed {
+    gene_symbol: String,
+    predicate: String,
+    object_name: String,
+    confidence: f32,
+}
+
+async fn run_heavy_enrichment_for_chunks(
+    paper: crate::models::PaperMetadata,
+    paper_id: Uuid,
+    chunks: Vec<crate::models::DocumentChunk>,
+    repo: Arc<IngestionRepository>,
+    ner: Arc<TrieNer>,
+    embed_client: Option<Arc<EmbeddingClient>>,
+) -> PaperProcessingResult {
+    let mut out = PaperProcessingResult::default();
     let entity_repo = EntityRepository::new(repo.db());
     let mut entity_id_cache: HashMap<String, Uuid> = HashMap::new();
     let cancer_normaliser = ner.cancers();
@@ -1334,26 +1490,22 @@ async fn process_single_paper(
     } else {
         paper.title.clone()
     };
-    #[derive(Debug, Clone)]
-    struct MentionFactSeed {
-        entity_type: DbEntityType,
-        object_name: String,
-        confidence: f32,
-    }
-
-    #[derive(Debug, Clone)]
-    struct RelationFactSeed {
-        gene_symbol: String,
-        predicate: String,
-        object_name: String,
-        confidence: f32,
-    }
 
     let mut mention_seeds: Vec<MentionFactSeed> = Vec::new();
     let mut relation_seeds: Vec<RelationFactSeed> = Vec::new();
     let mut unique_candidates: HashMap<String, (DbEntityType, String)> = HashMap::new();
 
     for chunk in &chunks {
+        let fp_input = if chunk.content.len() > 512 {
+            &chunk.content[..512]
+        } else {
+            &chunk.content
+        };
+        let fingerprint = hash_text(fp_input);
+        if chunk_fingerprint_seen_or_mark(&fingerprint) {
+            continue;
+        }
+
         let entities = ner.extract(&chunk.content);
         if !entities.is_empty() {
             info!(paper_id = %paper_id, count = entities.len(), "Entities extracted from chunk");
@@ -1825,6 +1977,15 @@ fn pdf_parse_cache_dir() -> PathBuf {
 
 fn hash_bytes(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{:02x}", b));
+    }
+    out
+}
+
+fn hash_text(text: &str) -> String {
+    let digest = Sha256::digest(text.as_bytes());
     let mut out = String::with_capacity(digest.len() * 2);
     for b in digest {
         let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{:02x}", b));

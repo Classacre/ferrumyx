@@ -336,6 +336,112 @@ impl PaperRepository {
         Ok(out)
     }
 
+    /// Resolve existing paper IDs for DOI values in bounded query chunks.
+    pub async fn find_ids_by_dois(
+        &self,
+        dois: &[String],
+        chunk_size: usize,
+    ) -> Result<HashMap<String, uuid::Uuid>> {
+        self.find_ids_by_identity_values("doi", dois, chunk_size).await
+    }
+
+    /// Resolve existing paper IDs for PMID values in bounded query chunks.
+    pub async fn find_ids_by_pmids(
+        &self,
+        pmids: &[String],
+        chunk_size: usize,
+    ) -> Result<HashMap<String, uuid::Uuid>> {
+        self.find_ids_by_identity_values("pmid", pmids, chunk_size).await
+    }
+
+    async fn find_ids_by_identity_values(
+        &self,
+        field: &str,
+        values: &[String],
+        chunk_size: usize,
+    ) -> Result<HashMap<String, uuid::Uuid>> {
+        if values.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq = values
+            .iter()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        uniq.sort_unstable();
+        uniq.dedup();
+        if uniq.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+
+        let mut out: HashMap<String, uuid::Uuid> = HashMap::new();
+        let chunk = chunk_size.max(1).min(300);
+
+        for group in uniq.chunks(chunk) {
+            let filter = group
+                .iter()
+                .map(|v| format!("{} = '{}'", field, v.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            if filter.is_empty() {
+                continue;
+            }
+
+            let mut stream = table
+                .query()
+                .only_if(&format!("({filter})"))
+                .select(lancedb::query::Select::columns(&["id", field]))
+                .execute()
+                .await?;
+
+            while let Some(batch) = stream.next().await {
+                let batch = batch?;
+                let schema = batch.schema();
+                let id_idx = match schema.index_of("id") {
+                    Ok(i) => i,
+                    Err(_) => continue,
+                };
+                let field_idx = match schema.index_of(field) {
+                    Ok(i) => i,
+                    Err(_) => continue,
+                };
+
+                let ids_arr = match batch.column(id_idx).as_any().downcast_ref::<StringArray>() {
+                    Some(a) => a,
+                    None => continue,
+                };
+                let vals_arr = match batch
+                    .column(field_idx)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                {
+                    Some(a) => a,
+                    None => continue,
+                };
+
+                for row in 0..batch.num_rows() {
+                    if vals_arr.is_null(row) || ids_arr.is_null(row) {
+                        continue;
+                    }
+                    if let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(row)) {
+                        out.insert(vals_arr.value(row).to_string(), id);
+                    }
+                }
+            }
+        }
+
+        Ok(out)
+    }
+
     /// Resolve paper publication timestamps for a list of IDs in one query.
     pub async fn find_published_at_by_ids(
         &self,

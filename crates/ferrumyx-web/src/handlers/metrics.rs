@@ -1,13 +1,14 @@
 //! Self-improvement metrics dashboard.
 
-use std::collections::HashSet;
-
 use axum::{extract::State, response::Html, Json};
 use serde::Serialize;
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
-use ferrumyx_db::{kg_facts::KgFactRepository, target_scores::TargetScoreRepository};
+use ferrumyx_db::{
+    entities::EntityRepository, kg_facts::KgFactRepository, schema::EntityType,
+    target_scores::TargetScoreRepository,
+};
 use ferrumyx_ingestion::pipeline::load_recent_perf_snapshots;
 
 #[derive(Debug, Serialize)]
@@ -41,19 +42,11 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     let fact_repo = KgFactRepository::new(state.db.clone());
     let score_repo = TargetScoreRepository::new(state.db.clone());
 
-    let facts = fact_repo.list(0, 80_000).await.unwrap_or_default();
-    let scores = score_repo.list(0, 50_000).await.unwrap_or_default();
-
-    let fact_count = facts.len() as f64;
-    let scored_count = scores.len() as f64;
-
-    let mut gene_subjects = HashSet::new();
-    for f in &facts {
-        if is_gene_like(&f.subject_name) {
-            gene_subjects.insert(f.subject_id);
-        }
-    }
-    let gene_subject_count = gene_subjects.len() as f64;
+    let entity_repo = EntityRepository::new(state.db.clone());
+    let fact_count = fact_repo.count().await.unwrap_or(0) as f64;
+    let scored_count = score_repo.count().await.unwrap_or(0) as f64;
+    let gene_subject_count = entity_repo.count_by_type(EntityType::Gene).await.unwrap_or(0) as f64;
+    let scores = score_repo.list(0, 5_000).await.unwrap_or_default();
 
     let primary_count = scores
         .iter()
@@ -387,14 +380,4 @@ fn metric_meta(name: &str) -> (&'static str, &'static str, bool) {
         "kg_conflict_rate" => ("KG Conflict Rate", "< 0.20", false),
         _ => ("Unknown Metric", "—", true),
     }
-}
-
-fn is_gene_like(name: &str) -> bool {
-    let n = name.trim();
-    if n.is_empty() || n.len() > 16 || n.contains(' ') {
-        return false;
-    }
-    n.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        && n.chars().any(|c| c.is_ascii_uppercase())
 }

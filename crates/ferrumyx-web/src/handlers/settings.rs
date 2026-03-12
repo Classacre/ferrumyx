@@ -76,6 +76,9 @@ async function loadSettings() {
   byId('ingestion_pdf_parse_cache_enabled').checked = data.ingestion_pdf_parse_cache_enabled;
   byId('ingestion_full_text_negative_cache_enabled').checked = data.ingestion_full_text_negative_cache_enabled;
   byId('ingestion_full_text_negative_cache_ttl_secs').value = data.ingestion_full_text_negative_cache_ttl_secs;
+  byId('ingestion_chunk_fingerprint_cache_enabled').checked = data.ingestion_chunk_fingerprint_cache_enabled;
+  byId('ingestion_chunk_fingerprint_cache_ttl_secs').value = data.ingestion_chunk_fingerprint_cache_ttl_secs;
+  byId('ingestion_heavy_lane_async_enabled').checked = data.ingestion_heavy_lane_async_enabled;
   byId('ingestion_min_ner_chars').value = data.ingestion_min_ner_chars;
   byId('ingestion_max_relation_genes_per_chunk').value = data.ingestion_max_relation_genes_per_chunk;
   byId('ingestion_async_post_ingest_scoring').checked = data.ingestion_async_post_ingest_scoring;
@@ -144,6 +147,9 @@ async function saveSettings() {
     ingestion_pdf_parse_cache_enabled: byId('ingestion_pdf_parse_cache_enabled').checked,
     ingestion_full_text_negative_cache_enabled: byId('ingestion_full_text_negative_cache_enabled').checked,
     ingestion_full_text_negative_cache_ttl_secs: Number(byId('ingestion_full_text_negative_cache_ttl_secs').value || 21600),
+    ingestion_chunk_fingerprint_cache_enabled: byId('ingestion_chunk_fingerprint_cache_enabled').checked,
+    ingestion_chunk_fingerprint_cache_ttl_secs: Number(byId('ingestion_chunk_fingerprint_cache_ttl_secs').value || 172800),
+    ingestion_heavy_lane_async_enabled: byId('ingestion_heavy_lane_async_enabled').checked,
     ingestion_min_ner_chars: Number(byId('ingestion_min_ner_chars').value || 500),
     ingestion_max_relation_genes_per_chunk: Number(byId('ingestion_max_relation_genes_per_chunk').value || 4),
     ingestion_async_post_ingest_scoring: byId('ingestion_async_post_ingest_scoring').checked,
@@ -431,6 +437,21 @@ __NAV__
             <div class="help-text">How long failed full-text attempts stay suppressed before retrying.</div>
           </div>
           <div class="form-group">
+            <label for="ingestion_chunk_fingerprint_cache_enabled">Chunk Fingerprint Cache Enabled</label>
+            <input id="ingestion_chunk_fingerprint_cache_enabled" type="checkbox" />
+            <div class="help-text">Skips repeated NER/KG extraction for duplicate chunk text across papers.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_chunk_fingerprint_cache_ttl_secs">Chunk Fingerprint Cache TTL (seconds)</label>
+            <input id="ingestion_chunk_fingerprint_cache_ttl_secs" type="number" min="300" max="1209600" class="form-control" />
+            <div class="help-text">Retention window for duplicate-chunk skip fingerprints.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_heavy_lane_async_enabled">Heavy Lane Async Enrichment</label>
+            <input id="ingestion_heavy_lane_async_enabled" type="checkbox" />
+            <div class="help-text">Runs expensive NER/KG enrichment in background after fast chunk insertion.</div>
+          </div>
+          <div class="form-group">
             <label for="ingestion_min_ner_chars">Quality Gate Minimum Chars</label>
             <input id="ingestion_min_ner_chars" type="number" min="120" max="5000" class="form-control" />
             <div class="help-text">Documents below this total chunk text size skip deep NER/KG for speed.</div>
@@ -540,6 +561,12 @@ pub struct SettingsView {
     ingestion_full_text_negative_cache_enabled: bool,
     #[serde(default = "default_full_text_negative_cache_ttl_secs")]
     ingestion_full_text_negative_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
+    ingestion_chunk_fingerprint_cache_enabled: bool,
+    #[serde(default = "default_chunk_fingerprint_cache_ttl_secs")]
+    ingestion_chunk_fingerprint_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
+    ingestion_heavy_lane_async_enabled: bool,
     #[serde(default = "default_min_ner_chars")]
     ingestion_min_ner_chars: u64,
     #[serde(default = "default_max_relation_genes_per_chunk")]
@@ -619,6 +646,12 @@ pub struct SettingsSaveRequest {
     ingestion_full_text_negative_cache_enabled: bool,
     #[serde(default = "default_full_text_negative_cache_ttl_secs")]
     ingestion_full_text_negative_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
+    ingestion_chunk_fingerprint_cache_enabled: bool,
+    #[serde(default = "default_chunk_fingerprint_cache_ttl_secs")]
+    ingestion_chunk_fingerprint_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
+    ingestion_heavy_lane_async_enabled: bool,
     #[serde(default = "default_min_ner_chars")]
     ingestion_min_ner_chars: u64,
     #[serde(default = "default_max_relation_genes_per_chunk")]
@@ -683,6 +716,9 @@ fn default_pdf_host_concurrency() -> u64 {
 }
 fn default_full_text_negative_cache_ttl_secs() -> u64 {
     6 * 60 * 60
+}
+fn default_chunk_fingerprint_cache_ttl_secs() -> u64 {
+    2 * 24 * 60 * 60
 }
 fn default_min_ner_chars() -> u64 {
     500
@@ -988,6 +1024,29 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             ],
             default_full_text_negative_cache_ttl_secs(),
         ),
+        ingestion_chunk_fingerprint_cache_enabled: bool_at(
+            &root,
+            &[
+                "ingestion",
+                "performance",
+                "chunk_fingerprint_cache_enabled",
+            ],
+            true,
+        ),
+        ingestion_chunk_fingerprint_cache_ttl_secs: int_at(
+            &root,
+            &[
+                "ingestion",
+                "performance",
+                "chunk_fingerprint_cache_ttl_secs",
+            ],
+            default_chunk_fingerprint_cache_ttl_secs(),
+        ),
+        ingestion_heavy_lane_async_enabled: bool_at(
+            &root,
+            &["ingestion", "performance", "heavy_lane_async_enabled"],
+            true,
+        ),
         ingestion_min_ner_chars: int_at(
             &root,
             &["ingestion", "performance", "min_ner_chars"],
@@ -1204,6 +1263,22 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
                 .ingestion_full_text_negative_cache_ttl_secs
                 .clamp(60, 604_800) as i64,
         ),
+    );
+    performance.insert(
+        "chunk_fingerprint_cache_enabled".to_string(),
+        toml::Value::Boolean(payload.ingestion_chunk_fingerprint_cache_enabled),
+    );
+    performance.insert(
+        "chunk_fingerprint_cache_ttl_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .ingestion_chunk_fingerprint_cache_ttl_secs
+                .clamp(300, 1_209_600) as i64,
+        ),
+    );
+    performance.insert(
+        "heavy_lane_async_enabled".to_string(),
+        toml::Value::Boolean(payload.ingestion_heavy_lane_async_enabled),
     );
     performance.insert(
         "min_ner_chars".to_string(),
@@ -1527,6 +1602,43 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         ingestion_full_text_negative_cache_ttl_secs
             .clamp(60, 604_800)
             .to_string(),
+    );
+    let ingestion_chunk_fingerprint_cache_enabled = bool_at(
+        root,
+        &["ingestion", "performance", "chunk_fingerprint_cache_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED",
+        if ingestion_chunk_fingerprint_cache_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_chunk_fingerprint_cache_ttl_secs = int_at(
+        root,
+        &["ingestion", "performance", "chunk_fingerprint_cache_ttl_secs"],
+        default_chunk_fingerprint_cache_ttl_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_CHUNK_FINGERPRINT_CACHE_TTL_SECS",
+        ingestion_chunk_fingerprint_cache_ttl_secs
+            .clamp(300, 1_209_600)
+            .to_string(),
+    );
+    let ingestion_heavy_lane_async_enabled = bool_at(
+        root,
+        &["ingestion", "performance", "heavy_lane_async_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_HEAVY_LANE_ASYNC",
+        if ingestion_heavy_lane_async_enabled {
+            "1"
+        } else {
+            "0"
+        },
     );
     let ingestion_min_ner_chars = int_at(
         root,

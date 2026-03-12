@@ -132,7 +132,7 @@ async fn load_ranked_targets(
     let depmap = DepMapClientAdapter::init().await.ok();
 
     let mut rows = score_repo
-        .list(0, limit)
+        .list(0, limit.min(10_000))
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -142,11 +142,11 @@ async fn load_ranked_targets(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let all_facts = kg_repo.list(0, 50_000).await.unwrap_or_default();
-    let mut fact_count_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
-    for fact in all_facts {
-        *fact_count_by_gene.entry(fact.subject_id).or_insert(0) += 1;
-    }
+    let gene_ids: Vec<uuid::Uuid> = rows.iter().map(|s| s.gene_id).collect();
+    let fact_count_by_gene: HashMap<uuid::Uuid, u32> = kg_repo
+        .count_by_subject_ids(&gene_ids, 300)
+        .await
+        .unwrap_or_default();
 
     let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
     let mut out = Vec::new();

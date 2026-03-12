@@ -9,6 +9,7 @@ use crate::schema_arrow::{kg_fact_to_record, record_to_kg_fact};
 use arrow_array::Array;
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Repository for knowledge graph fact operations.
@@ -401,5 +402,71 @@ impl KgFactRepository {
         }
 
         Ok(predicates.into_iter().collect())
+    }
+
+    /// Count facts per subject_id for a bounded set of subjects.
+    pub async fn count_by_subject_ids(
+        &self,
+        subject_ids: &[uuid::Uuid],
+        chunk_size: usize,
+    ) -> Result<HashMap<uuid::Uuid, u32>> {
+        if subject_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_KG_FACTS)
+            .execute()
+            .await?;
+
+        let mut uniq = subject_ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+        let chunk = chunk_size.max(1).min(500);
+
+        let mut out: HashMap<uuid::Uuid, u32> = HashMap::new();
+        for group in uniq.chunks(chunk) {
+            let filter = group
+                .iter()
+                .map(|id| format!("subject_id = '{}'", id))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            if filter.is_empty() {
+                continue;
+            }
+            let mut stream = table
+                .query()
+                .only_if(&format!("({filter})"))
+                .select(lancedb::query::Select::columns(&["subject_id"]))
+                .execute()
+                .await?;
+
+            while let Some(batch) = stream.next().await {
+                let batch = batch?;
+                let schema = batch.schema();
+                let subj_idx = match schema.index_of("subject_id") {
+                    Ok(i) => i,
+                    Err(_) => continue,
+                };
+                let subj_arr = match batch
+                    .column(subj_idx)
+                    .as_any()
+                    .downcast_ref::<arrow_array::StringArray>()
+                {
+                    Some(a) => a,
+                    None => continue,
+                };
+                for row in 0..batch.num_rows() {
+                    if subj_arr.is_null(row) {
+                        continue;
+                    }
+                    if let Ok(id) = uuid::Uuid::parse_str(subj_arr.value(row)) {
+                        *out.entry(id).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+        Ok(out)
     }
 }

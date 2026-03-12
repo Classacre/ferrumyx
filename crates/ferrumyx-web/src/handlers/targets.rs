@@ -138,25 +138,25 @@ pub async fn api_target_detail(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let mut paper_title_cache: HashMap<uuid::Uuid, String> = HashMap::new();
+    let paper_ids: Vec<uuid::Uuid> = facts
+        .iter()
+        .take(80)
+        .filter(|f| !f.paper_id.is_nil())
+        .map(|f| f.paper_id)
+        .collect();
+    let paper_title_cache: HashMap<uuid::Uuid, String> =
+        paper_repo.find_titles_by_ids(&paper_ids).await.unwrap_or_default();
     let mut kg_facts = Vec::new();
     let mut literature = Vec::new();
 
     for fact in facts.into_iter().take(80) {
         let source = if fact.paper_id.is_nil() {
             "unknown".to_string()
-        } else if let Some(cached) = paper_title_cache.get(&fact.paper_id) {
-            cached.clone()
         } else {
-            let title = paper_repo
-                .find_by_id(fact.paper_id)
-                .await
-                .ok()
-                .flatten()
-                .map(|p| p.title)
-                .unwrap_or_else(|| fact.paper_id.to_string());
-            paper_title_cache.insert(fact.paper_id, title.clone());
-            title
+            paper_title_cache
+                .get(&fact.paper_id)
+                .cloned()
+                .unwrap_or_else(|| fact.paper_id.to_string())
         };
 
         kg_facts.push(KgFactBrief {
@@ -399,7 +399,7 @@ async fn load_target_rows(
     let depmap = DepMapClientAdapter::init().await.ok();
 
     let mut scores = score_repo
-        .list(0, limit)
+        .list(0, limit.min(10_000))
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -409,11 +409,11 @@ async fn load_target_rows(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let all_facts = kg_repo.list(0, 50_000).await.unwrap_or_default();
-    let mut evidence_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
-    for fact in all_facts {
-        *evidence_by_gene.entry(fact.subject_id).or_insert(0) += 1;
-    }
+    let gene_ids: Vec<uuid::Uuid> = scores.iter().map(|s| s.gene_id).collect();
+    let evidence_by_gene: HashMap<uuid::Uuid, u32> = kg_repo
+        .count_by_subject_ids(&gene_ids, 300)
+        .await
+        .unwrap_or_default();
 
     let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
     let mut rows = Vec::new();

@@ -53,6 +53,9 @@ struct IngestionRuntimeDefaults {
     pdf_parse_cache_enabled: bool,
     full_text_negative_cache_enabled: bool,
     full_text_negative_cache_ttl_secs: u64,
+    chunk_fingerprint_cache_enabled: bool,
+    chunk_fingerprint_cache_ttl_secs: u64,
+    heavy_lane_async_enabled: bool,
     min_ner_chars: usize,
     max_relation_genes_per_chunk: usize,
     async_post_ingest_scoring: bool,
@@ -154,6 +157,21 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(6 * 60 * 60)
             .clamp(60, 604_800),
+            chunk_fingerprint_cache_enabled: std::env::var(
+                "FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED",
+            )
+            .ok()
+            .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            chunk_fingerprint_cache_ttl_secs: std::env::var(
+                "FERRUMYX_CHUNK_FINGERPRINT_CACHE_TTL_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(172_800)
+            .clamp(300, 1_209_600),
+            heavy_lane_async_enabled: std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_ASYNC")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
             min_ner_chars: std::env::var("FERRUMYX_INGESTION_MIN_NER_CHARS")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
@@ -383,6 +401,30 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.full_text_negative_cache_ttl_secs,
     )
     .clamp(60, 604_800);
+    defaults.chunk_fingerprint_cache_enabled = toml_bool(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "chunk_fingerprint_cache_enabled",
+        ],
+        defaults.chunk_fingerprint_cache_enabled,
+    );
+    defaults.chunk_fingerprint_cache_ttl_secs = toml_u64(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "chunk_fingerprint_cache_ttl_secs",
+        ],
+        defaults.chunk_fingerprint_cache_ttl_secs,
+    )
+    .clamp(300, 1_209_600);
+    defaults.heavy_lane_async_enabled = toml_bool(
+        &root,
+        &["ingestion", "performance", "heavy_lane_async_enabled"],
+        defaults.heavy_lane_async_enabled,
+    );
     defaults.min_ner_chars = toml_u64(
         &root,
         &["ingestion", "performance", "min_ner_chars"],
@@ -631,6 +673,26 @@ impl Tool for IngestionTool {
         std::env::set_var(
             "FERRUMYX_FULLTEXT_NEGATIVE_CACHE_TTL_SECS",
             defaults.full_text_negative_cache_ttl_secs.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED",
+            if defaults.chunk_fingerprint_cache_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_CHUNK_FINGERPRINT_CACHE_TTL_SECS",
+            defaults.chunk_fingerprint_cache_ttl_secs.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_HEAVY_LANE_ASYNC",
+            if defaults.heavy_lane_async_enabled {
+                "1"
+            } else {
+                "0"
+            },
         );
         std::env::set_var(
             "FERRUMYX_INGESTION_MIN_NER_CHARS",
