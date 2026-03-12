@@ -61,7 +61,9 @@ impl MutationType {
         match s.to_lowercase().as_str() {
             "missense" | "substitution - missense" => MutationType::Missense,
             "nonsense" | "substitution - nonsense" => MutationType::Nonsense,
-            "frameshift" | "deletion - frameshift" | "insertion - frameshift" => MutationType::Frameshift,
+            "frameshift" | "deletion - frameshift" | "insertion - frameshift" => {
+                MutationType::Frameshift
+            }
             "inframe deletion" | "deletion - in frame" => MutationType::InFrameDeletion,
             "inframe insertion" | "insertion - in frame" => MutationType::InFrameInsertion,
             "splice site" | "complex" => MutationType::SpliceSite,
@@ -92,11 +94,17 @@ pub struct CosmicClient {
 
 impl CosmicClient {
     pub fn new() -> Self {
-        Self { client: Client::new(), api_key: None }
+        Self {
+            client: Client::new(),
+            api_key: None,
+        }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
-        Self { client: Client::new(), api_key: Some(api_key.into()) }
+        Self {
+            client: Client::new(),
+            api_key: Some(api_key.into()),
+        }
     }
 
     /// Fetch mutations for a specific gene.
@@ -110,7 +118,7 @@ impl CosmicClient {
         // COSMIC API requires authentication
         // Public access is available but rate-limited
         // Full API requires registration at https://cancer.sanger.ac.uk/cosmic/register
-        
+
         debug!(
             gene = gene_symbol,
             cancer_type = cancer_type,
@@ -122,7 +130,7 @@ impl CosmicClient {
         // - /genes/{gene_id}/mutations - mutations in a gene
         // - /cancer/{cancer_type}/mutations - mutations in a cancer type
         // - /mutation/{mutation_id} - specific mutation details
-        
+
         Ok(Vec::new())
     }
 
@@ -141,7 +149,7 @@ impl CosmicClient {
 
         // TODO: Query COSMIC for specific protein change
         // Would return all samples with this mutation across cancer types
-        
+
         Ok(Vec::new())
     }
 
@@ -151,8 +159,10 @@ impl CosmicClient {
         gene_symbol: &str,
         cancer_type: &str,
     ) -> anyhow::Result<Option<f64>> {
-        let mutations = self.fetch_gene_mutations(gene_symbol, Some(cancer_type), 1000).await?;
-        
+        let mutations = self
+            .fetch_gene_mutations(gene_symbol, Some(cancer_type), 1000)
+            .await?;
+
         if mutations.is_empty() {
             return Ok(None);
         }
@@ -160,28 +170,38 @@ impl CosmicClient {
         let total_samples: usize = mutations.iter().map(|m| m.sample_count).sum();
         // Frequency calculation would need total samples in cancer type
         // This is a placeholder
-        
+
         Ok(Some(0.0))
     }
 
     /// Check if a mutation is a known driver mutation.
-    pub async fn is_driver_mutation(&self, gene_symbol: &str, protein_change: &str) -> anyhow::Result<bool> {
+    pub async fn is_driver_mutation(
+        &self,
+        gene_symbol: &str,
+        protein_change: &str,
+    ) -> anyhow::Result<bool> {
         // COSMIC Cancer Gene Census marks known driver genes
         // Check if mutation is in a known driver position
-        
+
         Ok(false)
     }
 }
 
 impl Default for CosmicClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // COSMIC is not a literature source, but we implement the trait
 // for consistency with the ingestion pipeline.
 #[async_trait]
 impl LiteratureSource for CosmicClient {
-    async fn search(&self, _query: &str, _max_results: usize) -> anyhow::Result<Vec<PaperMetadata>> {
+    async fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+    ) -> anyhow::Result<Vec<PaperMetadata>> {
         Ok(Vec::new())
     }
 
@@ -203,9 +223,18 @@ mod tests {
     #[test]
     fn test_mutation_type_from_str() {
         assert_eq!(MutationType::from_str("missense"), MutationType::Missense);
-        assert_eq!(MutationType::from_str("Substitution - Missense"), MutationType::Missense);
-        assert_eq!(MutationType::from_str("frameshift"), MutationType::Frameshift);
-        assert_eq!(MutationType::from_str("unknown_type"), MutationType::Unknown);
+        assert_eq!(
+            MutationType::from_str("Substitution - Missense"),
+            MutationType::Missense
+        );
+        assert_eq!(
+            MutationType::from_str("frameshift"),
+            MutationType::Frameshift
+        );
+        assert_eq!(
+            MutationType::from_str("unknown_type"),
+            MutationType::Unknown
+        );
     }
 
     #[test]

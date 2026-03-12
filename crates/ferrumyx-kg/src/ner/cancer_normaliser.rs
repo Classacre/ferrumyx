@@ -1,7 +1,9 @@
 //! Cancer type normalisation logic using MSKCC OncoTree.
 
-use std::collections::HashMap;
 use anyhow::{Context, Result};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use tracing::info;
 
 /// Whether a cancer pattern is a short OncoTree code or a full name.
@@ -25,7 +27,8 @@ pub struct OncoTreeRecord {
 }
 
 /// OncoTree stable TSV URL.
-const ONCOTREE_JSON_URL: &str = "https://oncotree.info/api/tumorTypes?version=oncotree_latest_stable";
+const ONCOTREE_JSON_URL: &str =
+    "https://oncotree.info/api/tumorTypes?version=oncotree_latest_stable";
 
 pub struct CancerNormaliser {
     /// Mapping from lowercase name/synonym to canonical OncoTree code.
@@ -37,8 +40,25 @@ pub struct CancerNormaliser {
 }
 
 impl CancerNormaliser {
+    fn cache_path() -> PathBuf {
+        let root =
+            std::env::var("FERRUMYX_CACHE_DIR").unwrap_or_else(|_| "./data/cache/ner".to_string());
+        PathBuf::from(root).join("oncotree_latest_stable.json")
+    }
+
     /// Build from OncoTree download.
     pub async fn from_download() -> Result<Self> {
+        let cache_path = Self::cache_path();
+        if let Ok(raw) = fs::read_to_string(&cache_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                info!(
+                    "Loaded OncoTree dataset from cache: {}",
+                    cache_path.display()
+                );
+                return Self::from_json(&json);
+            }
+        }
+
         info!("Downloading OncoTree dataset from {}", ONCOTREE_JSON_URL);
         let resp = reqwest::get(ONCOTREE_JSON_URL)
             .await
@@ -46,7 +66,14 @@ impl CancerNormaliser {
             .json::<serde_json::Value>()
             .await
             .context("OncoTree JSON parse failed")?;
-        
+
+        if let Some(parent) = cache_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(raw) = serde_json::to_string(&resp) {
+            let _ = fs::write(&cache_path, raw);
+        }
+
         Self::from_json(&resp)
     }
 
@@ -72,10 +99,26 @@ impl CancerNormaliser {
             parent: Option<String>,
         ) {
             if let Some(obj) = node.as_object() {
-                let code = obj.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let main_type = obj.get("mainType").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let tissue = obj.get("tissue").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let code = obj
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let name = obj
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let main_type = obj
+                    .get("mainType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let tissue = obj
+                    .get("tissue")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 if !code.is_empty() {
                     let record = OncoTreeRecord {
@@ -115,19 +158,27 @@ impl CancerNormaliser {
 
         traverse(json, &mut lookup, &mut pattern_kinds, &mut records, None);
 
-        info!("OncoTree normaliser built: {} codes, {} lookup entries", records.len(), lookup.len());
-        Ok(Self { lookup, pattern_kinds, records })
+        info!(
+            "OncoTree normaliser built: {} codes, {} lookup entries",
+            records.len(),
+            lookup.len()
+        );
+        Ok(Self {
+            lookup,
+            pattern_kinds,
+            records,
+        })
     }
 
     /// Normalise a cancerous entity name to its canonical OncoTree code.
     pub fn normalise(&self, name: &str) -> Option<String> {
         let name_lower = name.to_lowercase();
-        
+
         // Exact match
         if let Some(code) = self.lookup.get(&name_lower) {
             return Some(code.clone());
         }
-        
+
         // Substring match (only for longer synonyms to avoid false positives)
         for (synonym, code) in &self.lookup {
             if name_lower.contains(synonym.as_str()) && synonym.len() > 5 {
@@ -144,7 +195,10 @@ impl CancerNormaliser {
 
     /// All patterns for the trie, paired with their kind.
     pub fn all_patterns_with_kind(&self) -> Vec<(String, CancerPatternKind)> {
-        self.pattern_kinds.iter().map(|(k, &kind)| (k.clone(), kind)).collect()
+        self.pattern_kinds
+            .iter()
+            .map(|(k, &kind)| (k.clone(), kind))
+            .collect()
     }
 
     /// All patterns (backward compat).

@@ -26,8 +26,12 @@ pub struct DatabaseConfig {
     pub min_connections: u32,
 }
 
-fn default_max_connections() -> u32 { 10 }
-fn default_min_connections() -> u32 { 2 }
+fn default_max_connections() -> u32 {
+    10
+}
+fn default_min_connections() -> u32 {
+    2
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
@@ -40,10 +44,10 @@ pub struct LlmConfig {
     /// Backend for CONFIDENTIAL/INTERNAL data (must be local)
     #[serde(default = "default_local_backend")]
     pub local_backend: String,
-    pub ollama:            Option<OllamaBackendConfig>,
-    pub openai:            Option<ApiBackendConfig>,
-    pub anthropic:         Option<ApiBackendConfig>,
-    pub gemini:            Option<ApiBackendConfig>,
+    pub ollama: Option<OllamaBackendConfig>,
+    pub openai: Option<ApiBackendConfig>,
+    pub anthropic: Option<ApiBackendConfig>,
+    pub gemini: Option<ApiBackendConfig>,
     pub openai_compatible: Option<OpenAiCompatibleConfig>,
     #[serde(default)]
     pub limits: LlmLimits,
@@ -51,9 +55,15 @@ pub struct LlmConfig {
     pub rate_limits: LlmRateLimits,
 }
 
-fn default_llm_mode()       -> String { "any".to_string() }
-fn default_default_backend()-> String { "ollama".to_string() }
-fn default_local_backend()  -> String { "ollama".to_string() }
+fn default_llm_mode() -> String {
+    "any".to_string()
+}
+fn default_default_backend() -> String {
+    "ollama".to_string()
+}
+fn default_local_backend() -> String {
+    "ollama".to_string()
+}
 
 /// Config for Ollama (local endpoint).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,8 +74,12 @@ pub struct OllamaBackendConfig {
     pub model: String,
 }
 
-fn default_ollama_url()   -> String { "http://localhost:11434".to_string() }
-fn default_ollama_model() -> String { "llama3.1:8b".to_string() }
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+fn default_ollama_model() -> String {
+    "llama3.1:8b".to_string()
+}
 
 /// Config for API-based providers (OpenAI, Anthropic, Gemini).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,11 +124,19 @@ pub struct LlmLimits {
     pub alert_cost_threshold_usd: f64,
 }
 
-fn default_1m() -> u64 { 1_000_000 }
+fn default_1m() -> u64 {
+    1_000_000
+}
 
-fn default_500k()          -> u64 { 500_000 }
-fn default_cost_limit()    -> f64 { 20.0 }
-fn default_alert_threshold() -> f64 { 15.0 }
+fn default_500k() -> u64 {
+    500_000
+}
+fn default_cost_limit() -> f64 {
+    20.0
+}
+fn default_alert_threshold() -> f64 {
+    15.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LlmRateLimits {
@@ -130,11 +152,21 @@ pub struct LlmRateLimits {
     pub ollama_rpm: u32,
 }
 
-fn default_openai_rpm()    -> u32 { 60 }
-fn default_anthropic_rpm() -> u32 { 40 }
-fn default_gemini_rpm()    -> u32 { 60 }
-fn default_compat_rpm()    -> u32 { 60 }
-fn default_ollama_rpm()    -> u32 { 120 }
+fn default_openai_rpm() -> u32 {
+    60
+}
+fn default_anthropic_rpm() -> u32 {
+    40
+}
+fn default_gemini_rpm() -> u32 {
+    60
+}
+fn default_compat_rpm() -> u32 {
+    60
+}
+fn default_ollama_rpm() -> u32 {
+    120
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestionConfig {
@@ -156,7 +188,9 @@ pub struct SourceConfig {
     pub requests_per_second: u32,
 }
 
-fn default_rps() -> u32 { 3 }
+fn default_rps() -> u32 {
+    3
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingConfig {
@@ -179,11 +213,21 @@ pub struct EmbeddingConfig {
     pub biomedbert_url: String,
 }
 
-fn default_embed_backend()  -> String { "openai".to_string() }
-fn default_embed_model()    -> String { "text-embedding-3-small".to_string() }
-fn default_embed_dim()      -> usize  { 1536 }
-fn default_batch_size()     -> usize  { 32 }
-fn default_biomedbert_url() -> String { "http://localhost:8002".to_string() }
+fn default_embed_backend() -> String {
+    "openai".to_string()
+}
+fn default_embed_model() -> String {
+    "text-embedding-3-small".to_string()
+}
+fn default_embed_dim() -> usize {
+    1536
+}
+fn default_batch_size() -> usize {
+    32
+}
+fn default_biomedbert_url() -> String {
+    "http://localhost:8002".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NerConfig {
@@ -203,11 +247,21 @@ pub struct NerConfig {
     pub service_url: String,
 }
 
-fn default_ner_primary()    -> String { "trie".to_string() }  // Rust trie is default
-fn default_bern2_threshold()-> u32    { 50 }
-fn default_scispacy_image() -> String { "ferrumyx/scispacy-ner:latest".to_string() }
-fn default_bern2_image()    -> String { "ferrumyx/bern2-ner:latest".to_string() }
-fn default_ner_url()        -> String { "http://localhost:8001".to_string() }
+fn default_ner_primary() -> String {
+    "trie".to_string()
+} // Rust trie is default
+fn default_bern2_threshold() -> u32 {
+    50
+}
+fn default_scispacy_image() -> String {
+    "ferrumyx/scispacy-ner:latest".to_string()
+}
+fn default_bern2_image() -> String {
+    "ferrumyx/bern2-ner:latest".to_string()
+}
+fn default_ner_url() -> String {
+    "http://localhost:8001".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringConfig {
@@ -221,10 +275,18 @@ pub struct ScoringConfig {
     pub secondary_shortlist_threshold: f64,
 }
 
-fn default_focus_cancer()       -> String { "PAAD".to_string() }
-fn default_focus_mutation()     -> String { "KRAS_G12D".to_string() }
-fn default_primary_threshold()  -> f64    { 0.60 }
-fn default_secondary_threshold() -> f64   { 0.45 }
+fn default_focus_cancer() -> String {
+    "PAAD".to_string()
+}
+fn default_focus_mutation() -> String {
+    "KRAS_G12D".to_string()
+}
+fn default_primary_threshold() -> f64 {
+    0.60
+}
+fn default_secondary_threshold() -> f64 {
+    0.45
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructuralConfig {
@@ -242,10 +304,18 @@ pub struct StructuralConfig {
     pub admet_docker_image: String,
 }
 
-fn default_fpocket_image() -> String { "ferrumyx/fpocket:latest".to_string() }
-fn default_vina_image()    -> String { "ferrumyx/autodock-vina:latest".to_string() }
-fn default_rdkit_image()   -> String { "ferrumyx/rdkit-service:latest".to_string() }
-fn default_admet_image()   -> String { "ferrumyx/admet-ai:latest".to_string() }
+fn default_fpocket_image() -> String {
+    "ferrumyx/fpocket:latest".to_string()
+}
+fn default_vina_image() -> String {
+    "ferrumyx/autodock-vina:latest".to_string()
+}
+fn default_rdkit_image() -> String {
+    "ferrumyx/rdkit-service:latest".to_string()
+}
+fn default_admet_image() -> String {
+    "ferrumyx/admet-ai:latest".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecurityConfig {
@@ -257,9 +327,15 @@ pub struct SecurityConfig {
     pub audit_log_retention_days: u32,
 }
 
-fn bool_true()          -> bool { true }
-fn default_true()       -> bool { true }
-fn default_retention()  -> u32  { 90 }
+fn bool_true() -> bool {
+    true
+}
+fn default_true() -> bool {
+    true
+}
+fn default_retention() -> u32 {
+    90
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
@@ -267,7 +343,9 @@ pub struct WorkspaceConfig {
     pub path: String,
 }
 
-fn default_workspace_path() -> String { "./workspace".to_string() }
+fn default_workspace_path() -> String {
+    "./workspace".to_string()
+}
 
 mod tests;
 
@@ -275,8 +353,7 @@ impl Config {
     /// Load configuration from ferrumyx.toml.
     /// Checks FERRUMYX_CONFIG env var first, then current directory.
     pub fn load() -> anyhow::Result<Self> {
-        let path = std::env::var("FERRUMYX_CONFIG")
-            .unwrap_or_else(|_| "ferrumyx.toml".to_string());
+        let path = std::env::var("FERRUMYX_CONFIG").unwrap_or_else(|_| "ferrumyx.toml".to_string());
 
         if !Path::new(&path).exists() {
             anyhow::bail!(

@@ -5,8 +5,8 @@
 
 use crate::error::{DbError, Result};
 use crate::schema::*;
-use arrow_array::{Array, RecordBatch, StringArray, Int64Array, Float32Array, FixedSizeListArray};
-use arrow_schema::{Field, Schema, DataType};
+use arrow_array::{Array, FixedSizeListArray, Float32Array, Int64Array, RecordBatch, StringArray};
+use arrow_schema::{DataType, Field, Schema};
 use std::sync::Arc;
 
 /// Embedding dimension (BiomedBERT-base outputs 768-dim vectors)
@@ -46,7 +46,7 @@ pub fn paper_schema() -> Arc<Schema> {
 
 pub fn paper_to_record(paper: &Paper) -> Result<RecordBatch> {
     let schema = paper_schema();
-    
+
     let id = StringArray::from(vec![paper.id.to_string()]);
     let doi = StringArray::from(vec![paper.doi.as_deref()]);
     let pmid = StringArray::from(vec![paper.pmid.as_deref()]);
@@ -56,9 +56,7 @@ pub fn paper_to_record(paper: &Paper) -> Result<RecordBatch> {
     let raw_json = StringArray::from(vec![paper.raw_json.as_deref()]);
     let source = StringArray::from(vec![paper.source.as_str()]);
     let source_id = StringArray::from(vec![paper.source_id.as_deref()]);
-    let published_at = StringArray::from(vec![
-        paper.published_at.map(|dt| dt.to_rfc3339())
-    ]);
+    let published_at = StringArray::from(vec![paper.published_at.map(|dt| dt.to_rfc3339())]);
     let authors = StringArray::from(vec![paper.authors.as_deref()]);
     let journal = StringArray::from(vec![paper.journal.as_deref()]);
     let volume = StringArray::from(vec![paper.volume.as_deref()]);
@@ -70,7 +68,7 @@ pub fn paper_to_record(paper: &Paper) -> Result<RecordBatch> {
     let ingested_at = StringArray::from(vec![paper.ingested_at.to_rfc3339()]);
     let abstract_simhash = Int64Array::from(vec![paper.abstract_simhash]);
     let published_version_doi = StringArray::from(vec![paper.published_version_doi.as_deref()]);
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -96,36 +94,74 @@ pub fn paper_to_record(paper: &Paper) -> Result<RecordBatch> {
             Arc::new(abstract_simhash),
             Arc::new(published_version_doi),
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_paper(batch: &RecordBatch, row: usize) -> Result<Paper> {
     let get_string = |col: usize| -> String {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
         arr.value(row).to_string()
     };
-    
+
     let get_opt_string = |col: usize| -> Option<String> {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
     };
-    
+
     let get_opt_i64 = |col: usize| -> Option<i64> {
-        let arr = batch.column(col).as_any().downcast_ref::<Int64Array>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row)) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
     };
     let get_opt_i32 = |col: usize| -> Option<i32> {
-        let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row)) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
     };
-    
+
     let get_bool = |col: usize| -> bool {
-        let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap();
-        if arr.is_null(row) { false } else { arr.value(row) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
     };
 
     Ok(Paper {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         doi: get_opt_string(1),
         pmid: get_opt_string(2),
         title: get_string(3),
@@ -134,7 +170,8 @@ pub fn record_to_paper(batch: &RecordBatch, row: usize) -> Result<Paper> {
         raw_json: get_opt_string(6),
         source: get_string(7),
         source_id: get_opt_string(8),
-        published_at: get_opt_string(9).and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+        published_at: get_opt_string(9)
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
         authors: get_opt_string(10),
         journal: get_opt_string(11),
@@ -166,20 +203,28 @@ pub fn chunk_schema() -> Arc<Schema> {
         Field::new("section", DataType::Utf8, true),
         Field::new("page", DataType::Int64, true),
         Field::new("created_at", DataType::Utf8, false),
-        Field::new("embedding", DataType::FixedSizeList(
-            Arc::new(Field::new("item", DataType::Float32, false)),
-            EMBEDDING_DIM as i32
-        ), true),
-        Field::new("embedding_large", DataType::FixedSizeList(
-            Arc::new(Field::new("item", DataType::Float32, false)),
-            EMBEDDING_LARGE_DIM as i32
-        ), true),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, false)),
+                EMBEDDING_DIM as i32,
+            ),
+            true,
+        ),
+        Field::new(
+            "embedding_large",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, false)),
+                EMBEDDING_LARGE_DIM as i32,
+            ),
+            true,
+        ),
     ]))
 }
 
 pub fn chunk_to_record(chunk: &Chunk) -> Result<RecordBatch> {
     let schema = chunk_schema();
-    
+
     let id = StringArray::from(vec![chunk.id.to_string()]);
     let paper_id = StringArray::from(vec![chunk.paper_id.to_string()]);
     let chunk_index = Int64Array::from(vec![chunk.chunk_index]);
@@ -188,13 +233,15 @@ pub fn chunk_to_record(chunk: &Chunk) -> Result<RecordBatch> {
     let section = StringArray::from(vec![chunk.section.as_deref()]);
     let page = Int64Array::from(vec![chunk.page]);
     let created_at = StringArray::from(vec![chunk.created_at.to_rfc3339()]);
-    
+
     // Handle embedding
     let embedding: Arc<dyn Array> = if let Some(ref emb) = chunk.embedding {
         let values = Float32Array::from(emb.clone());
         let field = Arc::new(Field::new("item", DataType::Float32, false));
-        Arc::new(FixedSizeListArray::try_new(field, EMBEDDING_DIM as i32, Arc::new(values), None)
-            .map_err(|e| DbError::Arrow(e.to_string()))?)
+        Arc::new(
+            FixedSizeListArray::try_new(field, EMBEDDING_DIM as i32, Arc::new(values), None)
+                .map_err(|e| DbError::Arrow(e.to_string()))?,
+        )
     } else {
         Arc::new(FixedSizeListArray::new_null(
             Arc::new(Field::new("item", DataType::Float32, false)),
@@ -202,12 +249,14 @@ pub fn chunk_to_record(chunk: &Chunk) -> Result<RecordBatch> {
             1,
         ))
     };
-    
+
     let embedding_large: Arc<dyn Array> = if let Some(ref emb) = chunk.embedding_large {
         let values = Float32Array::from(emb.clone());
         let field = Arc::new(Field::new("item", DataType::Float32, false));
-        Arc::new(FixedSizeListArray::try_new(field, EMBEDDING_LARGE_DIM as i32, Arc::new(values), None)
-            .map_err(|e| DbError::Arrow(e.to_string()))?)
+        Arc::new(
+            FixedSizeListArray::try_new(field, EMBEDDING_LARGE_DIM as i32, Arc::new(values), None)
+                .map_err(|e| DbError::Arrow(e.to_string()))?,
+        )
     } else {
         Arc::new(FixedSizeListArray::new_null(
             Arc::new(Field::new("item", DataType::Float32, false)),
@@ -215,7 +264,7 @@ pub fn chunk_to_record(chunk: &Chunk) -> Result<RecordBatch> {
             1,
         ))
     };
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -230,44 +279,83 @@ pub fn chunk_to_record(chunk: &Chunk) -> Result<RecordBatch> {
             embedding,
             embedding_large,
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_chunk(batch: &RecordBatch, row: usize) -> Result<Chunk> {
     let get_string = |col: usize| -> String {
-        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
     };
-    
+
     let get_opt_string = |col: usize| -> Option<String> {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
     };
-    
+
     let get_i64 = |col: usize| -> i64 {
-        batch.column(col).as_any().downcast_ref::<Int64Array>().unwrap().value(row)
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .value(row)
     };
-    
+
     let get_opt_i64 = |col: usize| -> Option<i64> {
-        let arr = batch.column(col).as_any().downcast_ref::<Int64Array>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row)) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
     };
-    
+
     let get_embedding = |col: usize| -> Option<Vec<f32>> {
         let arr = batch.column(col);
-        if arr.is_null(row) { return None; }
+        if arr.is_null(row) {
+            return None;
+        }
         let list_arr = arr.as_any().downcast_ref::<FixedSizeListArray>().unwrap();
-        if list_arr.is_null(row) { return None; }
+        if list_arr.is_null(row) {
+            return None;
+        }
         let values = list_arr.value(row);
         let float_arr = values.as_any().downcast_ref::<Float32Array>().unwrap();
         Some(float_arr.values().to_vec())
     };
     let get_i32 = |col: usize| -> i32 {
-        batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap().value(row)
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap()
+            .value(row)
     };
-    
+
     Ok(Chunk {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        paper_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        paper_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         chunk_index: get_i64(2),
         token_count: get_i32(3),
         content: get_string(4),
@@ -303,7 +391,7 @@ pub fn entity_schema() -> Arc<Schema> {
 
 pub fn entity_to_record(entity: &Entity) -> Result<RecordBatch> {
     let schema = entity_schema();
-    
+
     let id = StringArray::from(vec![entity.id.to_string()]);
     let external_id = StringArray::from(vec![entity.external_id.as_str()]);
     let name = StringArray::from(vec![entity.name.as_str()]);
@@ -315,7 +403,7 @@ pub fn entity_to_record(entity: &Entity) -> Result<RecordBatch> {
     let metadata = StringArray::from(vec![entity.metadata.as_deref()]);
     let created_at = StringArray::from(vec![entity.created_at.to_rfc3339()]);
     let updated_at = StringArray::from(vec![entity.updated_at.to_rfc3339()]);
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -331,21 +419,37 @@ pub fn entity_to_record(entity: &Entity) -> Result<RecordBatch> {
             Arc::new(created_at),
             Arc::new(updated_at),
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_entity(batch: &RecordBatch, row: usize) -> Result<Entity> {
     let get_string = |col: usize| -> String {
-        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
     };
-    
+
     let get_opt_string = |col: usize| -> Option<String> {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
     };
-    
+
     Ok(Entity {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         external_id: get_string(1),
         name: get_string(2),
         canonical_name: get_opt_string(3),
@@ -389,7 +493,7 @@ pub fn kg_fact_schema() -> Arc<Schema> {
 
 pub fn kg_fact_to_record(fact: &KgFact) -> Result<RecordBatch> {
     let schema = kg_fact_schema();
-    
+
     let id = StringArray::from(vec![fact.id.to_string()]);
     let paper_id = StringArray::from(vec![fact.paper_id.to_string()]);
     let subject_id = StringArray::from(vec![fact.subject_id.to_string()]);
@@ -405,7 +509,7 @@ pub fn kg_fact_to_record(fact: &KgFact) -> Result<RecordBatch> {
     let valid_from = StringArray::from(vec![fact.valid_from.to_rfc3339()]);
     let valid_until = StringArray::from(vec![fact.valid_until.map(|dt| dt.to_rfc3339())]);
     let created_at = StringArray::from(vec![fact.created_at.to_rfc3339()]);
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -425,35 +529,67 @@ pub fn kg_fact_to_record(fact: &KgFact) -> Result<RecordBatch> {
             Arc::new(valid_until),
             Arc::new(created_at),
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_kg_fact(batch: &RecordBatch, row: usize) -> Result<KgFact> {
     let get_string = |col: usize| -> String {
-        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
     };
-    
+
     let get_opt_string = |col: usize| -> Option<String> {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
     };
-    
+
     let get_f32 = |col: usize| -> f32 {
-        batch.column(col).as_any().downcast_ref::<Float32Array>().unwrap().value(row)
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Float32Array>()
+            .unwrap()
+            .value(row)
     };
-    
+
     let get_opt_i32 = |col: usize| -> Option<i32> {
-        let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row)) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
     };
 
     Ok(KgFact {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        paper_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        subject_id: uuid::Uuid::parse_str(&get_string(2)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        paper_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        subject_id: uuid::Uuid::parse_str(&get_string(2))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         subject_name: get_string(3),
         predicate: get_string(4),
-        object_id: uuid::Uuid::parse_str(&get_string(5)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        object_id: uuid::Uuid::parse_str(&get_string(5))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         object_name: get_string(6),
         confidence: get_f32(7),
         evidence: get_opt_string(8),
@@ -463,7 +599,8 @@ pub fn record_to_kg_fact(batch: &RecordBatch, row: usize) -> Result<KgFact> {
         valid_from: chrono::DateTime::parse_from_rfc3339(&get_string(12))
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now()),
-        valid_until: get_opt_string(13).and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+        valid_until: get_opt_string(13)
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
         created_at: chrono::DateTime::parse_from_rfc3339(&get_string(14))
             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -492,7 +629,7 @@ pub fn entity_mention_schema() -> Arc<Schema> {
 
 pub fn entity_mention_to_record(mention: &EntityMention) -> Result<RecordBatch> {
     let schema = entity_mention_schema();
-    
+
     let id = StringArray::from(vec![mention.id.to_string()]);
     let entity_id = StringArray::from(vec![mention.entity_id.to_string()]);
     let chunk_id = StringArray::from(vec![mention.chunk_id.to_string()]);
@@ -503,7 +640,7 @@ pub fn entity_mention_to_record(mention: &EntityMention) -> Result<RecordBatch> 
     let confidence = Float32Array::from(vec![mention.confidence]);
     let context = StringArray::from(vec![mention.context.as_deref()]);
     let created_at = StringArray::from(vec![mention.created_at.to_rfc3339()]);
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -518,33 +655,65 @@ pub fn entity_mention_to_record(mention: &EntityMention) -> Result<RecordBatch> 
             Arc::new(context),
             Arc::new(created_at),
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_entity_mention(batch: &RecordBatch, row: usize) -> Result<EntityMention> {
     let get_string = |col: usize| -> String {
-        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
     };
-    
+
     let get_opt_string = |col: usize| -> Option<String> {
-        let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
     };
-    
+
     let get_i64 = |col: usize| -> i64 {
-        batch.column(col).as_any().downcast_ref::<Int64Array>().unwrap().value(row)
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .value(row)
     };
-    
+
     let get_opt_f32 = |col: usize| -> Option<f32> {
-        let arr = batch.column(col).as_any().downcast_ref::<Float32Array>().unwrap();
-        if arr.is_null(row) { None } else { Some(arr.value(row)) }
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
     };
-    
+
     Ok(EntityMention {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        entity_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        chunk_id: uuid::Uuid::parse_str(&get_string(2)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        paper_id: uuid::Uuid::parse_str(&get_string(3)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        entity_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        chunk_id: uuid::Uuid::parse_str(&get_string(2))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        paper_id: uuid::Uuid::parse_str(&get_string(3))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         start_offset: get_i64(4),
         end_offset: get_i64(5),
         text: get_string(6),
@@ -574,7 +743,7 @@ pub fn kg_conflict_schema() -> Arc<Schema> {
 
 pub fn kg_conflict_to_record(conflict: &KgConflict) -> Result<RecordBatch> {
     let schema = kg_conflict_schema();
-    
+
     let id = StringArray::from(vec![conflict.id.to_string()]);
     let fact_a_id = StringArray::from(vec![conflict.fact_a_id.to_string()]);
     let fact_b_id = StringArray::from(vec![conflict.fact_b_id.to_string()]);
@@ -582,7 +751,7 @@ pub fn kg_conflict_to_record(conflict: &KgConflict) -> Result<RecordBatch> {
     let net_confidence = Float32Array::from(vec![conflict.net_confidence]);
     let resolution = StringArray::from(vec![conflict.resolution.as_str()]);
     let detected_at = StringArray::from(vec![conflict.detected_at.to_rfc3339()]);
-    
+
     RecordBatch::try_new(
         schema,
         vec![
@@ -594,22 +763,37 @@ pub fn kg_conflict_to_record(conflict: &KgConflict) -> Result<RecordBatch> {
             Arc::new(resolution),
             Arc::new(detected_at),
         ],
-    ).map_err(|e| DbError::Arrow(e.to_string()))
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_kg_conflict(batch: &RecordBatch, row: usize) -> Result<KgConflict> {
     let get_string = |col: usize| -> String {
-        batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string()
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
     };
-    
+
     let get_f32 = |col: usize| -> f32 {
-        batch.column(col).as_any().downcast_ref::<Float32Array>().unwrap().value(row)
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<Float32Array>()
+            .unwrap()
+            .value(row)
     };
-    
+
     Ok(KgConflict {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        fact_a_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        fact_b_id: uuid::Uuid::parse_str(&get_string(2)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        fact_a_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        fact_b_id: uuid::Uuid::parse_str(&get_string(2))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         conflict_type: get_string(3),
         net_confidence: get_f32(4),
         resolution: get_string(5),
@@ -653,37 +837,108 @@ pub fn ent_gene_to_record(item: &EntGene) -> Result<RecordBatch> {
     let gene_biotype = StringArray::from(vec![item.gene_biotype.as_deref()]);
     let chromosome = StringArray::from(vec![item.chromosome.as_deref()]);
     let strand = arrow_array::Int16Array::from(vec![item.strand]);
-    let aliases = StringArray::from(vec![item.aliases.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())]);
+    let aliases = StringArray::from(vec![item
+        .aliases
+        .as_ref()
+        .map(|v| serde_json::to_string(v).unwrap_or_default())]);
     let oncogene_flag = arrow_array::BooleanArray::from(vec![Some(item.oncogene_flag)]);
     let tsg_flag = arrow_array::BooleanArray::from(vec![Some(item.tsg_flag)]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(hgnc_id),
-        Arc::new(symbol),
-        Arc::new(name),
-        Arc::new(uniprot_id),
-        Arc::new(ensembl_id),
-        Arc::new(entrez_id),
-        Arc::new(gene_biotype),
-        Arc::new(chromosome),
-        Arc::new(strand),
-        Arc::new(aliases),
-        Arc::new(oncogene_flag),
-        Arc::new(tsg_flag),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(hgnc_id),
+            Arc::new(symbol),
+            Arc::new(name),
+            Arc::new(uniprot_id),
+            Arc::new(ensembl_id),
+            Arc::new(entrez_id),
+            Arc::new(gene_biotype),
+            Arc::new(chromosome),
+            Arc::new(strand),
+            Arc::new(aliases),
+            Arc::new(oncogene_flag),
+            Arc::new(tsg_flag),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_gene(batch: &RecordBatch, row: usize) -> Result<EntGene> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntGene {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         hgnc_id: get_opt_string(1),
         symbol: get_string(2),
         name: get_opt_string(3),
@@ -696,7 +951,9 @@ pub fn record_to_ent_gene(batch: &RecordBatch, row: usize) -> Result<EntGene> {
         aliases: get_opt_string(10).and_then(|s| serde_json::from_str(&s).ok()),
         oncogene_flag: get_bool(11),
         tsg_flag: get_bool(12),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(13)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(13))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -731,32 +988,101 @@ pub fn ent_mutation_to_record(item: &EntMutation) -> Result<RecordBatch> {
     let hotspot_flag = arrow_array::BooleanArray::from(vec![Some(item.hotspot_flag)]);
     let vaf_context = StringArray::from(vec![item.vaf_context.as_deref()]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(gene_id),
-        Arc::new(hgvs_p),
-        Arc::new(hgvs_c),
-        Arc::new(rs_id),
-        Arc::new(aa_ref),
-        Arc::new(aa_alt),
-        Arc::new(aa_position),
-        Arc::new(oncogenicity),
-        Arc::new(hotspot_flag),
-        Arc::new(vaf_context),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(gene_id),
+            Arc::new(hgvs_p),
+            Arc::new(hgvs_c),
+            Arc::new(rs_id),
+            Arc::new(aa_ref),
+            Arc::new(aa_alt),
+            Arc::new(aa_position),
+            Arc::new(oncogenicity),
+            Arc::new(hotspot_flag),
+            Arc::new(vaf_context),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_mutation(batch: &RecordBatch, row: usize) -> Result<EntMutation> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntMutation {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        gene_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        gene_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         hgvs_p: get_opt_string(2),
         hgvs_c: get_opt_string(3),
         rs_id: get_opt_string(4),
@@ -766,7 +1092,9 @@ pub fn record_to_ent_mutation(batch: &RecordBatch, row: usize) -> Result<EntMuta
         oncogenicity: get_opt_string(8),
         hotspot_flag: get_bool(9),
         vaf_context: get_opt_string(10),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(11)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(11))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -793,34 +1121,104 @@ pub fn ent_cancer_type_to_record(item: &EntCancerType) -> Result<RecordBatch> {
     let parent_code = StringArray::from(vec![item.parent_code.as_deref()]);
     let level = arrow_array::Int32Array::from(vec![item.level]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(oncotree_code),
-        Arc::new(oncotree_name),
-        Arc::new(icd_o3_code),
-        Arc::new(tissue),
-        Arc::new(parent_code),
-        Arc::new(level),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(oncotree_code),
+            Arc::new(oncotree_name),
+            Arc::new(icd_o3_code),
+            Arc::new(tissue),
+            Arc::new(parent_code),
+            Arc::new(level),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_cancer_type(batch: &RecordBatch, row: usize) -> Result<EntCancerType> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntCancerType {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         oncotree_code: get_opt_string(1),
         oncotree_name: get_opt_string(2),
         icd_o3_code: get_opt_string(3),
         tissue: get_opt_string(4),
         parent_code: get_opt_string(5),
         level: get_opt_i32(6),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(7)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(7))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -844,37 +1242,110 @@ pub fn ent_pathway_to_record(item: &EntPathway) -> Result<RecordBatch> {
     let reactome_id = StringArray::from(vec![item.reactome_id.as_deref()]);
     let go_term = StringArray::from(vec![item.go_term.as_deref()]);
     let name = StringArray::from(vec![item.name.as_str()]);
-    let gene_members = StringArray::from(vec![item.gene_members.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())]);
+    let gene_members = StringArray::from(vec![item
+        .gene_members
+        .as_ref()
+        .map(|v| serde_json::to_string(v).unwrap_or_default())]);
     let source = StringArray::from(vec![item.source.as_deref()]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(kegg_id),
-        Arc::new(reactome_id),
-        Arc::new(go_term),
-        Arc::new(name),
-        Arc::new(gene_members),
-        Arc::new(source),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(kegg_id),
+            Arc::new(reactome_id),
+            Arc::new(go_term),
+            Arc::new(name),
+            Arc::new(gene_members),
+            Arc::new(source),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_pathway(batch: &RecordBatch, row: usize) -> Result<EntPathway> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntPathway {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         kegg_id: get_opt_string(1),
         reactome_id: get_opt_string(2),
         go_term: get_opt_string(3),
         name: get_string(4),
         gene_members: get_opt_string(5).and_then(|s| serde_json::from_str(&s).ok()),
         source: get_opt_string(6),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(7)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(7))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -909,42 +1380,117 @@ pub fn ent_clinical_evidence_to_record(item: &EntClinicalEvidence) -> Result<Rec
     let outcome = StringArray::from(vec![item.outcome.as_deref()]);
     let evidence_grade = StringArray::from(vec![item.evidence_grade.as_deref()]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(nct_id),
-        Arc::new(pmid),
-        Arc::new(doi),
-        Arc::new(phase),
-        Arc::new(intervention),
-        Arc::new(target_gene_id),
-        Arc::new(cancer_id),
-        Arc::new(primary_endpoint),
-        Arc::new(outcome),
-        Arc::new(evidence_grade),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(nct_id),
+            Arc::new(pmid),
+            Arc::new(doi),
+            Arc::new(phase),
+            Arc::new(intervention),
+            Arc::new(target_gene_id),
+            Arc::new(cancer_id),
+            Arc::new(primary_endpoint),
+            Arc::new(outcome),
+            Arc::new(evidence_grade),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
-pub fn record_to_ent_clinical_evidence(batch: &RecordBatch, row: usize) -> Result<EntClinicalEvidence> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+pub fn record_to_ent_clinical_evidence(
+    batch: &RecordBatch,
+    row: usize,
+) -> Result<EntClinicalEvidence> {
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntClinicalEvidence {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         nct_id: get_opt_string(1),
         pmid: get_opt_string(2),
         doi: get_opt_string(3),
         phase: get_opt_string(4),
         intervention: get_opt_string(5),
-        target_gene_id: uuid::Uuid::parse_str(&get_string(6)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        cancer_id: uuid::Uuid::parse_str(&get_string(7)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        target_gene_id: uuid::Uuid::parse_str(&get_string(6))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        cancer_id: uuid::Uuid::parse_str(&get_string(7))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         primary_endpoint: get_opt_string(8),
         outcome: get_opt_string(9),
         evidence_grade: get_opt_string(10),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(11)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(11))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -973,31 +1519,102 @@ pub fn ent_compound_to_record(item: &EntCompound) -> Result<RecordBatch> {
     let moa = StringArray::from(vec![item.moa.as_deref()]);
     let patent_status = StringArray::from(vec![item.patent_status.as_deref()]);
     let max_phase = arrow_array::Int32Array::from(vec![item.max_phase]);
-    let target_gene_ids = StringArray::from(vec![item.target_gene_ids.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())]);
+    let target_gene_ids = StringArray::from(vec![item
+        .target_gene_ids
+        .as_ref()
+        .map(|v| serde_json::to_string(v).unwrap_or_default())]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(chembl_id),
-        Arc::new(name),
-        Arc::new(smiles),
-        Arc::new(inchi_key),
-        Arc::new(moa),
-        Arc::new(patent_status),
-        Arc::new(max_phase),
-        Arc::new(target_gene_ids),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(chembl_id),
+            Arc::new(name),
+            Arc::new(smiles),
+            Arc::new(inchi_key),
+            Arc::new(moa),
+            Arc::new(patent_status),
+            Arc::new(max_phase),
+            Arc::new(target_gene_ids),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_compound(batch: &RecordBatch, row: usize) -> Result<EntCompound> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntCompound {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         chembl_id: get_opt_string(1),
         name: get_opt_string(2),
         smiles: get_opt_string(3),
@@ -1006,7 +1623,9 @@ pub fn record_to_ent_compound(batch: &RecordBatch, row: usize) -> Result<EntComp
         patent_status: get_opt_string(6),
         max_phase: get_opt_i32(7),
         target_gene_ids: get_opt_string(8).and_then(|s| serde_json::from_str(&s).ok()),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(9)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(9))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -1030,7 +1649,10 @@ pub fn ent_structure_to_record(item: &EntStructure) -> Result<RecordBatch> {
     let schema = ent_structure_schema();
     let id = StringArray::from(vec![item.id.to_string()]);
     let gene_id = StringArray::from(vec![item.gene_id.to_string()]);
-    let pdb_ids = StringArray::from(vec![item.pdb_ids.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())]);
+    let pdb_ids = StringArray::from(vec![item
+        .pdb_ids
+        .as_ref()
+        .map(|v| serde_json::to_string(v).unwrap_or_default())]);
     let best_resolution = arrow_array::Float32Array::from(vec![item.best_resolution]);
     let exp_method = StringArray::from(vec![item.exp_method.as_deref()]);
     let af_accession = StringArray::from(vec![item.af_accession.as_deref()]);
@@ -1039,31 +1661,100 @@ pub fn ent_structure_to_record(item: &EntStructure) -> Result<RecordBatch> {
     let has_pdb = arrow_array::BooleanArray::from(vec![Some(item.has_pdb)]);
     let has_alphafold = arrow_array::BooleanArray::from(vec![Some(item.has_alphafold)]);
     let updated_at = StringArray::from(vec![item.updated_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(gene_id),
-        Arc::new(pdb_ids),
-        Arc::new(best_resolution),
-        Arc::new(exp_method),
-        Arc::new(af_accession),
-        Arc::new(af_plddt_mean),
-        Arc::new(af_plddt_active),
-        Arc::new(has_pdb),
-        Arc::new(has_alphafold),
-        Arc::new(updated_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(gene_id),
+            Arc::new(pdb_ids),
+            Arc::new(best_resolution),
+            Arc::new(exp_method),
+            Arc::new(af_accession),
+            Arc::new(af_plddt_mean),
+            Arc::new(af_plddt_active),
+            Arc::new(has_pdb),
+            Arc::new(has_alphafold),
+            Arc::new(updated_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_structure(batch: &RecordBatch, row: usize) -> Result<EntStructure> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntStructure {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        gene_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        gene_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         pdb_ids: get_opt_string(2).and_then(|s| serde_json::from_str(&s).ok()),
         best_resolution: get_opt_f32(3),
         exp_method: get_opt_string(4),
@@ -1072,7 +1763,9 @@ pub fn record_to_ent_structure(batch: &RecordBatch, row: usize) -> Result<EntStr
         af_plddt_active: get_opt_f32(7),
         has_pdb: get_bool(8),
         has_alphafold: get_bool(9),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&get_string(10)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        updated_at: chrono::DateTime::parse_from_rfc3339(&get_string(10))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -1099,34 +1792,105 @@ pub fn ent_druggability_to_record(item: &EntDruggability) -> Result<RecordBatch>
     let dogsitescorer = arrow_array::Float32Array::from(vec![item.dogsitescorer]);
     let overall_assessment = StringArray::from(vec![item.overall_assessment.as_deref()]);
     let assessed_at = StringArray::from(vec![item.assessed_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(structure_id),
-        Arc::new(fpocket_score),
-        Arc::new(fpocket_volume),
-        Arc::new(fpocket_pocket_count),
-        Arc::new(dogsitescorer),
-        Arc::new(overall_assessment),
-        Arc::new(assessed_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(structure_id),
+            Arc::new(fpocket_score),
+            Arc::new(fpocket_volume),
+            Arc::new(fpocket_pocket_count),
+            Arc::new(dogsitescorer),
+            Arc::new(overall_assessment),
+            Arc::new(assessed_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
 pub fn record_to_ent_druggability(batch: &RecordBatch, row: usize) -> Result<EntDruggability> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntDruggability {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        structure_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        structure_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         fpocket_score: get_opt_f32(2),
         fpocket_volume: get_opt_f32(3),
         fpocket_pocket_count: get_opt_i32(4),
         dogsitescorer: get_opt_f32(5),
         overall_assessment: get_opt_string(6),
-        assessed_at: chrono::DateTime::parse_from_rfc3339(&get_string(7)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        assessed_at: chrono::DateTime::parse_from_rfc3339(&get_string(7))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }
 
@@ -1159,39 +1923,115 @@ pub fn ent_synthetic_lethality_to_record(item: &EntSyntheticLethality) -> Result
     let confidence = arrow_array::Float32Array::from(vec![item.confidence]);
     let pmid = StringArray::from(vec![item.pmid.as_deref()]);
     let created_at = StringArray::from(vec![item.created_at.to_rfc3339()]);
-    RecordBatch::try_new(schema, vec![
-        Arc::new(id) as Arc<dyn Array>,
-        Arc::new(gene1_id),
-        Arc::new(gene2_id),
-        Arc::new(cancer_id),
-        Arc::new(evidence_type),
-        Arc::new(source_db),
-        Arc::new(screen_id),
-        Arc::new(effect_size),
-        Arc::new(confidence),
-        Arc::new(pmid),
-        Arc::new(created_at),
-    ]).map_err(|e| DbError::Arrow(e.to_string()))
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(id) as Arc<dyn Array>,
+            Arc::new(gene1_id),
+            Arc::new(gene2_id),
+            Arc::new(cancer_id),
+            Arc::new(evidence_type),
+            Arc::new(source_db),
+            Arc::new(screen_id),
+            Arc::new(effect_size),
+            Arc::new(confidence),
+            Arc::new(pmid),
+            Arc::new(created_at),
+        ],
+    )
+    .map_err(|e| DbError::Arrow(e.to_string()))
 }
 
-pub fn record_to_ent_synthetic_lethality(batch: &RecordBatch, row: usize) -> Result<EntSyntheticLethality> {
-    let get_string = |col: usize| -> String { batch.column(col).as_any().downcast_ref::<StringArray>().unwrap().value(row).to_string() };
-    let get_opt_string = |col: usize| -> Option<String> { let arr = batch.column(col).as_any().downcast_ref::<StringArray>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row).to_string()) } };
-    let get_bool = |col: usize| -> bool { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::BooleanArray>().unwrap(); if arr.is_null(row) { false } else { arr.value(row) } };
-    let get_opt_i16 = |col: usize| -> Option<i16> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int16Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_i32 = |col: usize| -> Option<i32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Int32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
-    let get_opt_f32 = |col: usize| -> Option<f32> { let arr = batch.column(col).as_any().downcast_ref::<arrow_array::Float32Array>().unwrap(); if arr.is_null(row) { None } else { Some(arr.value(row)) } };
+pub fn record_to_ent_synthetic_lethality(
+    batch: &RecordBatch,
+    row: usize,
+) -> Result<EntSyntheticLethality> {
+    let get_string = |col: usize| -> String {
+        batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(row)
+            .to_string()
+    };
+    let get_opt_string = |col: usize| -> Option<String> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row).to_string())
+        }
+    };
+    let get_bool = |col: usize| -> bool {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::BooleanArray>()
+            .unwrap();
+        if arr.is_null(row) {
+            false
+        } else {
+            arr.value(row)
+        }
+    };
+    let get_opt_i16 = |col: usize| -> Option<i16> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int16Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_i32 = |col: usize| -> Option<i32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Int32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
+    let get_opt_f32 = |col: usize| -> Option<f32> {
+        let arr = batch
+            .column(col)
+            .as_any()
+            .downcast_ref::<arrow_array::Float32Array>()
+            .unwrap();
+        if arr.is_null(row) {
+            None
+        } else {
+            Some(arr.value(row))
+        }
+    };
     Ok(EntSyntheticLethality {
-        id: uuid::Uuid::parse_str(&get_string(0)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        gene1_id: uuid::Uuid::parse_str(&get_string(1)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        gene2_id: uuid::Uuid::parse_str(&get_string(2)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
-        cancer_id: uuid::Uuid::parse_str(&get_string(3)).map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        id: uuid::Uuid::parse_str(&get_string(0))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        gene1_id: uuid::Uuid::parse_str(&get_string(1))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        gene2_id: uuid::Uuid::parse_str(&get_string(2))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
+        cancer_id: uuid::Uuid::parse_str(&get_string(3))
+            .map_err(|e| DbError::InvalidQuery(e.to_string()))?,
         evidence_type: get_opt_string(4),
         source_db: get_opt_string(5),
         screen_id: get_opt_string(6),
         effect_size: get_opt_f32(7),
         confidence: get_opt_f32(8),
         pmid: get_opt_string(9),
-        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(10)).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
+        created_at: chrono::DateTime::parse_from_rfc3339(&get_string(10))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
     })
 }

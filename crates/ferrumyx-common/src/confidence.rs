@@ -81,13 +81,19 @@ mod tests {
 
     #[test]
     fn test_retracted_is_zero() {
-        let mods = ConfidenceModifiers { is_retracted: true, ..Default::default() };
+        let mods = ConfidenceModifiers {
+            is_retracted: true,
+            ..Default::default()
+        };
         assert_eq!(compute_confidence(0.9, &mods), 0.0);
     }
 
     #[test]
     fn test_preprint_penalty() {
-        let mods = ConfidenceModifiers { is_preprint: true, ..Default::default() };
+        let mods = ConfidenceModifiers {
+            is_preprint: true,
+            ..Default::default()
+        };
         let c = compute_confidence(0.85, &mods);
         assert!((c - 0.595).abs() < 1e-6);
     }

@@ -32,15 +32,15 @@ impl Default for WeightVector {
     /// Initial expert prior weights from ARCHITECTURE.md §4.1
     fn default() -> Self {
         Self {
-            mutation_freq:          0.20,
-            crispr_dependency:      0.18,
-            survival_correlation:   0.15,
+            mutation_freq: 0.20,
+            crispr_dependency: 0.18,
+            survival_correlation: 0.15,
             expression_specificity: 0.12,
-            structural_tractability:0.12,
-            pocket_detectability:   0.08,
-            novelty_score:          0.07,
-            pathway_independence:   0.05,
-            literature_novelty:     0.03,
+            structural_tractability: 0.12,
+            pocket_detectability: 0.08,
+            novelty_score: 0.07,
+            pathway_independence: 0.05,
+            literature_novelty: 0.03,
         }
     }
 }
@@ -72,15 +72,15 @@ impl WeightVector {
             + self.pathway_independence
             + self.literature_novelty;
         if sum > 0.0 {
-            self.mutation_freq           /= sum;
-            self.crispr_dependency       /= sum;
-            self.survival_correlation    /= sum;
-            self.expression_specificity  /= sum;
+            self.mutation_freq /= sum;
+            self.crispr_dependency /= sum;
+            self.survival_correlation /= sum;
+            self.expression_specificity /= sum;
             self.structural_tractability /= sum;
-            self.pocket_detectability    /= sum;
-            self.novelty_score           /= sum;
-            self.pathway_independence    /= sum;
-            self.literature_novelty      /= sum;
+            self.pocket_detectability /= sum;
+            self.novelty_score /= sum;
+            self.pathway_independence /= sum;
+            self.literature_novelty /= sum;
         }
     }
 

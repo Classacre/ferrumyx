@@ -28,34 +28,34 @@
 //! }
 //! ```
 
+pub mod chunks;
 pub mod database;
+pub mod ent_stage;
+pub mod entities;
+pub mod entity_mentions;
 pub mod error;
+pub mod kg_conflicts;
+pub mod kg_facts;
+pub mod papers;
+pub mod phase4_signals;
 pub mod schema;
 pub mod schema_arrow;
-pub mod papers;
-pub mod chunks;
-pub mod entities;
-pub mod kg_facts;
-pub mod entity_mentions;
-pub mod kg_conflicts;
 pub mod target_scores;
-pub mod ent_stage;
-pub mod phase4_signals;
 
-pub use database::{Database, DatabaseStats};
-pub use error::{DbError, Result};
-pub use schema::{
-    Paper, Chunk, Entity, KgFact, EntityMention, TargetScore,
-    EntityType, EMBEDDING_DIM, KgConflict,
-    TABLE_PAPERS, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_KG_FACTS, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS, TABLE_TARGET_SCORES
-};
-pub use papers::PaperRepository;
 pub use chunks::ChunkRepository;
-pub use entities::EntityRepository;
-pub use kg_facts::KgFactRepository;
-pub use entity_mentions::EntityMentionRepository;
-pub use kg_conflicts::KgConflictRepository;
-pub use target_scores::TargetScoreRepository;
+pub use database::{Database, DatabaseStats};
 pub use ent_stage::{EntEnrichment, EntStageRepository};
+pub use entities::EntityRepository;
+pub use entity_mentions::EntityMentionRepository;
+pub use error::{DbError, Result};
+pub use kg_conflicts::KgConflictRepository;
+pub use kg_facts::KgFactRepository;
+pub use papers::PaperRepository;
 pub use phase4_signals::Phase4SignalRepository;
+pub use schema::{
+    Chunk, Entity, EntityMention, EntityType, KgConflict, KgFact, Paper, TargetScore,
+    EMBEDDING_DIM, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS,
+    TABLE_KG_FACTS, TABLE_PAPERS, TABLE_TARGET_SCORES,
+};
 pub use schema::{EntChemblTarget, EntGtexExpression, EntReactomeGene, EntTcgaSurvival};
+pub use target_scores::TargetScoreRepository;

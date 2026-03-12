@@ -119,8 +119,8 @@ impl Tool for SystemCommandTool {
             .spawn()
             .map_err(|e| ToolError::ExecutionFailed(format!("spawn failed: {e}")))?;
 
-        let timed = tokio::time::timeout(Duration::from_secs(timeout_secs), child.wait_with_output())
-            .await;
+        let timed =
+            tokio::time::timeout(Duration::from_secs(timeout_secs), child.wait_with_output()).await;
         let output = match timed {
             Ok(Ok(o)) => o,
             Ok(Err(e)) => return Err(ToolError::ExecutionFailed(format!("command failed: {e}"))),

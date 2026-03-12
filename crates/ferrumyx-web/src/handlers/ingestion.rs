@@ -1,25 +1,18 @@
 //! Ingestion pipeline monitor and trigger — wired to real pipeline.
 
-use axum::{
-    extract::State,
-    response::Html,
-    Form,
-};
+use axum::{extract::State, response::Html, Form};
 use serde::Deserialize;
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use ferrumyx_ingestion::pipeline::{
-    IngestionJob, IngestionSourceSpec, run_ingestion,
-};
 use ferrumyx_ingestion::embedding::{
-    EmbeddingBackend as IngestionEmbeddingBackend,
-    EmbeddingConfig as IngestionEmbeddingConfig,
+    EmbeddingBackend as IngestionEmbeddingBackend, EmbeddingConfig as IngestionEmbeddingConfig,
 };
+use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionSourceSpec};
 use ferrumyx_ingestion::repository::IngestionRepository;
 
-use crate::state::{SharedState, AppEvent};
 use crate::handlers::dashboard::NAV_HTML;
+use crate::state::{AppEvent, SharedState};
 
 // ── Form input ────────────────────────────────────────────────────────────────
 
@@ -58,70 +51,99 @@ pub async fn ingestion_run(
 ) -> Html<String> {
     // Parse source list from the multi-select
     let mut sources = Vec::new();
-    if form.src_pubmed.is_some() { sources.push(IngestionSourceSpec::PubMed); }
-    if form.src_europepmc.is_some() { sources.push(IngestionSourceSpec::EuropePmc); }
-    if form.src_biorxiv.is_some() { sources.push(IngestionSourceSpec::BioRxiv); }
-    if form.src_medrxiv.is_some() { sources.push(IngestionSourceSpec::MedRxiv); }
-    if form.src_arxiv.is_some() { sources.push(IngestionSourceSpec::Arxiv); }
-    if form.src_clinicaltrials.is_some() { sources.push(IngestionSourceSpec::ClinicalTrials); }
-    if form.src_crossref.is_some() { sources.push(IngestionSourceSpec::CrossRef); }
-    if form.src_semanticscholar.is_some() { sources.push(IngestionSourceSpec::SemanticScholar); }
-    
-    if sources.is_empty() { sources.push(IngestionSourceSpec::PubMed); }
+    if form.src_pubmed.is_some() {
+        sources.push(IngestionSourceSpec::PubMed);
+    }
+    if form.src_europepmc.is_some() {
+        sources.push(IngestionSourceSpec::EuropePmc);
+    }
+    if form.src_biorxiv.is_some() {
+        sources.push(IngestionSourceSpec::BioRxiv);
+    }
+    if form.src_medrxiv.is_some() {
+        sources.push(IngestionSourceSpec::MedRxiv);
+    }
+    if form.src_arxiv.is_some() {
+        sources.push(IngestionSourceSpec::Arxiv);
+    }
+    if form.src_clinicaltrials.is_some() {
+        sources.push(IngestionSourceSpec::ClinicalTrials);
+    }
+    if form.src_crossref.is_some() {
+        sources.push(IngestionSourceSpec::CrossRef);
+    }
+    if form.src_semanticscholar.is_some() {
+        sources.push(IngestionSourceSpec::SemanticScholar);
+    }
+
+    if sources.is_empty() {
+        sources.push(IngestionSourceSpec::PubMed);
+    }
 
     let job = IngestionJob {
-        gene:           form.gene.clone(),
-        mutation:       form.mutation.clone().filter(|m| !m.is_empty()),
-        cancer_type:    form.cancer.clone(),
-        max_results:    form.max_results.unwrap_or(100),
+        gene: form.gene.clone(),
+        mutation: form.mutation.clone().filter(|m| !m.is_empty()),
+        cancer_type: form.cancer.clone(),
+        max_results: form.max_results.unwrap_or(100),
         sources,
         pubmed_api_key: resolve_pubmed_api_key(),
         semantic_scholar_api_key: resolve_semantic_scholar_api_key(),
         unpaywall_email: resolve_unpaywall_email(),
-        embedding_cfg:  resolve_embedding_cfg_for_form(&form),
-        enable_scihub_fallback: form.enable_scihub.is_some() && form.enable_scihub.as_deref() == Some("on"),
+        embedding_cfg: resolve_embedding_cfg_for_form(&form),
+        enable_scihub_fallback: form.enable_scihub.is_some()
+            && form.enable_scihub.as_deref() == Some("on"),
+        full_text_enabled: true,
         source_timeout_secs: Some(45),
+        full_text_step_timeout_secs: Some(15),
+        full_text_prefetch_workers: None,
+        source_cache_enabled: true,
+        source_cache_ttl_secs: Some(30 * 60),
     };
 
     // Emit SSE start event immediately
     let _ = state.event_tx.send(AppEvent::PipelineStatus {
-        stage:   "search".to_string(),
-        message: format!("Starting ingestion: {} {} in {}", job.gene, job.mutation.as_deref().unwrap_or(""), job.cancer_type),
-        count:   0,
+        stage: "search".to_string(),
+        message: format!(
+            "Starting ingestion: {} {} in {}",
+            job.gene,
+            job.mutation.as_deref().unwrap_or(""),
+            job.cancer_type
+        ),
+        count: 0,
     });
 
     // Spawn ingestion in background task so we can return immediately
     let event_tx = state.event_tx.clone();
     let db = state.db.clone();
-    
+
     tokio::spawn(async move {
         let repo = Arc::new(IngestionRepository::new(db));
-        
+
         // Update progress before starting
         let _ = event_tx.send(AppEvent::PipelineStatus {
-            stage:   "searching".to_string(),
+            stage: "searching".to_string(),
             message: "Searching PubMed and Europe PMC...".to_string(),
-            count:   0,
+            count: 0,
         });
 
         let result = run_ingestion(job, repo, None).await;
 
         // Emit SSE completion events
         let _ = event_tx.send(AppEvent::PipelineStatus {
-            stage:   "complete".to_string(),
+            stage: "complete".to_string(),
             message: format!(
                 "Ingestion complete — {} papers found, {} inserted, {} chunks",
                 result.papers_found, result.papers_inserted, result.chunks_inserted
             ),
-            count:   result.papers_inserted as u64,
+            count: result.papers_inserted as u64,
         });
 
         // Also emit individual PaperIngested events
         for i in 0..result.papers_inserted.min(10) {
             let _ = event_tx.send(AppEvent::PaperIngested {
                 paper_id: format!("{}-{}", result.job_id, i),
-                title:    format!("Paper #{} ingested from {}", i + 1, result.query),
-                source:   "ingestion".to_string(),
+                title: format!("Paper #{} ingested from {}", i + 1, result.query),
+                source: "ingestion".to_string(),
             });
         }
     });
@@ -135,7 +157,11 @@ pub async fn ingestion_run(
         form.cancer
     );
 
-    Html(render_page_with_progress(stats, &summary, form.max_results.unwrap_or(100) as i64))
+    Html(render_page_with_progress(
+        stats,
+        &summary,
+        form.max_results.unwrap_or(100) as i64,
+    ))
 }
 
 // ── Stats loader ──────────────────────────────────────────────────────────────
@@ -303,7 +329,10 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
 
     let backend_str = explicit_backend
         .map(ToString::to_string)
-        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "backend"])))
+        .or_else(|| {
+            root.as_ref()
+                .and_then(|r| toml_string(r, &["embedding", "backend"]))
+        })
         .unwrap_or_else(|| "rust_native".to_string());
     let backend = parse_embedding_backend(&backend_str);
 
@@ -313,8 +342,13 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
-        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "embedding_model"])))
-        .unwrap_or_else(|| "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string());
+        .or_else(|| {
+            root.as_ref()
+                .and_then(|r| toml_string(r, &["embedding", "embedding_model"]))
+        })
+        .unwrap_or_else(|| {
+            "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string()
+        });
 
     let base_url = root
         .as_ref()
@@ -330,18 +364,26 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
             toml_u64(
                 r,
                 &["embedding", "embedding_dim"],
-                if matches!(backend, IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert) {
+                if matches!(
+                    backend,
+                    IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert
+                ) {
                     768
                 } else {
                     1536
                 },
             )
         })
-        .unwrap_or(if matches!(backend, IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert) {
-            768
-        } else {
-            1536
-        })
+        .unwrap_or(
+            if matches!(
+                backend,
+                IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert
+            ) {
+                768
+            } else {
+                1536
+            },
+        )
         .clamp(64, 8192) as usize;
 
     let api_key = form
@@ -350,7 +392,10 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
-        .or_else(|| root.as_ref().and_then(|r| toml_string(r, &["embedding", "api_key"])))
+        .or_else(|| {
+            root.as_ref()
+                .and_then(|r| toml_string(r, &["embedding", "api_key"]))
+        })
         .or_else(|| match backend {
             IngestionEmbeddingBackend::OpenAi => std::env::var("FERRUMYX_OPENAI_API_KEY")
                 .ok()
@@ -378,20 +423,25 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
 // ── Source parser ─────────────────────────────────────────────────────────────
 
 fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
-    let v: Vec<IngestionSourceSpec> = s.split(',')
+    let v: Vec<IngestionSourceSpec> = s
+        .split(',')
         .filter_map(|x| match x.trim() {
-            "pubmed"         => Some(IngestionSourceSpec::PubMed),
-            "europepmc"      => Some(IngestionSourceSpec::EuropePmc),
-            "biorxiv"        => Some(IngestionSourceSpec::BioRxiv),
-            "medrxiv"        => Some(IngestionSourceSpec::MedRxiv),
-            "arxiv"          => Some(IngestionSourceSpec::Arxiv),
+            "pubmed" => Some(IngestionSourceSpec::PubMed),
+            "europepmc" => Some(IngestionSourceSpec::EuropePmc),
+            "biorxiv" => Some(IngestionSourceSpec::BioRxiv),
+            "medrxiv" => Some(IngestionSourceSpec::MedRxiv),
+            "arxiv" => Some(IngestionSourceSpec::Arxiv),
             "clinicaltrials" => Some(IngestionSourceSpec::ClinicalTrials),
-            "crossref"       => Some(IngestionSourceSpec::CrossRef),
-            "semanticscholar"=> Some(IngestionSourceSpec::SemanticScholar),
-            _                => None,
+            "crossref" => Some(IngestionSourceSpec::CrossRef),
+            "semanticscholar" => Some(IngestionSourceSpec::SemanticScholar),
+            _ => None,
         })
         .collect();
-    if v.is_empty() { vec![IngestionSourceSpec::PubMed] } else { v }
+    if v.is_empty() {
+        vec![IngestionSourceSpec::PubMed]
+    } else {
+        v
+    }
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -405,14 +455,21 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
         String::new()
     } else {
         let is_running = summary.contains("started");
-        let alert_class = if is_running { "alert-info" } else { "alert-success" };
-        format!(r#"
+        let alert_class = if is_running {
+            "alert-info"
+        } else {
+            "alert-success"
+        };
+        format!(
+            r#"
         <div class="alert {} alert-dismissible mt-3">
             {}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>"#, alert_class, summary)
+        </div>"#,
+            alert_class, summary
+        )
     };
-    
+
     let progress_display = if total_expected > 0 { "block" } else { "none" };
 
     let audit_rows: String = if stats.recent_audit.is_empty() {
@@ -431,7 +488,8 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
         }).collect()
     };
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -623,7 +681,7 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
                     <summary>Advanced Options</summary>
                     <div class="mt-2">
                         <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                            <input type="checkbox" name="enable_scihub" id="enable_scihub" checked> <span style="font-weight:500; color: var(--brand-purple);">Enable Sci-Hub fallback for full-text retrieval</span>
+                            <input type="checkbox" name="enable_scihub" id="enable_scihub"> <span style="font-weight:500; color: var(--brand-purple);">Enable Sci-Hub fallback for full-text retrieval</span>
                         </label>
                     </div>
                 </details>
@@ -656,9 +714,13 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
 </html>"#,
         NAV_HTML,
         banner,
-        stats.total, stats.parsed, stats.pending, stats.failed,
+        stats.total,
+        stats.parsed,
+        stats.pending,
+        stats.failed,
         progress_display,
         total_expected,
         total_expected,
-        audit_rows)
+        audit_rows
+    )
 }

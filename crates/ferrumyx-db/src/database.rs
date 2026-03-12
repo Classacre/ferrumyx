@@ -5,7 +5,7 @@
 use crate::error::Result;
 use crate::schema;
 use arrow_array::RecordBatchIterator;
-use arrow_schema::{Field, Schema, Fields, DataType};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use lancedb::connection::Connection;
 use std::path::Path;
 use std::sync::Arc;
@@ -21,32 +21,30 @@ impl Database {
     /// Open or create a database at the specified path.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
-        
+
         // Create directory if it doesn't exist
         if !path.as_ref().exists() {
             std::fs::create_dir_all(path.as_ref())?;
         }
-        
-        let conn = lancedb::connect(&path_str)
-            .execute()
-            .await?;
-        
+
+        let conn = lancedb::connect(&path_str).execute().await?;
+
         Ok(Self {
             conn,
             path: path_str,
         })
     }
-    
+
     /// Get the underlying connection.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
-    
+
     /// Get the database path.
     pub fn path(&self) -> &str {
         &self.path
     }
-    
+
     /// Initialize all tables with schemas.
     ///
     /// This creates the tables if they don't exist.
@@ -56,42 +54,42 @@ impl Database {
         if !self.table_exists(schema::TABLE_PAPERS).await? {
             self.create_papers_table().await?;
         }
-        
+
         // Create chunks table if it doesn't exist
         if !self.table_exists(schema::TABLE_CHUNKS).await? {
             self.create_chunks_table().await?;
         }
-        
+
         // Create entities table if it doesn't exist
         if !self.table_exists(schema::TABLE_ENTITIES).await? {
             self.create_entities_table().await?;
         }
-        
+
         // Create entity_mentions table if it doesn't exist
         if !self.table_exists(schema::TABLE_ENTITY_MENTIONS).await? {
             self.create_entity_mentions_table().await?;
         }
-        
+
         // Create kg_facts table if it doesn't exist
         if !self.table_exists(schema::TABLE_KG_FACTS).await? {
             self.create_kg_facts_table().await?;
         }
-        
+
         // Create kg_conflicts table if it doesn't exist
         if !self.table_exists(schema::TABLE_KG_CONFLICTS).await? {
             self.create_kg_conflicts_table().await?;
         }
-        
+
         // Create target_scores table if it doesn't exist
         if !self.table_exists(schema::TABLE_TARGET_SCORES).await? {
             self.create_target_scores_table().await?;
         }
-        
+
         // Create ingestion_audit table if it doesn't exist
         if !self.table_exists(schema::TABLE_INGESTION_AUDIT).await? {
             self.create_ingestion_audit_table().await?;
         }
-        
+
         // Entity Stage Tables (Phase 3)
         if !self.table_exists(schema::TABLE_ENT_GENES).await? {
             self.create_ent_genes_table().await?;
@@ -105,7 +103,10 @@ impl Database {
         if !self.table_exists(schema::TABLE_ENT_PATHWAYS).await? {
             self.create_ent_pathways_table().await?;
         }
-        if !self.table_exists(schema::TABLE_ENT_CLINICAL_EVIDENCE).await? {
+        if !self
+            .table_exists(schema::TABLE_ENT_CLINICAL_EVIDENCE)
+            .await?
+        {
             self.create_ent_clinical_evidence_table().await?;
         }
         if !self.table_exists(schema::TABLE_ENT_COMPOUNDS).await? {
@@ -117,7 +118,10 @@ impl Database {
         if !self.table_exists(schema::TABLE_ENT_DRUGGABILITY).await? {
             self.create_ent_druggability_table().await?;
         }
-        if !self.table_exists(schema::TABLE_ENT_SYNTHETIC_LETHALITY).await? {
+        if !self
+            .table_exists(schema::TABLE_ENT_SYNTHETIC_LETHALITY)
+            .await?
+        {
             self.create_ent_synthetic_lethality_table().await?;
         }
         if !self.table_exists(schema::TABLE_ENT_TCGA_SURVIVAL).await? {
@@ -132,16 +136,16 @@ impl Database {
         if !self.table_exists(schema::TABLE_ENT_REACTOME_GENES).await? {
             self.create_ent_reactome_genes_table().await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Check if a table exists.
     pub async fn table_exists(&self, name: &str) -> Result<bool> {
         let tables = self.conn.table_names().execute().await?;
         Ok(tables.contains(&name.to_string()))
     }
-    
+
     /// Create the papers table with an empty schema.
     async fn create_papers_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -166,21 +170,22 @@ impl Database {
             Field::new("ingested_at", DataType::Utf8, false),
             Field::new("abstract_simhash", DataType::Int64, true),
             Field::new("published_version_doi", DataType::Utf8, true),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
-        
+
         // Create empty iterator with schema
         let empty_iter = RecordBatchIterator::new(vec![], schema.clone());
-        
+
         self.conn
             .create_table(schema::TABLE_PAPERS, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the chunks table with embedding column.
     async fn create_chunks_table(&self) -> Result<()> {
         let embedding_field = Field::new(
@@ -191,7 +196,7 @@ impl Database {
             ),
             true,
         );
-        
+
         let fields: Fields = vec![
             Field::new("id", DataType::Utf8, false),
             Field::new("paper_id", DataType::Utf8, false),
@@ -210,19 +215,20 @@ impl Database {
                 ),
                 true,
             ),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_CHUNKS, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the entities table.
     async fn create_entities_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -237,19 +243,20 @@ impl Database {
             Field::new("metadata", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
             Field::new("updated_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_ENTITIES, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the entity_mentions table.
     async fn create_entity_mentions_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -263,19 +270,20 @@ impl Database {
             Field::new("confidence", DataType::Float32, true),
             Field::new("context", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_ENTITY_MENTIONS, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the kg_facts table.
     async fn create_kg_facts_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -294,19 +302,20 @@ impl Database {
             Field::new("valid_from", DataType::Utf8, false),
             Field::new("valid_until", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_KG_FACTS, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the kg_conflicts table.
     async fn create_kg_conflicts_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -317,19 +326,20 @@ impl Database {
             Field::new("net_confidence", DataType::Float32, false),
             Field::new("resolution", DataType::Utf8, false),
             Field::new("detected_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_KG_CONFLICTS, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the target_scores table.
     async fn create_target_scores_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -345,19 +355,20 @@ impl Database {
             Field::new("components_raw", DataType::Utf8, false),
             Field::new("components_normed", DataType::Utf8, false),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_TARGET_SCORES, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create the ingestion_audit table.
     async fn create_ingestion_audit_table(&self) -> Result<()> {
         let fields: Fields = vec![
@@ -367,52 +378,46 @@ impl Database {
             Field::new("action", DataType::Utf8, false),
             Field::new("detail", DataType::Utf8, false),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
-        
+        ]
+        .into();
+
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        
+
         self.conn
             .create_table(schema::TABLE_INGESTION_AUDIT, empty_iter)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Create a vector index on the chunks table for embedding search.
     pub async fn create_vector_index(&self) -> Result<()> {
-        let table = self.conn
-            .open_table(schema::TABLE_CHUNKS)
-            .execute()
-            .await?;
-        
+        let table = self.conn.open_table(schema::TABLE_CHUNKS).execute().await?;
+
         table
-            .create_index(
-                &["embedding"],
-                lancedb::index::Index::Auto,
-            )
+            .create_index(&["embedding"], lancedb::index::Index::Auto)
             .execute()
             .await?;
-        
+
         Ok(())
     }
-    
+
     /// Optimize all tables.
     pub async fn optimize(&self) -> Result<()> {
         let tables = self.conn.table_names().execute().await?;
-        
+
         for table_name in tables {
-            let table = self.conn
-                .open_table(&table_name)
-                .execute()
+            let table = self.conn.open_table(&table_name).execute().await?;
+            table
+                .optimize(lancedb::table::OptimizeAction::default())
                 .await?;
-            table.optimize(lancedb::table::OptimizeAction::default()).await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Get table statistics.
     pub async fn stats(&self) -> Result<DatabaseStats> {
         let papers_count = if self.table_exists(schema::TABLE_PAPERS).await? {
@@ -421,49 +426,69 @@ impl Database {
         } else {
             0
         };
-        
+
         let chunks_count = if self.table_exists(schema::TABLE_CHUNKS).await? {
             let table = self.conn.open_table(schema::TABLE_CHUNKS).execute().await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         let entities_count = if self.table_exists(schema::TABLE_ENTITIES).await? {
-            let table = self.conn.open_table(schema::TABLE_ENTITIES).execute().await?;
+            let table = self
+                .conn
+                .open_table(schema::TABLE_ENTITIES)
+                .execute()
+                .await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         let mentions_count = if self.table_exists(schema::TABLE_ENTITY_MENTIONS).await? {
-            let table = self.conn.open_table(schema::TABLE_ENTITY_MENTIONS).execute().await?;
+            let table = self
+                .conn
+                .open_table(schema::TABLE_ENTITY_MENTIONS)
+                .execute()
+                .await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         let facts_count = if self.table_exists(schema::TABLE_KG_FACTS).await? {
-            let table = self.conn.open_table(schema::TABLE_KG_FACTS).execute().await?;
+            let table = self
+                .conn
+                .open_table(schema::TABLE_KG_FACTS)
+                .execute()
+                .await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         let target_scores_count = if self.table_exists(schema::TABLE_TARGET_SCORES).await? {
-            let table = self.conn.open_table(schema::TABLE_TARGET_SCORES).execute().await?;
+            let table = self
+                .conn
+                .open_table(schema::TABLE_TARGET_SCORES)
+                .execute()
+                .await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         let ingestion_audit_count = if self.table_exists(schema::TABLE_INGESTION_AUDIT).await? {
-            let table = self.conn.open_table(schema::TABLE_INGESTION_AUDIT).execute().await?;
+            let table = self
+                .conn
+                .open_table(schema::TABLE_INGESTION_AUDIT)
+                .execute()
+                .await?;
             table.count_rows(None).await? as u64
         } else {
             0
         };
-        
+
         Ok(DatabaseStats {
             papers: papers_count,
             chunks: chunks_count,
@@ -508,10 +533,14 @@ impl Database {
             Field::new("oncogene_flag", DataType::Boolean, false),
             Field::new("tsg_flag", DataType::Boolean, false),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_GENES, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_GENES, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -529,10 +558,14 @@ impl Database {
             Field::new("hotspot_flag", DataType::Boolean, false),
             Field::new("vaf_context", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_MUTATIONS, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_MUTATIONS, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -546,10 +579,14 @@ impl Database {
             Field::new("parent_code", DataType::Utf8, true),
             Field::new("level", DataType::Int32, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_CANCER_TYPES, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_CANCER_TYPES, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -563,10 +600,14 @@ impl Database {
             Field::new("gene_members", DataType::Utf8, true),
             Field::new("source", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_PATHWAYS, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_PATHWAYS, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -584,10 +625,14 @@ impl Database {
             Field::new("outcome", DataType::Utf8, true),
             Field::new("evidence_grade", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_CLINICAL_EVIDENCE, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_CLINICAL_EVIDENCE, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -603,10 +648,14 @@ impl Database {
             Field::new("max_phase", DataType::Int32, true),
             Field::new("target_gene_ids", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_COMPOUNDS, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_COMPOUNDS, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -623,10 +672,14 @@ impl Database {
             Field::new("has_pdb", DataType::Boolean, false),
             Field::new("has_alphafold", DataType::Boolean, false),
             Field::new("updated_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_STRUCTURES, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_STRUCTURES, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -640,10 +693,14 @@ impl Database {
             Field::new("dogsitescorer", DataType::Float32, true),
             Field::new("overall_assessment", DataType::Utf8, true),
             Field::new("assessed_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_DRUGGABILITY, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_DRUGGABILITY, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -660,10 +717,14 @@ impl Database {
             Field::new("confidence", DataType::Float32, true),
             Field::new("pmid", DataType::Utf8, true),
             Field::new("created_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_SYNTHETIC_LETHALITY, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_SYNTHETIC_LETHALITY, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -676,10 +737,14 @@ impl Database {
             Field::new("survival_score", DataType::Float64, false),
             Field::new("source", DataType::Utf8, false),
             Field::new("fetched_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_TCGA_SURVIVAL, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_TCGA_SURVIVAL, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -690,10 +755,14 @@ impl Database {
             Field::new("expression_score", DataType::Float64, false),
             Field::new("source", DataType::Utf8, false),
             Field::new("fetched_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_GTEX_EXPRESSION, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_GTEX_EXPRESSION, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -704,10 +773,14 @@ impl Database {
             Field::new("inhibitor_count", DataType::Int64, false),
             Field::new("source", DataType::Utf8, false),
             Field::new("fetched_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_CHEMBL_TARGETS, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_CHEMBL_TARGETS, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
 
@@ -718,11 +791,14 @@ impl Database {
             Field::new("pathway_count", DataType::Int64, false),
             Field::new("source", DataType::Utf8, false),
             Field::new("fetched_at", DataType::Utf8, false),
-        ].into();
+        ]
+        .into();
         let schema = Arc::new(Schema::new(fields));
         let empty_iter = RecordBatchIterator::new(vec![], schema);
-        self.conn.create_table(schema::TABLE_ENT_REACTOME_GENES, empty_iter).execute().await?;
+        self.conn
+            .create_table(schema::TABLE_ENT_REACTOME_GENES, empty_iter)
+            .execute()
+            .await?;
         Ok(())
     }
-
 }

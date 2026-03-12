@@ -1,8 +1,8 @@
 //! Unified biomedical entity database loader.
 
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use anyhow::{Context, Result};
 use tracing::{info, warn};
 
 pub struct BiomedicalDatabase {
@@ -17,7 +17,10 @@ impl BiomedicalDatabase {
         let genes = match crate::ner::hgnc::HgncNormaliser::from_download().await {
             Ok(g) => Some(g),
             Err(e) => {
-                warn!("Failed to download HGNC database: {}. Proceeding without genes.", e);
+                warn!(
+                    "Failed to download HGNC database: {}. Proceeding without genes.",
+                    e
+                );
                 None
             }
         };
@@ -25,12 +28,15 @@ impl BiomedicalDatabase {
         let cancers = match crate::ner::cancer_normaliser::CancerNormaliser::from_download().await {
             Ok(c) => Some(c),
             Err(e) => {
-                warn!("Failed to download OncoTree database: {}. Proceeding without cancers.", e);
+                warn!(
+                    "Failed to download OncoTree database: {}. Proceeding without cancers.",
+                    e
+                );
                 None
             }
         };
-        
-        Ok(Self { 
+
+        Ok(Self {
             genes,
             cancers,
             mutations: crate::ner::hgvs::HgvsMutationNormaliser::new(),

@@ -1,10 +1,10 @@
 //! Fast NER using Aho-Corasick trie for dictionary matching.
 
-use aho_corasick::{AhoCorasick, MatchKind};
+use super::cancer_normaliser::{CancerNormaliser, CancerPatternKind};
 use super::entity_types::EntityType;
 use super::hgnc::{HgncNormaliser, SymbolTier};
-use super::cancer_normaliser::{CancerNormaliser, CancerPatternKind};
 use super::hgvs::HgvsMutationNormaliser;
+use aho_corasick::{AhoCorasick, MatchKind};
 use tracing::info;
 
 #[derive(Clone, Debug, Copy)]
@@ -105,7 +105,12 @@ impl TrieNer {
             .ascii_case_insensitive(true)
             .build(&patterns)?;
 
-        Ok(Self { automaton, pattern_info, hgnc, cancers })
+        Ok(Self {
+            automaton,
+            pattern_info,
+            hgnc,
+            cancers,
+        })
     }
 
     pub fn hgnc(&self) -> &HgncNormaliser {
@@ -153,7 +158,8 @@ impl TrieNer {
             };
 
             // Penalty for short symbols unless OncoTree code.
-            let is_oncotree_code = matches!(meta.class, ConfidenceClass::Cancer(CancerPatternKind::Code));
+            let is_oncotree_code =
+                matches!(meta.class, ConfidenceClass::Cancer(CancerPatternKind::Code));
             if matched_len < 4 && !is_oncotree_code {
                 confidence -= 0.15;
             }
@@ -168,10 +174,16 @@ impl TrieNer {
 
             // Word-boundary check for short / ambiguous symbols
             if matched_len <= 3 || meta.requires_word_boundary {
-                let prev_char = if start > 0 { text[..start].chars().next_back() } else { None };
+                let prev_char = if start > 0 {
+                    text[..start].chars().next_back()
+                } else {
+                    None
+                };
                 let next_char = text[end..].chars().next();
-                
-                if prev_char.map_or(false, |c| c.is_alphabetic()) || next_char.map_or(false, |c| c.is_alphabetic()) {
+
+                if prev_char.map_or(false, |c| c.is_alphabetic())
+                    || next_char.map_or(false, |c| c.is_alphabetic())
+                {
                     continue; // Skip if part of a larger word
                 }
             }

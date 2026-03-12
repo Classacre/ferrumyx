@@ -1,17 +1,17 @@
 //! NER entity extraction page — real-time entity recognition demo.
 
+use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
+use axum::http::StatusCode;
 use axum::{
     extract::State,
     response::{Html, IntoResponse, Json},
     Form,
 };
-use axum::http::StatusCode;
+use ferrumyx_kg::ner::TrieNer;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use crate::state::SharedState;
-use crate::handlers::dashboard::NAV_HTML;
-use ferrumyx_kg::ner::TrieNer;
 
 #[derive(Deserialize)]
 pub struct NerForm {
@@ -75,20 +75,23 @@ pub async fn ner_extract(
         }
     };
     let extracted = ner.extract(&form.text);
-    
-    let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
-        text: e.text,
-        entity_type: format!("{:?}", e.label),
-        start: e.start,
-        end: e.end,
-        confidence: e.confidence,
-    }).collect();
-    
+
+    let entities: Vec<EntityResult> = extracted
+        .into_iter()
+        .map(|e| EntityResult {
+            text: e.text,
+            entity_type: format!("{:?}", e.label),
+            start: e.start,
+            end: e.end,
+            confidence: e.confidence,
+        })
+        .collect();
+
     let result = NerResult {
         text: form.text.clone(),
         entities,
     };
-    
+
     Html(render_ner_page(Some(result), None))
 }
 
@@ -100,46 +103,51 @@ pub async fn api_ner_stats() -> impl IntoResponse {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 format!("NER resources unavailable: {}", e),
-            ).into_response();
+            )
+                .into_response();
         }
     };
     let stats = ner.stats();
-    
+
     Json(NerStats {
         gene_count: stats.gene_count,
         disease_count: stats.disease_count,
         chemical_count: stats.chemical_count,
         total_patterns: stats.total_patterns,
-    }).into_response()
+    })
+    .into_response()
 }
 
 /// POST /api/ner/extract — API endpoint for entity extraction
-pub async fn api_ner_extract(
-    Json(payload): Json<NerForm>,
-) -> impl IntoResponse {
+pub async fn api_ner_extract(Json(payload): Json<NerForm>) -> impl IntoResponse {
     let ner = match get_ner().await {
         Ok(ner) => ner,
         Err(e) => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 format!("NER resources unavailable: {}", e),
-            ).into_response();
+            )
+                .into_response();
         }
     };
     let extracted = ner.extract(&payload.text);
-    
-    let entities: Vec<EntityResult> = extracted.into_iter().map(|e| EntityResult {
-        text: e.text,
-        entity_type: format!("{:?}", e.label),
-        start: e.start,
-        end: e.end,
-        confidence: e.confidence,
-    }).collect();
-    
+
+    let entities: Vec<EntityResult> = extracted
+        .into_iter()
+        .map(|e| EntityResult {
+            text: e.text,
+            entity_type: format!("{:?}", e.label),
+            start: e.start,
+            end: e.end,
+            confidence: e.confidence,
+        })
+        .collect();
+
     Json(NerResult {
         text: payload.text,
         entities,
-    }).into_response()
+    })
+    .into_response()
 }
 
 fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
@@ -148,7 +156,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     let stats_disease_count = cached_stats.as_ref().map(|s| s.disease_count).unwrap_or(0);
     let stats_chemical_count = cached_stats.as_ref().map(|s| s.chemical_count).unwrap_or(0);
     let stats_total_patterns = cached_stats.as_ref().map(|s| s.total_patterns).unwrap_or(0);
-    
+
     let entity_html = result.as_ref().map(|r| {
         let mut highlighted = r.text.clone();
         let mut offset = 0i32;
@@ -210,7 +218,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
             highlighted, r.entities.len(), entity_list
         )
     }).unwrap_or_default();
-    
+
     format!(
         r##"<!DOCTYPE html>
 <html lang="en">
@@ -315,6 +323,8 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
         stats_total_patterns,
         result.as_ref().map(|r| r.text.clone()).unwrap_or_default(),
         entity_html,
-        error.map(|e| format!(r#"<div class="alert alert-danger">{}</div>"#, e)).unwrap_or_default()
+        error
+            .map(|e| format!(r#"<div class="alert alert-danger">{}</div>"#, e))
+            .unwrap_or_default()
     )
 }

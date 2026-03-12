@@ -58,7 +58,25 @@ async function loadSettings() {
   byId('ingestion_idle_timeout_secs').value = data.ingestion_idle_timeout_secs;
   byId('ingestion_max_runtime_secs').value = data.ingestion_max_runtime_secs;
   byId('ingestion_enable_embeddings').checked = data.ingestion_enable_embeddings;
+  byId('ingestion_source_profile').value = data.ingestion_source_profile;
+  byId('ingestion_source_timeout_secs').value = data.ingestion_source_timeout_secs;
+  byId('ingestion_full_text_step_timeout_secs').value = data.ingestion_full_text_step_timeout_secs;
+  byId('ingestion_full_text_prefetch_workers').value = data.ingestion_full_text_prefetch_workers;
+  byId('ingestion_paper_process_workers').value = data.ingestion_paper_process_workers;
+  byId('ingestion_perf_mode').value = data.ingestion_perf_mode;
+  byId('ingestion_source_cache_enabled').checked = data.ingestion_source_cache_enabled;
+  byId('ingestion_source_cache_ttl_secs').value = data.ingestion_source_cache_ttl_secs;
+  byId('ingestion_entity_batch_size').value = data.ingestion_entity_batch_size;
+  byId('ingestion_fact_batch_size').value = data.ingestion_fact_batch_size;
+  byId('ingestion_strict_fuzzy_dedup').checked = data.ingestion_strict_fuzzy_dedup;
+  byId('ingestion_source_max_inflight').value = data.ingestion_source_max_inflight;
+  byId('ingestion_source_retries').value = data.ingestion_source_retries;
+  byId('ingestion_pdf_host_concurrency').value = data.ingestion_pdf_host_concurrency;
+  byId('ingestion_pdf_parse_cache_enabled').checked = data.ingestion_pdf_parse_cache_enabled;
+  byId('ingestion_min_ner_chars').value = data.ingestion_min_ner_chars;
   byId('unpaywall_email').value = data.unpaywall_email;
+  byId('scihub_domains').value = data.scihub_domains;
+  byId('scihub_request_timeout_secs').value = data.scihub_request_timeout_secs;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -103,7 +121,25 @@ async function saveSettings() {
     ingestion_idle_timeout_secs: Number(byId('ingestion_idle_timeout_secs').value || 600),
     ingestion_max_runtime_secs: Number(byId('ingestion_max_runtime_secs').value || 14400),
     ingestion_enable_embeddings: byId('ingestion_enable_embeddings').checked,
+    ingestion_source_profile: byId('ingestion_source_profile').value,
+    ingestion_source_timeout_secs: Number(byId('ingestion_source_timeout_secs').value || 18),
+    ingestion_full_text_step_timeout_secs: Number(byId('ingestion_full_text_step_timeout_secs').value || 15),
+    ingestion_full_text_prefetch_workers: Number(byId('ingestion_full_text_prefetch_workers').value || 4),
+    ingestion_paper_process_workers: Number(byId('ingestion_paper_process_workers').value || 4),
+    ingestion_perf_mode: byId('ingestion_perf_mode').value,
+    ingestion_source_cache_enabled: byId('ingestion_source_cache_enabled').checked,
+    ingestion_source_cache_ttl_secs: Number(byId('ingestion_source_cache_ttl_secs').value || 1800),
+    ingestion_entity_batch_size: Number(byId('ingestion_entity_batch_size').value || 256),
+    ingestion_fact_batch_size: Number(byId('ingestion_fact_batch_size').value || 512),
+    ingestion_strict_fuzzy_dedup: byId('ingestion_strict_fuzzy_dedup').checked,
+    ingestion_source_max_inflight: Number(byId('ingestion_source_max_inflight').value || 4),
+    ingestion_source_retries: Number(byId('ingestion_source_retries').value || 2),
+    ingestion_pdf_host_concurrency: Number(byId('ingestion_pdf_host_concurrency').value || 4),
+    ingestion_pdf_parse_cache_enabled: byId('ingestion_pdf_parse_cache_enabled').checked,
+    ingestion_min_ner_chars: Number(byId('ingestion_min_ner_chars').value || 500),
     unpaywall_email: byId('unpaywall_email').value,
+    scihub_domains: byId('scihub_domains').value,
+    scihub_request_timeout_secs: Number(byId('scihub_request_timeout_secs').value || 10),
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
@@ -251,6 +287,19 @@ __NAV__
             <div class="help-text">Optional but recommended. Enables Unpaywall DOI->PDF OA resolution tier.</div>
           </div>
         </div>
+        <h4 class="settings-section-title" style="margin-top:1rem;">Sci-Hub Full-Text Fallback</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="scihub_domains">Sci-Hub Mirror List (comma-separated)</label>
+            <textarea id="scihub_domains" class="form-control" rows="3" placeholder="https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee"></textarea>
+            <div class="help-text">Tried in order when OA routes fail. Uses first mirror returning a valid PDF.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_request_timeout_secs">Sci-Hub Request Timeout (seconds)</label>
+            <input id="scihub_request_timeout_secs" type="number" min="4" max="45" class="form-control" />
+            <div class="help-text">Per-request timeout for mirror and PDF fetches. Lower is faster failover, higher tolerates slow mirrors.</div>
+          </div>
+        </div>
         <h4 class="settings-section-title" style="margin-top:1rem;">Ingestion Runtime Policy</h4>
         <div class="form-grid">
           <div class="form-group">
@@ -272,6 +321,94 @@ __NAV__
             <label for="ingestion_enable_embeddings">Enable Embeddings During Ingestion</label>
             <input id="ingestion_enable_embeddings" type="checkbox" />
             <div class="help-text">When enabled, chunk embeddings run during ingestion using the Embeddings tab provider.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_profile">Default Source Profile</label>
+            <select id="ingestion_source_profile" class="form-control">
+              <option value="fast">fast (PubMed + EuropePMC)</option>
+              <option value="full">full (all configured sources)</option>
+            </select>
+            <div class="help-text">Controls default source mix for agent ingestion runs.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_timeout_secs">Per-Source Timeout (seconds)</label>
+            <input id="ingestion_source_timeout_secs" type="number" min="5" max="300" class="form-control" />
+            <div class="help-text">Stops slow upstream APIs from stalling ingestion.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_full_text_step_timeout_secs">Full-Text Step Timeout (seconds)</label>
+            <input id="ingestion_full_text_step_timeout_secs" type="number" min="5" max="120" class="form-control" />
+            <div class="help-text">Timeout budget per full-text strategy step (PMC XML/PDF, Unpaywall, etc.).</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_full_text_prefetch_workers">Full-Text Prefetch Workers</label>
+            <input id="ingestion_full_text_prefetch_workers" type="number" min="1" max="32" class="form-control" />
+            <div class="help-text">Parallel full-text fetch workers. Higher values improve throughput on strong hardware.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_paper_process_workers">Paper Processing Workers</label>
+            <input id="ingestion_paper_process_workers" type="number" min="1" max="16" class="form-control" />
+            <div class="help-text">Parallel post-upsert workers for chunking, NER, KG facts, and parse status updates.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_perf_mode">Performance Mode</label>
+            <select id="ingestion_perf_mode" class="form-control">
+              <option value="auto">auto (hardware-aware)</option>
+              <option value="throughput">throughput (aggressive)</option>
+              <option value="balanced">balanced</option>
+              <option value="safe">safe (stability-first)</option>
+            </select>
+            <div class="help-text">Controls default runtime tuning profile for ingestion execution.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_cache_enabled">Persistent Source Cache</label>
+            <input id="ingestion_source_cache_enabled" type="checkbox" />
+            <div class="help-text">Reuses recent source search responses to avoid repeated network fetches for identical queries.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_cache_ttl_secs">Source Cache TTL (seconds)</label>
+            <input id="ingestion_source_cache_ttl_secs" type="number" min="60" max="86400" class="form-control" />
+            <div class="help-text">How long cached source search payloads remain valid.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_entity_batch_size">Entity Insert Batch Size</label>
+            <input id="ingestion_entity_batch_size" type="number" min="16" max="2048" class="form-control" />
+            <div class="help-text">Batch size for new entity writes during NER/KG extraction.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_fact_batch_size">KG Fact Insert Batch Size</label>
+            <input id="ingestion_fact_batch_size" type="number" min="16" max="4096" class="form-control" />
+            <div class="help-text">Batch size for knowledge-graph fact inserts per paper.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_strict_fuzzy_dedup">Strict Fuzzy Dedup</label>
+            <input id="ingestion_strict_fuzzy_dedup" type="checkbox" />
+            <div class="help-text">When enabled, lexical fuzzy dedup is applied in addition to DOI/PMID checks (can reduce recall).</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_max_inflight">Source Max Inflight</label>
+            <input id="ingestion_source_max_inflight" type="number" min="1" max="16" class="form-control" />
+            <div class="help-text">Caps concurrent source API searches to reduce throttling and improve stability.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_source_retries">Source Retries</label>
+            <input id="ingestion_source_retries" type="number" min="0" max="5" class="form-control" />
+            <div class="help-text">Automatic retries with backoff for transient source/network failures.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_pdf_host_concurrency">PDF Host Concurrency</label>
+            <input id="ingestion_pdf_host_concurrency" type="number" min="1" max="16" class="form-control" />
+            <div class="help-text">Per-host cap for parallel PDF downloads (prevents mirror/API overload).</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_pdf_parse_cache_enabled">PDF Parse Cache Enabled</label>
+            <input id="ingestion_pdf_parse_cache_enabled" type="checkbox" />
+            <div class="help-text">Caches parsed PDF sections by content hash to skip repeated parse work.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_min_ner_chars">Quality Gate Minimum Chars</label>
+            <input id="ingestion_min_ner_chars" type="number" min="120" max="5000" class="form-control" />
+            <div class="help-text">Documents below this total chunk text size skip deep NER/KG for speed.</div>
           </div>
         </div>
       </section>
@@ -332,7 +469,43 @@ pub struct SettingsView {
     ingestion_idle_timeout_secs: u64,
     ingestion_max_runtime_secs: u64,
     ingestion_enable_embeddings: bool,
+    #[serde(default = "default_source_profile")]
+    ingestion_source_profile: String,
+    #[serde(default = "default_source_timeout_secs")]
+    ingestion_source_timeout_secs: u64,
+    #[serde(default = "default_full_text_step_timeout_secs")]
+    ingestion_full_text_step_timeout_secs: u64,
+    #[serde(default = "default_full_text_prefetch_workers")]
+    ingestion_full_text_prefetch_workers: u64,
+    #[serde(default = "default_paper_process_workers")]
+    ingestion_paper_process_workers: u64,
+    #[serde(default = "default_perf_mode")]
+    ingestion_perf_mode: String,
+    #[serde(default = "default_true")]
+    ingestion_source_cache_enabled: bool,
+    #[serde(default = "default_source_cache_ttl_secs")]
+    ingestion_source_cache_ttl_secs: u64,
+    #[serde(default = "default_entity_batch_size")]
+    ingestion_entity_batch_size: u64,
+    #[serde(default = "default_fact_batch_size")]
+    ingestion_fact_batch_size: u64,
+    #[serde(default)]
+    ingestion_strict_fuzzy_dedup: bool,
+    #[serde(default = "default_source_max_inflight")]
+    ingestion_source_max_inflight: u64,
+    #[serde(default = "default_source_retries")]
+    ingestion_source_retries: u64,
+    #[serde(default = "default_pdf_host_concurrency")]
+    ingestion_pdf_host_concurrency: u64,
+    #[serde(default = "default_true")]
+    ingestion_pdf_parse_cache_enabled: bool,
+    #[serde(default = "default_min_ner_chars")]
+    ingestion_min_ner_chars: u64,
     unpaywall_email: String,
+    #[serde(default = "default_scihub_domains")]
+    scihub_domains: String,
+    #[serde(default = "default_scihub_request_timeout_secs")]
+    scihub_request_timeout_secs: u64,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
@@ -376,7 +549,32 @@ pub struct SettingsSaveRequest {
     ingestion_idle_timeout_secs: u64,
     ingestion_max_runtime_secs: u64,
     ingestion_enable_embeddings: bool,
+    ingestion_source_profile: String,
+    ingestion_source_timeout_secs: u64,
+    ingestion_full_text_step_timeout_secs: u64,
+    ingestion_full_text_prefetch_workers: u64,
+    ingestion_paper_process_workers: u64,
+    ingestion_perf_mode: String,
+    ingestion_source_cache_enabled: bool,
+    ingestion_source_cache_ttl_secs: u64,
+    ingestion_entity_batch_size: u64,
+    ingestion_fact_batch_size: u64,
+    ingestion_strict_fuzzy_dedup: bool,
+    #[serde(default = "default_source_max_inflight")]
+    ingestion_source_max_inflight: u64,
+    #[serde(default = "default_source_retries")]
+    ingestion_source_retries: u64,
+    #[serde(default = "default_pdf_host_concurrency")]
+    ingestion_pdf_host_concurrency: u64,
+    #[serde(default = "default_true")]
+    ingestion_pdf_parse_cache_enabled: bool,
+    #[serde(default = "default_min_ner_chars")]
+    ingestion_min_ner_chars: u64,
     unpaywall_email: String,
+    #[serde(default = "default_scihub_domains")]
+    scihub_domains: String,
+    #[serde(default = "default_scihub_request_timeout_secs")]
+    scihub_request_timeout_secs: u64,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
@@ -386,7 +584,54 @@ pub struct SettingsSaveRequest {
     embedding_api_key: Option<String>,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
+fn default_source_profile() -> String {
+    "fast".to_string()
+}
+fn default_source_timeout_secs() -> u64 {
+    18
+}
+fn default_full_text_step_timeout_secs() -> u64 {
+    15
+}
+fn default_full_text_prefetch_workers() -> u64 {
+    4
+}
+fn default_paper_process_workers() -> u64 {
+    4
+}
+fn default_perf_mode() -> String {
+    "auto".to_string()
+}
+fn default_source_cache_ttl_secs() -> u64 {
+    1800
+}
+fn default_entity_batch_size() -> u64 {
+    256
+}
+fn default_fact_batch_size() -> u64 {
+    512
+}
+fn default_source_max_inflight() -> u64 {
+    4
+}
+fn default_source_retries() -> u64 {
+    2
+}
+fn default_pdf_host_concurrency() -> u64 {
+    4
+}
+fn default_min_ner_chars() -> u64 {
+    500
+}
+fn default_scihub_request_timeout_secs() -> u64 {
+    10
+}
+fn default_scihub_domains() -> String {
+    "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
+}
 
 #[derive(Debug, Serialize)]
 pub struct SaveResponse {
@@ -450,12 +695,18 @@ fn save_toml(v: &toml::Value) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn table_mut<'a>(root: &'a mut toml::Value, key: &str) -> &'a mut toml::map::Map<String, toml::Value> {
+fn table_mut<'a>(
+    root: &'a mut toml::Value,
+    key: &str,
+) -> &'a mut toml::map::Map<String, toml::Value> {
     let root_tbl = root.as_table_mut().expect("root TOML table");
     if !root_tbl.contains_key(key) {
         root_tbl.insert(key.to_string(), toml::Value::Table(toml::map::Map::new()));
     }
-    root_tbl.get_mut(key).and_then(|v| v.as_table_mut()).expect("child TOML table")
+    root_tbl
+        .get_mut(key)
+        .and_then(|v| v.as_table_mut())
+        .expect("child TOML table")
 }
 
 fn nested_table_mut<'a>(
@@ -465,7 +716,10 @@ fn nested_table_mut<'a>(
     if !parent.contains_key(key) {
         parent.insert(key.to_string(), toml::Value::Table(toml::map::Map::new()));
     }
-    parent.get_mut(key).and_then(|v| v.as_table_mut()).expect("nested table")
+    parent
+        .get_mut(key)
+        .and_then(|v| v.as_table_mut())
+        .expect("nested table")
 }
 
 fn str_at(root: &toml::Value, path: &[&str], default: &str) -> String {
@@ -537,21 +791,121 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
         llm_mode: str_at(&root, &["llm", "mode"], "any"),
         llm_default_backend: str_at(&root, &["llm", "default_backend"], "openai"),
         llm_local_backend: str_at(&root, &["llm", "local_backend"], "ollama"),
-        ollama_base_url: str_at(&root, &["llm", "ollama", "base_url"], "http://localhost:11434"),
+        ollama_base_url: str_at(
+            &root,
+            &["llm", "ollama", "base_url"],
+            "http://localhost:11434",
+        ),
         ollama_model: str_at(&root, &["llm", "ollama", "model"], "llama3.1:8b"),
         openai_model: str_at(&root, &["llm", "openai", "model"], "gpt-4o-mini"),
         anthropic_model: str_at(&root, &["llm", "anthropic", "model"], "claude-haiku-4-5"),
         gemini_model: str_at(&root, &["llm", "gemini", "model"], "gemini-1.5-flash"),
-        compat_base_url: str_at(&root, &["llm", "openai_compatible", "base_url"], "https://api.groq.com/openai"),
-        compat_model: str_at(&root, &["llm", "openai_compatible", "model"], "llama-3.3-70b-versatile"),
+        compat_base_url: str_at(
+            &root,
+            &["llm", "openai_compatible", "base_url"],
+            "https://api.groq.com/openai",
+        ),
+        compat_model: str_at(
+            &root,
+            &["llm", "openai_compatible", "model"],
+            "llama-3.3-70b-versatile",
+        ),
         compat_cached_chat: bool_at(&root, &["llm", "openai_compatible", "cached_chat"], true),
         embedding_backend: str_at(&root, &["embedding", "backend"], "rust_native"),
-        embedding_model: str_at(&root, &["embedding", "embedding_model"], "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"),
+        embedding_model: str_at(
+            &root,
+            &["embedding", "embedding_model"],
+            "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
+        ),
         embedding_base_url: str_at(&root, &["embedding", "base_url"], ""),
         ingestion_default_max_results: int_at(&root, &["ingestion", "default_max_results"], 50),
-        ingestion_idle_timeout_secs: int_at(&root, &["ingestion", "watchdog", "idle_timeout_secs"], 600),
-        ingestion_max_runtime_secs: int_at(&root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400),
+        ingestion_idle_timeout_secs: int_at(
+            &root,
+            &["ingestion", "watchdog", "idle_timeout_secs"],
+            600,
+        ),
+        ingestion_max_runtime_secs: int_at(
+            &root,
+            &["ingestion", "watchdog", "max_runtime_secs"],
+            14_400,
+        ),
         ingestion_enable_embeddings: bool_at(&root, &["ingestion", "enable_embeddings"], false),
+        ingestion_source_profile: str_at(
+            &root,
+            &["ingestion", "performance", "source_profile"],
+            "fast",
+        ),
+        ingestion_source_timeout_secs: int_at(
+            &root,
+            &["ingestion", "performance", "source_timeout_secs"],
+            18,
+        ),
+        ingestion_full_text_step_timeout_secs: int_at(
+            &root,
+            &["ingestion", "performance", "full_text_step_timeout_secs"],
+            15,
+        ),
+        ingestion_full_text_prefetch_workers: int_at(
+            &root,
+            &["ingestion", "performance", "full_text_prefetch_workers"],
+            4,
+        ),
+        ingestion_paper_process_workers: int_at(
+            &root,
+            &["ingestion", "performance", "paper_process_workers"],
+            4,
+        ),
+        ingestion_perf_mode: str_at(&root, &["ingestion", "performance", "perf_mode"], "auto"),
+        ingestion_source_cache_enabled: bool_at(
+            &root,
+            &["ingestion", "performance", "source_cache_enabled"],
+            true,
+        ),
+        ingestion_source_cache_ttl_secs: int_at(
+            &root,
+            &["ingestion", "performance", "source_cache_ttl_secs"],
+            1800,
+        ),
+        ingestion_entity_batch_size: int_at(
+            &root,
+            &["ingestion", "performance", "entity_batch_size"],
+            256,
+        ),
+        ingestion_fact_batch_size: int_at(
+            &root,
+            &["ingestion", "performance", "fact_batch_size"],
+            512,
+        ),
+        ingestion_strict_fuzzy_dedup: bool_at(
+            &root,
+            &["ingestion", "performance", "strict_fuzzy_dedup"],
+            false,
+        ),
+        ingestion_source_max_inflight: int_at(
+            &root,
+            &["ingestion", "performance", "source_max_inflight"],
+            default_source_max_inflight(),
+        ),
+        ingestion_source_retries: int_at(
+            &root,
+            &["ingestion", "performance", "source_retries"],
+            default_source_retries(),
+        ),
+        ingestion_pdf_host_concurrency: int_at(
+            &root,
+            &["ingestion", "performance", "pdf_host_concurrency"],
+            default_pdf_host_concurrency(),
+        ),
+        ingestion_pdf_parse_cache_enabled: bool_at(
+            &root,
+            &["ingestion", "performance", "pdf_parse_cache_enabled"],
+            true,
+        ),
+        ingestion_min_ner_chars: int_at(
+            &root,
+            &["ingestion", "performance", "min_ner_chars"],
+            default_min_ner_chars(),
+        ),
         unpaywall_email: {
             let toml_value = str_at(&root, &["ingestion", "unpaywall", "email"], "");
             if toml_value.trim().is_empty() {
@@ -560,16 +914,44 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                 toml_value
             }
         },
-        has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"]) || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
-        has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"]) || std::env::var("FERRUMYX_ANTHROPIC_API_KEY").is_ok(),
-        has_gemini_key: has_nonempty(&root, &["llm", "gemini", "api_key"]) || std::env::var("FERRUMYX_GEMINI_API_KEY").is_ok(),
-        has_compat_key: has_nonempty(&root, &["llm", "openai_compatible", "api_key"]) || std::env::var("FERRUMYX_COMPAT_API_KEY").is_ok(),
+        scihub_domains: {
+            let toml_value = str_at(&root, &["ingestion", "scihub", "domains"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_SCIHUB_DOMAINS")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_scihub_domains)
+            }
+        },
+        scihub_request_timeout_secs: {
+            let toml_value = int_at(&root, &["ingestion", "scihub", "request_timeout_secs"], 0);
+            if toml_value >= 4 {
+                toml_value.clamp(4, 45)
+            } else {
+                std::env::var("FERRUMYX_SCIHUB_REQUEST_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_scihub_request_timeout_secs())
+                    .clamp(4, 45)
+            }
+        },
+        has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"])
+            || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
+        has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"])
+            || std::env::var("FERRUMYX_ANTHROPIC_API_KEY").is_ok(),
+        has_gemini_key: has_nonempty(&root, &["llm", "gemini", "api_key"])
+            || std::env::var("FERRUMYX_GEMINI_API_KEY").is_ok(),
+        has_compat_key: has_nonempty(&root, &["llm", "openai_compatible", "api_key"])
+            || std::env::var("FERRUMYX_COMPAT_API_KEY").is_ok(),
         has_pubmed_key: has_nonempty(&root, &["ingestion", "pubmed", "api_key"])
             || has_nonempty(&root, &["ingestion", "pubmed", "api_key_secret"])
             || std::env::var("FERRUMYX_PUBMED_API_KEY").is_ok(),
         has_semanticscholar_key: has_nonempty(&root, &["ingestion", "semanticscholar", "api_key"])
             || has_nonempty(&root, &["ingestion", "semanticscholar", "api_key_secret"])
-            || std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY").is_ok_and(|v| !v.trim().is_empty())
+            || std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY")
+                .is_ok_and(|v| !v.trim().is_empty())
             || std::env::var("SEMANTIC_SCHOLAR_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
         ironclaw_sync: IronclawSyncView {
@@ -578,7 +960,8 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             llm_model: std::env::var("LLM_MODEL").unwrap_or_default(),
             has_llm_api_key: std::env::var("LLM_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
             has_openai_key: std::env::var("OPENAI_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
-            has_anthropic_key: std::env::var("ANTHROPIC_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+            has_anthropic_key: std::env::var("ANTHROPIC_API_KEY")
+                .is_ok_and(|v| !v.trim().is_empty()),
             has_gemini_key: std::env::var("GEMINI_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
             compat_cached_chat_enabled: std::env::var("LLM_COMPAT_CACHED_CHAT")
                 .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -637,14 +1020,119 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
         "max_runtime_secs".to_string(),
         toml::Value::Integer(payload.ingestion_max_runtime_secs.clamp(600, 86_400) as i64),
     );
+    let performance = nested_table_mut(ingestion, "performance");
+    set_str(
+        performance,
+        "source_profile",
+        if payload.ingestion_source_profile.to_lowercase() == "full" {
+            "full".to_string()
+        } else {
+            "fast".to_string()
+        },
+    );
+    performance.insert(
+        "source_timeout_secs".to_string(),
+        toml::Value::Integer(payload.ingestion_source_timeout_secs.clamp(5, 300) as i64),
+    );
+    performance.insert(
+        "full_text_step_timeout_secs".to_string(),
+        toml::Value::Integer(payload.ingestion_full_text_step_timeout_secs.clamp(5, 120) as i64),
+    );
+    performance.insert(
+        "full_text_prefetch_workers".to_string(),
+        toml::Value::Integer(payload.ingestion_full_text_prefetch_workers.clamp(1, 32) as i64),
+    );
+    performance.insert(
+        "paper_process_workers".to_string(),
+        toml::Value::Integer(payload.ingestion_paper_process_workers.clamp(1, 16) as i64),
+    );
+    set_str(
+        performance,
+        "perf_mode",
+        match payload.ingestion_perf_mode.to_lowercase().as_str() {
+            "throughput" => "throughput".to_string(),
+            "balanced" => "balanced".to_string(),
+            "safe" => "safe".to_string(),
+            _ => "auto".to_string(),
+        },
+    );
+    performance.insert(
+        "source_cache_enabled".to_string(),
+        toml::Value::Boolean(payload.ingestion_source_cache_enabled),
+    );
+    performance.insert(
+        "source_cache_ttl_secs".to_string(),
+        toml::Value::Integer(payload.ingestion_source_cache_ttl_secs.clamp(60, 86_400) as i64),
+    );
+    performance.insert(
+        "entity_batch_size".to_string(),
+        toml::Value::Integer(payload.ingestion_entity_batch_size.clamp(16, 2048) as i64),
+    );
+    performance.insert(
+        "fact_batch_size".to_string(),
+        toml::Value::Integer(payload.ingestion_fact_batch_size.clamp(16, 4096) as i64),
+    );
+    performance.insert(
+        "strict_fuzzy_dedup".to_string(),
+        toml::Value::Boolean(payload.ingestion_strict_fuzzy_dedup),
+    );
+    performance.insert(
+        "source_max_inflight".to_string(),
+        toml::Value::Integer(payload.ingestion_source_max_inflight.clamp(1, 16) as i64),
+    );
+    performance.insert(
+        "source_retries".to_string(),
+        toml::Value::Integer(payload.ingestion_source_retries.clamp(0, 5) as i64),
+    );
+    performance.insert(
+        "pdf_host_concurrency".to_string(),
+        toml::Value::Integer(payload.ingestion_pdf_host_concurrency.clamp(1, 16) as i64),
+    );
+    performance.insert(
+        "pdf_parse_cache_enabled".to_string(),
+        toml::Value::Boolean(payload.ingestion_pdf_parse_cache_enabled),
+    );
+    performance.insert(
+        "min_ner_chars".to_string(),
+        toml::Value::Integer(payload.ingestion_min_ner_chars.clamp(120, 5000) as i64),
+    );
     let pubmed = nested_table_mut(ingestion, "pubmed");
     maybe_set_secret(pubmed, "api_key", &payload.pubmed_api_key);
     maybe_set_secret(pubmed, "api_key_secret", &payload.pubmed_api_key);
     let unpaywall = nested_table_mut(ingestion, "unpaywall");
-    set_str(unpaywall, "email", payload.unpaywall_email.trim().to_string());
+    set_str(
+        unpaywall,
+        "email",
+        payload.unpaywall_email.trim().to_string(),
+    );
+    let scihub = nested_table_mut(ingestion, "scihub");
+    let domains = payload
+        .scihub_domains
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(",");
+    set_str(
+        scihub,
+        "domains",
+        if domains.is_empty() {
+            default_scihub_domains()
+        } else {
+            domains
+        },
+    );
+    scihub.insert(
+        "request_timeout_secs".to_string(),
+        toml::Value::Integer(payload.scihub_request_timeout_secs.clamp(4, 45) as i64),
+    );
     let semanticscholar = nested_table_mut(ingestion, "semanticscholar");
     maybe_set_secret(semanticscholar, "api_key", &payload.semanticscholar_api_key);
-    maybe_set_secret(semanticscholar, "api_key_secret", &payload.semanticscholar_api_key);
+    maybe_set_secret(
+        semanticscholar,
+        "api_key_secret",
+        &payload.semanticscholar_api_key,
+    );
 
     let embedding = table_mut(&mut root, "embedding");
     set_str(embedding, "backend", payload.embedding_backend);
@@ -714,8 +1202,10 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     );
 
     let ingestion_default_max_results = int_at(root, &["ingestion", "default_max_results"], 50);
-    let ingestion_idle_timeout_secs = int_at(root, &["ingestion", "watchdog", "idle_timeout_secs"], 600);
-    let ingestion_max_runtime_secs = int_at(root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400);
+    let ingestion_idle_timeout_secs =
+        int_at(root, &["ingestion", "watchdog", "idle_timeout_secs"], 600);
+    let ingestion_max_runtime_secs =
+        int_at(root, &["ingestion", "watchdog", "max_runtime_secs"], 14_400);
     std::env::set_var(
         "FERRUMYX_INGESTION_DEFAULT_MAX_RESULTS",
         ingestion_default_max_results.to_string(),
@@ -731,7 +1221,157 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     let ingestion_enable_embeddings = bool_at(root, &["ingestion", "enable_embeddings"], false);
     std::env::set_var(
         "FERRUMYX_INGESTION_ENABLE_EMBEDDINGS",
-        if ingestion_enable_embeddings { "1" } else { "0" },
+        if ingestion_enable_embeddings {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_source_profile = str_at(
+        root,
+        &["ingestion", "performance", "source_profile"],
+        "fast",
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_PROFILE",
+        ingestion_source_profile,
+    );
+    let ingestion_source_timeout_secs = int_at(
+        root,
+        &["ingestion", "performance", "source_timeout_secs"],
+        18,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_TIMEOUT_SECS",
+        ingestion_source_timeout_secs.to_string(),
+    );
+    let ingestion_full_text_step_timeout_secs = int_at(
+        root,
+        &["ingestion", "performance", "full_text_step_timeout_secs"],
+        15,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_FULLTEXT_STEP_TIMEOUT_SECS",
+        ingestion_full_text_step_timeout_secs.to_string(),
+    );
+    let ingestion_full_text_prefetch_workers = int_at(
+        root,
+        &["ingestion", "performance", "full_text_prefetch_workers"],
+        4,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_FULLTEXT_PREFETCH_WORKERS",
+        ingestion_full_text_prefetch_workers.to_string(),
+    );
+    let ingestion_paper_process_workers = int_at(
+        root,
+        &["ingestion", "performance", "paper_process_workers"],
+        4,
+    );
+    std::env::set_var(
+        "FERRUMYX_PAPER_PROCESS_WORKERS",
+        ingestion_paper_process_workers.to_string(),
+    );
+    let ingestion_perf_mode = str_at(root, &["ingestion", "performance", "perf_mode"], "auto");
+    std::env::set_var("FERRUMYX_INGESTION_PERF_MODE", ingestion_perf_mode);
+    let ingestion_source_cache_enabled = bool_at(
+        root,
+        &["ingestion", "performance", "source_cache_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_CACHE_ENABLED",
+        if ingestion_source_cache_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_source_cache_ttl_secs = int_at(
+        root,
+        &["ingestion", "performance", "source_cache_ttl_secs"],
+        1800,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_CACHE_TTL_SECS",
+        ingestion_source_cache_ttl_secs.to_string(),
+    );
+    let ingestion_entity_batch_size = int_at(
+        root,
+        &["ingestion", "performance", "entity_batch_size"],
+        256,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_ENTITY_BATCH_SIZE",
+        ingestion_entity_batch_size.to_string(),
+    );
+    let ingestion_fact_batch_size =
+        int_at(root, &["ingestion", "performance", "fact_batch_size"], 512);
+    std::env::set_var(
+        "FERRUMYX_INGESTION_FACT_BATCH_SIZE",
+        ingestion_fact_batch_size.to_string(),
+    );
+    let ingestion_strict_fuzzy_dedup = bool_at(
+        root,
+        &["ingestion", "performance", "strict_fuzzy_dedup"],
+        false,
+    );
+    std::env::set_var(
+        "FERRUMYX_STRICT_FUZZY_DEDUP",
+        if ingestion_strict_fuzzy_dedup {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_source_max_inflight = int_at(
+        root,
+        &["ingestion", "performance", "source_max_inflight"],
+        default_source_max_inflight(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_MAX_INFLIGHT",
+        ingestion_source_max_inflight.clamp(1, 16).to_string(),
+    );
+    let ingestion_source_retries = int_at(
+        root,
+        &["ingestion", "performance", "source_retries"],
+        default_source_retries(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_SOURCE_RETRIES",
+        ingestion_source_retries.clamp(0, 5).to_string(),
+    );
+    let ingestion_pdf_host_concurrency = int_at(
+        root,
+        &["ingestion", "performance", "pdf_host_concurrency"],
+        default_pdf_host_concurrency(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_HOST_CONCURRENCY",
+        ingestion_pdf_host_concurrency.clamp(1, 16).to_string(),
+    );
+    let ingestion_pdf_parse_cache_enabled = bool_at(
+        root,
+        &["ingestion", "performance", "pdf_parse_cache_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_PARSE_CACHE_ENABLED",
+        if ingestion_pdf_parse_cache_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_min_ner_chars = int_at(
+        root,
+        &["ingestion", "performance", "min_ner_chars"],
+        default_min_ner_chars(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_MIN_NER_CHARS",
+        ingestion_min_ner_chars.clamp(120, 5000).to_string(),
     );
 
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
@@ -742,13 +1382,32 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     if !unpaywall_email.is_empty() {
         std::env::set_var("FERRUMYX_UNPAYWALL_EMAIL", &unpaywall_email);
     }
+    let scihub_domains = str_at(root, &["ingestion", "scihub", "domains"], "");
+    if !scihub_domains.trim().is_empty() {
+        std::env::set_var("FERRUMYX_SCIHUB_DOMAINS", scihub_domains);
+    } else {
+        std::env::set_var("FERRUMYX_SCIHUB_DOMAINS", default_scihub_domains());
+    }
+    let scihub_timeout_secs = int_at(
+        root,
+        &["ingestion", "scihub", "request_timeout_secs"],
+        default_scihub_request_timeout_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_REQUEST_TIMEOUT_SECS",
+        scihub_timeout_secs.clamp(4, 45).to_string(),
+    );
 
     let semanticscholar_key = {
         let k = str_at(root, &["ingestion", "semanticscholar", "api_key"], "");
         if !k.is_empty() {
             k
         } else {
-            str_at(root, &["ingestion", "semanticscholar", "api_key_secret"], "")
+            str_at(
+                root,
+                &["ingestion", "semanticscholar", "api_key_secret"],
+                "",
+            )
         }
     };
     if !semanticscholar_key.is_empty() {

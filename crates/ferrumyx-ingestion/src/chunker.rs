@@ -18,14 +18,14 @@ pub struct ChunkerConfig {
 impl Default for ChunkerConfig {
     fn default() -> Self {
         Self {
-            max_tokens: 510,    // 512 - 2 for [CLS] and [SEP]
+            max_tokens: 510, // 512 - 2 for [CLS] and [SEP]
             overlap_tokens: 64,
         }
     }
 }
 
 /// A section of a parsed document.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DocumentSection {
     pub section_type: SectionType,
     pub heading: Option<String>,
@@ -44,12 +44,7 @@ pub fn chunk_document(
     let mut chunk_index = 0;
 
     for section in sections {
-        let section_chunks = chunk_section(
-            paper_id,
-            &section,
-            &mut chunk_index,
-            config,
-        );
+        let section_chunks = chunk_section(paper_id, &section, &mut chunk_index, config);
         chunks.extend(section_chunks);
     }
 
@@ -65,7 +60,10 @@ fn chunk_section(
     let mut chunks = Vec::new();
 
     // Abstract and Figure Captions: always a single chunk
-    if matches!(section.section_type, SectionType::Abstract | SectionType::FigureCaption) {
+    if matches!(
+        section.section_type,
+        SectionType::Abstract | SectionType::FigureCaption
+    ) {
         chunks.push(DocumentChunk {
             paper_id,
             chunk_id: Uuid::new_v4(),
@@ -88,7 +86,7 @@ fn chunk_section(
 
     // Approximate: 1 token ≈ 0.75 words (WordPiece tokenization)
     let words_per_chunk = (config.max_tokens as f32 * 0.75) as usize;
-    let overlap_words   = (config.overlap_tokens as f32 * 0.75) as usize;
+    let overlap_words = (config.overlap_tokens as f32 * 0.75) as usize;
 
     let mut start = 0;
     while start < words.len() {
@@ -153,8 +151,14 @@ mod tests {
             text,
             page_number: Some(3),
         }];
-        let config = ChunkerConfig { max_tokens: 100, overlap_tokens: 10 };
+        let config = ChunkerConfig {
+            max_tokens: 100,
+            overlap_tokens: 10,
+        };
         let chunks = chunk_document(paper_id, sections, &config);
-        assert!(chunks.len() > 1, "Long section should produce multiple chunks");
+        assert!(
+            chunks.len() > 1,
+            "Long section should produce multiple chunks"
+        );
     }
 }

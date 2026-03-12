@@ -1,20 +1,34 @@
 //! HGVS mutation notation normalisation.
 //! Ported from ferrumyx-ingestion to ferrumyx-kg.
 
-use std::collections::HashMap;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Single-letter → three-letter amino acid map.
 fn aa1_to_aa3(aa: &str) -> Option<&'static str> {
     match aa.to_uppercase().as_str() {
-        "A" => Some("Ala"), "C" => Some("Cys"), "D" => Some("Asp"),
-        "E" => Some("Glu"), "F" => Some("Phe"), "G" => Some("Gly"),
-        "H" => Some("His"), "I" => Some("Ile"), "K" => Some("Lys"),
-        "L" => Some("Leu"), "M" => Some("Met"), "N" => Some("Asn"),
-        "P" => Some("Pro"), "Q" => Some("Gln"), "R" => Some("Arg"),
-        "S" => Some("Ser"), "T" => Some("Thr"), "V" => Some("Val"),
-        "W" => Some("Trp"), "Y" => Some("Tyr"), "*" => Some("Ter"),
+        "A" => Some("Ala"),
+        "C" => Some("Cys"),
+        "D" => Some("Asp"),
+        "E" => Some("Glu"),
+        "F" => Some("Phe"),
+        "G" => Some("Gly"),
+        "H" => Some("His"),
+        "I" => Some("Ile"),
+        "K" => Some("Lys"),
+        "L" => Some("Leu"),
+        "M" => Some("Met"),
+        "N" => Some("Asn"),
+        "P" => Some("Pro"),
+        "Q" => Some("Gln"),
+        "R" => Some("Arg"),
+        "S" => Some("Ser"),
+        "T" => Some("Thr"),
+        "V" => Some("Val"),
+        "W" => Some("Trp"),
+        "Y" => Some("Tyr"),
+        "*" => Some("Ter"),
         _ => None,
     }
 }
@@ -52,13 +66,27 @@ fn build_rsid_table() -> HashMap<(&'static str, &'static str), &'static str> {
 
 fn normalise_aa3(aa: &str) -> Option<&'static str> {
     match aa.to_lowercase().as_str() {
-        "ala" => Some("Ala"), "cys" => Some("Cys"), "asp" => Some("Asp"),
-        "glu" => Some("Glu"), "phe" => Some("Phe"), "gly" => Some("Gly"),
-        "his" => Some("His"), "ile" => Some("Ile"), "lys" => Some("Lys"),
-        "leu" => Some("Leu"), "met" => Some("Met"), "asn" => Some("Asn"),
-        "pro" => Some("Pro"), "gln" => Some("Gln"), "arg" => Some("Arg"),
-        "ser" => Some("Ser"), "thr" => Some("Thr"), "val" => Some("Val"),
-        "trp" => Some("Trp"), "tyr" => Some("Tyr"), "ter" => Some("Ter"),
+        "ala" => Some("Ala"),
+        "cys" => Some("Cys"),
+        "asp" => Some("Asp"),
+        "glu" => Some("Glu"),
+        "phe" => Some("Phe"),
+        "gly" => Some("Gly"),
+        "his" => Some("His"),
+        "ile" => Some("Ile"),
+        "lys" => Some("Lys"),
+        "leu" => Some("Leu"),
+        "met" => Some("Met"),
+        "asn" => Some("Asn"),
+        "pro" => Some("Pro"),
+        "gln" => Some("Gln"),
+        "arg" => Some("Arg"),
+        "ser" => Some("Ser"),
+        "thr" => Some("Thr"),
+        "val" => Some("Val"),
+        "trp" => Some("Trp"),
+        "tyr" => Some("Tyr"),
+        "ter" => Some("Ter"),
         "stop" | "*" => Some("Ter"),
         _ => None,
     }
@@ -76,8 +104,9 @@ impl HgvsMutationNormaliser {
             rsid_table: build_rsid_table(),
             re_single: Regex::new(r"^([A-Z\*])(\d+)([A-Z\*])$").unwrap(),
             re_hgvs: Regex::new(
-                r"^(?:p\.)?([A-Z][a-z]{0,2}|[A-Z\*])(\d+)([A-Z][a-z]{0,2}|[A-Z\*])$"
-            ).unwrap(),
+                r"^(?:p\.)?([A-Z][a-z]{0,2}|[A-Z\*])(\d+)([A-Z][a-z]{0,2}|[A-Z\*])$",
+            )
+            .unwrap(),
         }
     }
 
@@ -94,13 +123,18 @@ impl HgvsMutationNormaliser {
             let hgvs_p = format!("p.{}{}{}", ref_aa, pos, alt_aa);
 
             let rs_id = gene.and_then(|g| {
-                self.rsid_table.get(&(g, hgvs_p.as_str()))
+                self.rsid_table
+                    .get(&(g, hgvs_p.as_str()))
                     .map(|s| s.to_string())
             });
 
             return Some(NormalisedMutation {
-                raw: raw.to_string(), hgvs_p, position: pos,
-                ref_aa: ref_aa.to_string(), alt_aa: alt_aa.to_string(), rs_id,
+                raw: raw.to_string(),
+                hgvs_p,
+                position: pos,
+                ref_aa: ref_aa.to_string(),
+                alt_aa: alt_aa.to_string(),
+                rs_id,
             });
         }
 
@@ -122,24 +156,34 @@ impl HgvsMutationNormaliser {
 
             let hgvs_p = format!("p.{}{}{}", ref_aa, pos, alt_aa);
             let rs_id = gene.and_then(|g| {
-                self.rsid_table.get(&(g, hgvs_p.as_str()))
+                self.rsid_table
+                    .get(&(g, hgvs_p.as_str()))
                     .map(|s| s.to_string())
             });
 
             return Some(NormalisedMutation {
-                raw: raw.to_string(), hgvs_p, position: pos,
-                ref_aa: ref_aa.to_string(), alt_aa: alt_aa.to_string(), rs_id,
+                raw: raw.to_string(),
+                hgvs_p,
+                position: pos,
+                ref_aa: ref_aa.to_string(),
+                alt_aa: alt_aa.to_string(),
+                rs_id,
             });
         }
 
         None
     }
-    
+
     pub fn all_patterns(&self) -> Vec<String> {
-        self.rsid_table.keys().map(|(_, p)| p.replace("p.", "")).collect()
+        self.rsid_table
+            .keys()
+            .map(|(_, p)| p.replace("p.", ""))
+            .collect()
     }
 }
 
 impl Default for HgvsMutationNormaliser {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

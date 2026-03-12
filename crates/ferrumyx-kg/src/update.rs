@@ -2,9 +2,9 @@
 //! See ARCHITECTURE.md §3.4
 
 use ferrumyx_common::confidence::aggregate_confidence;
-use tokio::sync::mpsc;
-use std::sync::Arc;
 use ferrumyx_db::Database;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 /// Represents a trigger event from the routines engine.
@@ -37,24 +37,39 @@ pub fn should_requeue_scoring(old_confidence: f64, new_confidence: f64) -> bool 
 /// triggers the Target Prioritisation engine natively.
 pub fn start_scoring_event_queue(db: Arc<Database>) -> mpsc::UnboundedSender<KgUpdateTrigger> {
     let (tx, mut rx) = mpsc::unbounded_channel::<KgUpdateTrigger>();
-    
+
     tokio::spawn(async move {
         info!("Started event-driven KG scoring queue worker");
-        
+
         while let Some(event) = rx.recv().await {
             match event {
-                KgUpdateTrigger::FactConfidenceChanged { old_confidence, new_confidence, subject_id, .. } => {
+                KgUpdateTrigger::FactConfidenceChanged {
+                    old_confidence,
+                    new_confidence,
+                    subject_id,
+                    ..
+                } => {
                     if should_requeue_scoring(old_confidence, new_confidence) {
-                        info!("Confidence delta > 0.05 for target {:?}. Queuing re-score...", subject_id);
+                        info!(
+                            "Confidence delta > 0.05 for target {:?}. Queuing re-score...",
+                            subject_id
+                        );
                         // Trigger async recompute
                         if let Err(e) = crate::scoring::compute_target_scores(db.clone()).await {
                             warn!("Failed to re-score targets: {}", e);
                         }
                     }
-                },
-                KgUpdateTrigger::NewFact { subject_id, new_confidence, .. } => {
+                }
+                KgUpdateTrigger::NewFact {
+                    subject_id,
+                    new_confidence,
+                    ..
+                } => {
                     if should_requeue_scoring(0.0, new_confidence) {
-                        info!("New strong fact added for target {:?}. Queuing re-score...", subject_id);
+                        info!(
+                            "New strong fact added for target {:?}. Queuing re-score...",
+                            subject_id
+                        );
                         if let Err(e) = crate::scoring::compute_target_scores(db.clone()).await {
                             warn!("Failed to re-score targets: {}", e);
                         }

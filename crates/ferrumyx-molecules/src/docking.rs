@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Configuration for a docking run.
 #[derive(Debug, Clone)]
@@ -66,7 +66,10 @@ impl VinaRunner {
             anyhow::bail!("AutoDock Vina failed: {}", stderr);
         }
 
-        debug!("AutoDock Vina completed successfully. Output in {:?}", config.out);
+        debug!(
+            "AutoDock Vina completed successfully. Output in {:?}",
+            config.out
+        );
         Ok(config.out.clone())
     }
 }

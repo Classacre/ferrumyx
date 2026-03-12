@@ -6,7 +6,7 @@ use reqwest::Client;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Client for fetching protein structures from PDB and AlphaFold.
 pub struct StructureFetcher {
@@ -75,7 +75,7 @@ mod tests {
     async fn test_fetch_pdb() {
         let dir = tempdir().unwrap();
         let fetcher = StructureFetcher::new(dir.path());
-        
+
         // Fetch a small, known PDB (e.g., 1CRN - Crambin)
         let result = fetcher.fetch_pdb("1CRN").await;
         assert!(result.is_ok());

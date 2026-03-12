@@ -60,12 +60,11 @@ pub async fn compute_target_scores(db: Arc<Database>) -> anyhow::Result<u32> {
         let literature_score = normalise_count(evidence.total_evidence, 30.0);
         let mutation_score = normalise_count(evidence.mutation_evidence, 12.0);
         let cancer_score = normalise_count(evidence.cancer_evidence, 16.0);
-        let confidence_mean = (evidence.confidence_sum / evidence.total_evidence as f64).clamp(0.0, 1.0);
+        let confidence_mean =
+            (evidence.confidence_sum / evidence.total_evidence as f64).clamp(0.0, 1.0);
 
-        let composite_score = (0.50 * literature_score
-            + 0.30 * mutation_score
-            + 0.20 * cancer_score)
-            .clamp(0.0, 1.0);
+        let composite_score =
+            (0.50 * literature_score + 0.30 * mutation_score + 0.20 * cancer_score).clamp(0.0, 1.0);
         let adjusted_score = (composite_score * confidence_mean).clamp(0.0, 1.0);
         let shortlist_tier = if adjusted_score >= 0.60 {
             "primary"
@@ -110,7 +109,9 @@ pub async fn compute_target_scores(db: Arc<Database>) -> anyhow::Result<u32> {
 pub async fn get_gene_evidence(db: Arc<Database>, gene: &str) -> anyhow::Result<GeneEvidence> {
     let fact_repo = KgFactRepository::new(db);
     let mut out = GeneEvidence::default();
-    let facts = fact_repo.list_filtered(Some(gene), None, None, 10_000).await?;
+    let facts = fact_repo
+        .list_filtered(Some(gene), None, None, 10_000)
+        .await?;
 
     for fact in facts {
         if !fact.subject_name.eq_ignore_ascii_case(gene) {
@@ -146,7 +147,9 @@ fn is_cancer_like(name: &str) -> bool {
         return false;
     }
     // OncoTree-like code.
-    let code_like = n.len() <= 8 && n.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    let code_like = n.len() <= 8
+        && n.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
     if code_like {
         return true;
     }

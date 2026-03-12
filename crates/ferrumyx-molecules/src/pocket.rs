@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Wrapper for fpocket execution.
 pub struct FPocketRunner {

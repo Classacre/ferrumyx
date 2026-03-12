@@ -22,10 +22,10 @@ pub enum FerrumyxError {
 
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     #[error("Security error: {0}")]
     SecurityError(String),
-    
+
     #[error("Ingestion error: {0}")]
     IngestionError(String),
 

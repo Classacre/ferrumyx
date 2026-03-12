@@ -8,16 +8,16 @@
 //! Polite pool: set User-Agent with mailto (see CrossRef etiquette)
 
 use async_trait::async_trait;
+use chrono::NaiveDate;
 use reqwest::Client;
 use tracing::{debug, instrument, warn};
-use chrono::NaiveDate;
 
-use crate::models::{Author, IngestionSource, PaperMetadata};
 use super::LiteratureSource;
+use crate::models::{Author, IngestionSource, PaperMetadata};
 
-const CR_API_BASE:   &str = "https://api.crossref.org/works";
+const CR_API_BASE: &str = "https://api.crossref.org/works";
 const CR_SEARCH_URL: &str = "https://api.crossref.org/works";
-const USER_AGENT:    &str = "Ferrumyx/0.1 (mailto:ferrumyx@example.com)";
+const USER_AGENT: &str = "Ferrumyx/0.1 (mailto:ferrumyx@example.com)";
 
 pub struct CrossRefClient {
     client: Client,
@@ -53,12 +53,16 @@ impl CrossRefClient {
         max_results: usize,
     ) -> anyhow::Result<Vec<serde_json::Value>> {
         let clean = query.replace("[tiab]", "").replace(" AND ", " ");
-        let resp = self.client
+        let resp = self
+            .client
             .get(CR_SEARCH_URL)
             .query(&[
                 ("query", clean.trim()),
-                ("rows",  &max_results.to_string()),
-                ("select", "DOI,title,abstract,author,container-title,published,type"),
+                ("rows", &max_results.to_string()),
+                (
+                    "select",
+                    "DOI,title,abstract,author,container-title,published,type",
+                ),
             ])
             .send()
             .await?
@@ -73,7 +77,9 @@ impl CrossRefClient {
 }
 
 impl Default for CrossRefClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -104,9 +110,12 @@ fn work_to_paper(work: &serde_json::Value) -> PaperMetadata {
 
     let abstract_text = work["abstract"].as_str().map(|a| {
         // CrossRef returns JATS XML snippets in abstract; strip basic tags
-        a.replace("<jats:p>", "").replace("</jats:p>", "\n")
-         .replace("<jats:italic>", "").replace("</jats:italic>", "")
-         .replace("<jats:bold>", "").replace("</jats:bold>", "")
+        a.replace("<jats:p>", "")
+            .replace("</jats:p>", "\n")
+            .replace("<jats:italic>", "")
+            .replace("</jats:italic>", "")
+            .replace("<jats:bold>", "")
+            .replace("</jats:bold>", "")
     });
 
     let authors: Vec<Author> = work["author"]
@@ -114,9 +123,13 @@ fn work_to_paper(work: &serde_json::Value) -> PaperMetadata {
         .unwrap_or(&vec![])
         .iter()
         .map(|a| {
-            let given  = a["given"].as_str().unwrap_or("").trim().to_string();
+            let given = a["given"].as_str().unwrap_or("").trim().to_string();
             let family = a["family"].as_str().unwrap_or("").trim().to_string();
-            let name = if given.is_empty() { family.clone() } else { format!("{given} {family}") };
+            let name = if given.is_empty() {
+                family.clone()
+            } else {
+                format!("{given} {family}")
+            };
             Author {
                 name,
                 affiliation: a["affiliation"]
@@ -140,31 +153,33 @@ fn work_to_paper(work: &serde_json::Value) -> PaperMetadata {
         .and_then(|dp| dp.first())
         .and_then(|dp| dp.as_array())
         .and_then(|parts| {
-            let year  = parts.first()?.as_u64()? as i32;
+            let year = parts.first()?.as_u64()? as i32;
             let month = parts.get(1).and_then(|m| m.as_u64()).unwrap_or(1) as u32;
-            let day   = parts.get(2).and_then(|d| d.as_u64()).unwrap_or(1) as u32;
+            let day = parts.get(2).and_then(|d| d.as_u64()).unwrap_or(1) as u32;
             NaiveDate::from_ymd_opt(year, month, day)
         });
 
     PaperMetadata {
         doi,
-        pmid:         None,
-        pmcid:        None,
+        pmid: None,
+        pmcid: None,
         title,
         abstract_text,
         authors,
         journal,
         pub_date,
-        source:       IngestionSource::CrossRef,
-        open_access:  work["license"].as_array().map(|l| !l.is_empty()).unwrap_or(false),
-        full_text_url: work["link"]
+        source: IngestionSource::CrossRef,
+        open_access: work["license"]
             .as_array()
-            .and_then(|links| {
-                links.iter()
-                    .find(|l| l["content-type"].as_str() == Some("application/pdf"))
-                    .and_then(|l| l["URL"].as_str())
-                    .map(String::from)
-            }),
+            .map(|l| !l.is_empty())
+            .unwrap_or(false),
+        full_text_url: work["link"].as_array().and_then(|links| {
+            links
+                .iter()
+                .find(|l| l["content-type"].as_str() == Some("application/pdf"))
+                .and_then(|l| l["URL"].as_str())
+                .map(String::from)
+        }),
     }
 }
 
@@ -185,7 +200,11 @@ mod tests {
         let p = work_to_paper(&work);
         assert_eq!(p.doi.as_deref(), Some("10.1000/test"));
         assert_eq!(p.title, "Test Paper Title");
-        assert!(p.abstract_text.as_deref().unwrap().contains("Test abstract."));
+        assert!(p
+            .abstract_text
+            .as_deref()
+            .unwrap()
+            .contains("Test abstract."));
         assert_eq!(p.authors[0].name, "Jane Doe");
         assert_eq!(p.journal.as_deref(), Some("Nature"));
         assert_eq!(p.pub_date, NaiveDate::from_ymd_opt(2024, 6, 1));
@@ -194,8 +213,11 @@ mod tests {
     #[test]
     fn test_jats_tag_stripping() {
         let raw = "<jats:p>Hello <jats:italic>world</jats:italic>.</jats:p>";
-        let cleaned = raw.replace("<jats:p>", "").replace("</jats:p>", "\n")
-            .replace("<jats:italic>", "").replace("</jats:italic>", "");
+        let cleaned = raw
+            .replace("<jats:p>", "")
+            .replace("</jats:p>", "\n")
+            .replace("<jats:italic>", "")
+            .replace("</jats:italic>", "");
         assert_eq!(cleaned.trim(), "Hello world.");
     }
 }

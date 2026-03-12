@@ -1,7 +1,7 @@
 //! Server-Sent Events (SSE) streaming for real-time UI updates.
 
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::extract::State;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_core::Stream;
 use std::convert::Infallible;
 use std::time::Duration;
@@ -15,14 +15,13 @@ pub async fn sse_handler(
     State(state): State<SharedState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = state.subscribe();
-    let stream = BroadcastStream::new(rx)
-        .filter_map(|result| {
-            result.ok().and_then(|event| {
-                serde_json::to_string(&event).ok().map(|data| {
-                    Ok(Event::default().data(data))
-                })
-            })
-        });
+    let stream = BroadcastStream::new(rx).filter_map(|result| {
+        result.ok().and_then(|event| {
+            serde_json::to_string(&event)
+                .ok()
+                .map(|data| Ok(Event::default().data(data)))
+        })
+    });
 
     Sse::new(stream).keep_alive(
         KeepAlive::new()

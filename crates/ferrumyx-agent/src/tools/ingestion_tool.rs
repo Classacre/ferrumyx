@@ -7,14 +7,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
-use tokio::time::{Instant, timeout};
+use tokio::time::{timeout, Instant};
 
+use super::runtime_profile::RuntimeProfile;
 use ferrumyx_db::Database;
 use ferrumyx_ingestion::embedding::{
-    EmbeddingBackend as IngestionEmbeddingBackend,
-    EmbeddingConfig as IngestionEmbeddingConfig,
+    EmbeddingBackend as IngestionEmbeddingBackend, EmbeddingConfig as IngestionEmbeddingConfig,
 };
-use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionProgress, IngestionSourceSpec};
+use ferrumyx_ingestion::pipeline::{
+    run_ingestion, IngestionJob, IngestionProgress, IngestionSourceSpec,
+};
 use ferrumyx_ingestion::repository::IngestionRepository;
 use ferrumyx_ranker::{ProviderRefreshRequest, TargetQueryEngine};
 
@@ -34,6 +36,22 @@ struct IngestionRuntimeDefaults {
     max_results: usize,
     idle_timeout_secs: u64,
     max_runtime_secs: u64,
+    source_timeout_secs: Option<u64>,
+    full_text_step_timeout_secs: Option<u64>,
+    full_text_prefetch_workers: Option<usize>,
+    paper_process_workers: Option<usize>,
+    perf_mode: String,
+    source_cache_enabled: bool,
+    source_cache_ttl_secs: u64,
+    entity_batch_size: usize,
+    fact_batch_size: usize,
+    strict_fuzzy_dedup: bool,
+    source_max_inflight: usize,
+    source_retries: usize,
+    pdf_host_concurrency: usize,
+    pdf_parse_cache_enabled: bool,
+    min_ner_chars: usize,
+    source_profile: String,
     pubmed_api_key: Option<String>,
     semantic_scholar_api_key: Option<String>,
     unpaywall_email: Option<String>,
@@ -47,6 +65,81 @@ impl Default for IngestionRuntimeDefaults {
             max_results: 50,
             idle_timeout_secs: 600,
             max_runtime_secs: 14_400,
+            source_timeout_secs: std::env::var("FERRUMYX_INGESTION_SOURCE_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(|v| v.clamp(5, 300)),
+            full_text_step_timeout_secs: std::env::var(
+                "FERRUMYX_INGESTION_FULLTEXT_STEP_TIMEOUT_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(|v| v.clamp(5, 120))
+            .or(Some(15)),
+            full_text_prefetch_workers: std::env::var(
+                "FERRUMYX_INGESTION_FULLTEXT_PREFETCH_WORKERS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|v| v.clamp(1, 32)),
+            paper_process_workers: std::env::var("FERRUMYX_PAPER_PROCESS_WORKERS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .map(|v| v.clamp(1, 16)),
+            perf_mode: std::env::var("FERRUMYX_INGESTION_PERF_MODE")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "auto".to_string())
+                .to_lowercase(),
+            source_cache_enabled: std::env::var("FERRUMYX_INGESTION_SOURCE_CACHE_ENABLED")
+                .ok()
+                .map_or(true, |v| v == "1" || v.eq_ignore_ascii_case("true")),
+            source_cache_ttl_secs: std::env::var("FERRUMYX_INGESTION_SOURCE_CACHE_TTL_SECS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(1800)
+                .clamp(60, 86_400),
+            entity_batch_size: std::env::var("FERRUMYX_INGESTION_ENTITY_BATCH_SIZE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(256)
+                .clamp(16, 2048),
+            fact_batch_size: std::env::var("FERRUMYX_INGESTION_FACT_BATCH_SIZE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(512)
+                .clamp(16, 4096),
+            strict_fuzzy_dedup: std::env::var("FERRUMYX_STRICT_FUZZY_DEDUP")
+                .ok()
+                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            source_max_inflight: std::env::var("FERRUMYX_INGESTION_SOURCE_MAX_INFLIGHT")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(4)
+                .clamp(1, 16),
+            source_retries: std::env::var("FERRUMYX_INGESTION_SOURCE_RETRIES")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(2)
+                .clamp(0, 5),
+            pdf_host_concurrency: std::env::var("FERRUMYX_PDF_HOST_CONCURRENCY")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(4)
+                .clamp(1, 16),
+            pdf_parse_cache_enabled: std::env::var("FERRUMYX_PDF_PARSE_CACHE_ENABLED")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            min_ner_chars: std::env::var("FERRUMYX_INGESTION_MIN_NER_CHARS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(500)
+                .clamp(120, 5000),
+            source_profile: std::env::var("FERRUMYX_INGESTION_SOURCE_PROFILE")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "fast".to_string())
+                .to_lowercase(),
             pubmed_api_key: std::env::var("FERRUMYX_PUBMED_API_KEY")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
@@ -124,14 +217,120 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         return defaults;
     };
 
-    defaults.max_results = toml_u64(&root, &["ingestion", "default_max_results"], defaults.max_results as u64)
-        .clamp(1, 5000) as usize;
-    defaults.idle_timeout_secs =
-        toml_u64(&root, &["ingestion", "watchdog", "idle_timeout_secs"], defaults.idle_timeout_secs)
-            .clamp(60, 3600);
-    defaults.max_runtime_secs =
-        toml_u64(&root, &["ingestion", "watchdog", "max_runtime_secs"], defaults.max_runtime_secs)
-            .clamp(600, 86_400);
+    defaults.max_results = toml_u64(
+        &root,
+        &["ingestion", "default_max_results"],
+        defaults.max_results as u64,
+    )
+    .clamp(1, 5000) as usize;
+    defaults.idle_timeout_secs = toml_u64(
+        &root,
+        &["ingestion", "watchdog", "idle_timeout_secs"],
+        defaults.idle_timeout_secs,
+    )
+    .clamp(60, 3600);
+    defaults.max_runtime_secs = toml_u64(
+        &root,
+        &["ingestion", "watchdog", "max_runtime_secs"],
+        defaults.max_runtime_secs,
+    )
+    .clamp(600, 86_400);
+    defaults.source_timeout_secs = Some(toml_u64(
+        &root,
+        &["ingestion", "performance", "source_timeout_secs"],
+        0,
+    ))
+    .filter(|v| *v > 0)
+    .map(|v| v.clamp(5, 300));
+    defaults.full_text_step_timeout_secs = Some(
+        toml_u64(
+            &root,
+            &["ingestion", "performance", "full_text_step_timeout_secs"],
+            15,
+        )
+        .clamp(5, 120),
+    );
+    defaults.full_text_prefetch_workers = Some(
+        toml_u64(
+            &root,
+            &["ingestion", "performance", "full_text_prefetch_workers"],
+            0,
+        )
+        .clamp(0, 32) as usize,
+    )
+    .filter(|v| *v > 0);
+    defaults.paper_process_workers = Some(
+        toml_u64(
+            &root,
+            &["ingestion", "performance", "paper_process_workers"],
+            0,
+        )
+        .clamp(0, 16) as usize,
+    )
+    .filter(|v| *v > 0);
+    defaults.perf_mode = toml_string(&root, &["ingestion", "performance", "perf_mode"])
+        .unwrap_or_else(|| defaults.perf_mode.clone())
+        .to_lowercase();
+    defaults.source_cache_enabled = toml_bool(
+        &root,
+        &["ingestion", "performance", "source_cache_enabled"],
+        defaults.source_cache_enabled,
+    );
+    defaults.source_cache_ttl_secs = toml_u64(
+        &root,
+        &["ingestion", "performance", "source_cache_ttl_secs"],
+        defaults.source_cache_ttl_secs,
+    )
+    .clamp(60, 86_400);
+    defaults.entity_batch_size = toml_u64(
+        &root,
+        &["ingestion", "performance", "entity_batch_size"],
+        defaults.entity_batch_size as u64,
+    )
+    .clamp(16, 2048) as usize;
+    defaults.fact_batch_size = toml_u64(
+        &root,
+        &["ingestion", "performance", "fact_batch_size"],
+        defaults.fact_batch_size as u64,
+    )
+    .clamp(16, 4096) as usize;
+    defaults.strict_fuzzy_dedup = toml_bool(
+        &root,
+        &["ingestion", "performance", "strict_fuzzy_dedup"],
+        false,
+    );
+    defaults.source_max_inflight = toml_u64(
+        &root,
+        &["ingestion", "performance", "source_max_inflight"],
+        defaults.source_max_inflight as u64,
+    )
+    .clamp(1, 16) as usize;
+    defaults.source_retries = toml_u64(
+        &root,
+        &["ingestion", "performance", "source_retries"],
+        defaults.source_retries as u64,
+    )
+    .clamp(0, 5) as usize;
+    defaults.pdf_host_concurrency = toml_u64(
+        &root,
+        &["ingestion", "performance", "pdf_host_concurrency"],
+        defaults.pdf_host_concurrency as u64,
+    )
+    .clamp(1, 16) as usize;
+    defaults.pdf_parse_cache_enabled = toml_bool(
+        &root,
+        &["ingestion", "performance", "pdf_parse_cache_enabled"],
+        defaults.pdf_parse_cache_enabled,
+    );
+    defaults.min_ner_chars = toml_u64(
+        &root,
+        &["ingestion", "performance", "min_ner_chars"],
+        defaults.min_ner_chars as u64,
+    )
+    .clamp(120, 5000) as usize;
+    defaults.source_profile = toml_string(&root, &["ingestion", "performance", "source_profile"])
+        .unwrap_or_else(|| "fast".to_string())
+        .to_lowercase();
     if defaults.pubmed_api_key.is_none() {
         defaults.pubmed_api_key = first_nonempty_toml_string(
             &root,
@@ -151,10 +350,8 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         );
     }
     if defaults.unpaywall_email.is_none() {
-        defaults.unpaywall_email = first_nonempty_toml_string(
-            &root,
-            &[&["ingestion", "unpaywall", "email"]],
-        );
+        defaults.unpaywall_email =
+            first_nonempty_toml_string(&root, &[&["ingestion", "unpaywall", "email"]]);
     }
     defaults.enable_embeddings = toml_bool(
         &root,
@@ -166,15 +363,19 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         let backend = toml_string(&root, &["embedding", "backend"])
             .unwrap_or_else(|| "rust_native".to_string())
             .to_lowercase();
-        let model = toml_string(&root, &["embedding", "embedding_model"])
-            .unwrap_or_else(|| "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string());
+        let model = toml_string(&root, &["embedding", "embedding_model"]).unwrap_or_else(|| {
+            "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string()
+        });
         let base_url = toml_string(&root, &["embedding", "base_url"]);
-        let batch_size = toml_u64(&root, &["embedding", "batch_size"], 32)
-            .clamp(1, 256) as usize;
+        let batch_size = toml_u64(&root, &["embedding", "batch_size"], 32).clamp(1, 256) as usize;
         let dim = toml_u64(
             &root,
             &["embedding", "embedding_dim"],
-            if backend == "rust_native" || backend == "biomedbert" { 768 } else { 1536 },
+            if backend == "rust_native" || backend == "biomedbert" {
+                768
+            } else {
+                1536
+            },
         )
         .clamp(64, 8192) as usize;
 
@@ -187,24 +388,22 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
             _ => IngestionEmbeddingBackend::RustNative,
         };
 
-        let api_key = toml_string(&root, &["embedding", "api_key"]).or_else(|| match mapped_backend {
-            IngestionEmbeddingBackend::OpenAi => {
-                std::env::var("FERRUMYX_OPENAI_API_KEY")
+        let api_key = toml_string(&root, &["embedding", "api_key"])
+            .or_else(|| match mapped_backend {
+                IngestionEmbeddingBackend::OpenAi => std::env::var("FERRUMYX_OPENAI_API_KEY")
                     .ok()
-                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            }
-            IngestionEmbeddingBackend::Gemini => {
-                std::env::var("FERRUMYX_GEMINI_API_KEY")
+                    .or_else(|| std::env::var("OPENAI_API_KEY").ok()),
+                IngestionEmbeddingBackend::Gemini => std::env::var("FERRUMYX_GEMINI_API_KEY")
                     .ok()
-                    .or_else(|| std::env::var("GEMINI_API_KEY").ok())
-            }
-            IngestionEmbeddingBackend::OpenAiCompatible => {
-                std::env::var("FERRUMYX_COMPAT_API_KEY")
-                    .ok()
-                    .or_else(|| std::env::var("LLM_API_KEY").ok())
-            }
-            _ => None,
-        }).filter(|s| !s.trim().is_empty());
+                    .or_else(|| std::env::var("GEMINI_API_KEY").ok()),
+                IngestionEmbeddingBackend::OpenAiCompatible => {
+                    std::env::var("FERRUMYX_COMPAT_API_KEY")
+                        .ok()
+                        .or_else(|| std::env::var("LLM_API_KEY").ok())
+                }
+                _ => None,
+            })
+            .filter(|s| !s.trim().is_empty());
 
         defaults.embedding_cfg = Some(IngestionEmbeddingConfig {
             backend: mapped_backend,
@@ -217,6 +416,25 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
     }
 
     defaults
+}
+
+fn build_source_list(profile: &str, include_semantic: bool) -> Vec<IngestionSourceSpec> {
+    let mut sources = if profile == "full" {
+        vec![
+            IngestionSourceSpec::PubMed,
+            IngestionSourceSpec::EuropePmc,
+            IngestionSourceSpec::Arxiv,
+            IngestionSourceSpec::BioRxiv,
+            IngestionSourceSpec::MedRxiv,
+            IngestionSourceSpec::ClinicalTrials,
+        ]
+    } else {
+        vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc]
+    };
+    if include_semantic {
+        sources.push(IngestionSourceSpec::SemanticScholar);
+    }
+    sources
 }
 
 fn require_str<'a>(params: &'a serde_json::Value, name: &str) -> Result<&'a str, ToolError> {
@@ -281,6 +499,59 @@ impl Tool for IngestionTool {
         _ctx: &JobContext,
     ) -> Result<ToolOutput, ToolError> {
         let defaults = load_runtime_defaults();
+        let profile = RuntimeProfile::detect_and_prepare();
+        std::env::set_var(
+            "FERRUMYX_STRICT_FUZZY_DEDUP",
+            if defaults.strict_fuzzy_dedup {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_SOURCE_CACHE_ENABLED",
+            if defaults.source_cache_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_SOURCE_CACHE_TTL_SECS",
+            defaults.source_cache_ttl_secs.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_ENTITY_BATCH_SIZE",
+            defaults.entity_batch_size.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_FACT_BATCH_SIZE",
+            defaults.fact_batch_size.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_SOURCE_MAX_INFLIGHT",
+            defaults.source_max_inflight.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_SOURCE_RETRIES",
+            defaults.source_retries.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_HOST_CONCURRENCY",
+            defaults.pdf_host_concurrency.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_PARSE_CACHE_ENABLED",
+            if defaults.pdf_parse_cache_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_MIN_NER_CHARS",
+            defaults.min_ner_chars.to_string(),
+        );
 
         let gene = require_str(&params, "gene")?.to_string();
         let gene_for_refresh = gene.clone();
@@ -291,12 +562,26 @@ impl Tool for IngestionTool {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let max_results = params
+        let requested_max_results = params
             .get("max_results")
             .and_then(|v| v.as_u64())
             .map(|n| n as usize)
             .unwrap_or(defaults.max_results)
             .clamp(1, 5000);
+        let perf_mode = match defaults.perf_mode.as_str() {
+            "throughput" => "throughput",
+            "balanced" => "balanced",
+            "safe" => "safe",
+            _ => "auto",
+        };
+        let max_results = {
+            let base = profile.tuned_max_results(requested_max_results);
+            match perf_mode {
+                "throughput" => (base.saturating_mul(2)).clamp(1, 5000),
+                "safe" => (base / 2).max(1),
+                _ => base,
+            }
+        };
         let idle_timeout = Duration::from_secs(
             params
                 .get("idle_timeout_secs")
@@ -312,34 +597,72 @@ impl Tool for IngestionTool {
                 .clamp(600, 86_400),
         );
 
+        let has_semantic_key = defaults
+            .semantic_scholar_api_key
+            .as_ref()
+            .is_some_and(|k| !k.trim().is_empty());
+        let mut embedding_cfg = defaults.embedding_cfg.clone();
+        if let Some(cfg) = embedding_cfg.as_mut() {
+            cfg.batch_size = profile.tuned_embedding_batch_size(cfg.batch_size);
+        }
+
+        let source_timeout_secs = match perf_mode {
+            "throughput" => defaults
+                .source_timeout_secs
+                .or(Some(profile.source_timeout_secs().saturating_sub(4).max(8))),
+            "safe" => defaults
+                .source_timeout_secs
+                .or(Some(profile.source_timeout_secs().saturating_add(8))),
+            _ => defaults
+                .source_timeout_secs
+                .or(Some(profile.source_timeout_secs())),
+        };
+        let full_text_prefetch_workers = defaults.full_text_prefetch_workers.or_else(|| {
+            let cpus = profile.logical_cpus.max(1);
+            let v = match perf_mode {
+                "throughput" => (cpus / 2).clamp(2, 12),
+                "safe" => (cpus / 4).clamp(1, 4),
+                _ => (cpus / 3).clamp(2, 8),
+            };
+            Some(v)
+        });
+        let paper_process_workers = defaults.paper_process_workers.or_else(|| {
+            let cpus = profile.logical_cpus.max(1);
+            let v = match perf_mode {
+                "throughput" => (cpus / 2).clamp(2, 16),
+                "safe" => (cpus / 4).clamp(1, 6),
+                _ => (cpus / 3).clamp(2, 10),
+            };
+            Some(v)
+        });
+        if let Some(ppw) = paper_process_workers {
+            std::env::set_var("FERRUMYX_PAPER_PROCESS_WORKERS", ppw.to_string());
+        }
+
         let job = IngestionJob {
             gene,
             mutation,
             cancer_type,
             max_results,
-            sources: vec![
-                IngestionSourceSpec::PubMed,
-                IngestionSourceSpec::EuropePmc,
-                IngestionSourceSpec::SemanticScholar,
-                IngestionSourceSpec::Arxiv,
-                IngestionSourceSpec::BioRxiv,
-                IngestionSourceSpec::MedRxiv,
-                IngestionSourceSpec::ClinicalTrials,
-            ],
+            sources: build_source_list(&defaults.source_profile, has_semantic_key),
             pubmed_api_key: defaults.pubmed_api_key,
             semantic_scholar_api_key: defaults.semantic_scholar_api_key,
             unpaywall_email: defaults.unpaywall_email,
-            embedding_cfg: defaults.embedding_cfg.clone(),
+            embedding_cfg,
             enable_scihub_fallback: false,
-            source_timeout_secs: Some(45),
+            full_text_enabled: profile.use_full_text_default(),
+            source_timeout_secs,
+            full_text_step_timeout_secs: defaults.full_text_step_timeout_secs,
+            full_text_prefetch_workers,
+            source_cache_enabled: defaults.source_cache_enabled,
+            source_cache_ttl_secs: Some(defaults.source_cache_ttl_secs),
         };
 
         let repo = Arc::new(IngestionRepository::new(self.db.clone()));
         let (progress_tx, mut progress_rx) = broadcast::channel::<IngestionProgress>(512);
         let ingest_repo = repo.clone();
-        let ingest_task = tokio::spawn(async move {
-            run_ingestion(job, ingest_repo, Some(progress_tx)).await
-        });
+        let ingest_task =
+            tokio::spawn(async move { run_ingestion(job, ingest_repo, Some(progress_tx)).await });
 
         let started_at = Instant::now();
         let hard_deadline = started_at + max_runtime;
@@ -428,14 +751,13 @@ impl Tool for IngestionTool {
             .unwrap_or(0);
         let provider_errors = provider_refresh
             .as_ref()
-            .map(|r| {
-                (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
-            })
+            .map(|r| (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64)
             .unwrap_or(0);
 
         let output_text = format!(
-            "Ingestion completed in {}ms. Found {} papers across sources. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Watchdog policy: idle={}s, max_runtime={}s.",
+            "Ingestion completed in {}ms. Source fetch returned {} papers, {} unique after cross-source dedupe. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} existing duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Watchdog policy: idle={}s, max_runtime={}s. Runtime profile: ram={:.1}GB, cpu_logical={}, nvidia_gpu={}, cuda_toolkit={}, cuda_install_attempted={}, perf_mode={}, tuned_max_results={}, full_text_enabled={}, source_timeout_secs={}, prefetch_workers={:?}, paper_workers={:?}, source_cache_enabled={}, source_cache_ttl_secs={}, entity_batch_size={}, fact_batch_size={}. Source telemetry: {}",
             result.duration_ms,
+            result.papers_found_raw,
             result.papers_found,
             result.papers_inserted,
             result.chunks_inserted,
@@ -445,6 +767,27 @@ impl Tool for IngestionTool {
             provider_errors,
             idle_timeout.as_secs(),
             max_runtime.as_secs(),
+            profile.ram_gb,
+            profile.logical_cpus,
+            profile.has_nvidia_gpu,
+            profile.has_cuda_toolkit,
+            profile.cuda_install_attempted,
+            perf_mode,
+            max_results,
+            profile.use_full_text_default(),
+            source_timeout_secs.unwrap_or_else(|| profile.source_timeout_secs()),
+            full_text_prefetch_workers,
+            paper_process_workers,
+            defaults.source_cache_enabled,
+            defaults.source_cache_ttl_secs,
+            defaults.entity_batch_size,
+            defaults.fact_batch_size,
+            result
+                .source_telemetry
+                .iter()
+                .map(|s| format!("{}:fetched={},err={}", s.source, s.fetched, s.error.clone().unwrap_or_else(|| "none".to_string())))
+                .collect::<Vec<_>>()
+                .join("; "),
         );
 
         Ok(ToolOutput::text(

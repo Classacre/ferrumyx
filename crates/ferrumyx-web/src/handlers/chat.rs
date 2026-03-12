@@ -1,14 +1,14 @@
 //! Chat endpoint handler proxying requests to the IronClaw GatewayChannel.
 
+use crate::state::SharedState;
 use axum::{
     body::Body,
-    extract::{State, Json},
-    response::{IntoResponse, Html, Response},
+    extract::{Json, State},
+    response::{Html, IntoResponse, Response},
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use crate::state::SharedState;
 
 const GATEWAY_BASE_URL: &str = "http://127.0.0.1:3002";
 const GATEWAY_AUTH_TOKEN: &str = "Bearer ferrumyx-local-dev-token";
@@ -46,7 +46,8 @@ pub async fn chat_submit(
     };
 
     let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/send");
-    let res = client.post(gateway_url)
+    let res = client
+        .post(gateway_url)
         .header("Authorization", GATEWAY_AUTH_TOKEN)
         .json(&json!({
             "content": payload.message,
@@ -90,7 +91,7 @@ pub async fn chat_submit(
                 "response": "Task accepted and processing in background."
             }))
             .into_response()
-        },
+        }
         Err(e) => {
             tracing::error!("Failed to contact IronClaw Agent: {}", e);
             (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
@@ -189,7 +190,11 @@ async fn fetch_turn_marker(client: &Client, thread_id: &str) -> Option<usize> {
     )
 }
 
-async fn poll_for_response(client: &Client, thread_id: &str, before_turn_marker: usize) -> Option<String> {
+async fn poll_for_response(
+    client: &Client,
+    thread_id: &str,
+    before_turn_marker: usize,
+) -> Option<String> {
     let mut attempts = 0u32;
     while attempts < 40 {
         attempts += 1;
@@ -261,9 +266,7 @@ pub async fn chat_history(
     }
 }
 
-pub async fn chat_threads(
-    State(_state): State<SharedState>,
-) -> impl IntoResponse {
+pub async fn chat_threads(State(_state): State<SharedState>) -> impl IntoResponse {
     let client = Client::new();
     let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/threads");
 
@@ -293,9 +296,7 @@ pub async fn chat_threads(
     }
 }
 
-pub async fn chat_thread_new(
-    State(_state): State<SharedState>,
-) -> impl IntoResponse {
+pub async fn chat_thread_new(State(_state): State<SharedState>) -> impl IntoResponse {
     let client = Client::new();
     let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/thread/new");
 
@@ -319,15 +320,16 @@ pub async fn chat_thread_new(
         )
             .into_response(),
         Err(e) => {
-            tracing::error!("Failed to contact IronClaw Agent new-thread endpoint: {}", e);
+            tracing::error!(
+                "Failed to contact IronClaw Agent new-thread endpoint: {}",
+                e
+            );
             (axum::http::StatusCode::SERVICE_UNAVAILABLE, "Agent offline").into_response()
         }
     }
 }
 
-pub async fn chat_events_proxy(
-    State(_state): State<SharedState>,
-) -> impl IntoResponse {
+pub async fn chat_events_proxy(State(_state): State<SharedState>) -> impl IntoResponse {
     let client = Client::new();
     let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/events");
 

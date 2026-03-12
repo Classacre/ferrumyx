@@ -1,6 +1,5 @@
 /// Core entity types mirroring the knowledge graph schema.
 /// These are Rust representations of the PostgreSQL entity tables.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -35,9 +34,9 @@ pub struct Gene {
 pub struct Mutation {
     pub id: Uuid,
     pub gene_id: Uuid,
-    pub hgvs_p: Option<String>,  // e.g. p.Gly12Asp
-    pub hgvs_c: Option<String>,  // e.g. c.35G>A
-    pub rs_id: Option<String>,   // e.g. rs121913529
+    pub hgvs_p: Option<String>, // e.g. p.Gly12Asp
+    pub hgvs_c: Option<String>, // e.g. c.35G>A
+    pub rs_id: Option<String>,  // e.g. rs121913529
     pub aa_ref: Option<String>,
     pub aa_alt: Option<String>,
     pub aa_position: Option<i32>,
@@ -54,7 +53,7 @@ pub struct Mutation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CancerType {
     pub id: Uuid,
-    pub oncotree_code: String,  // e.g. PAAD
+    pub oncotree_code: String, // e.g. PAAD
     pub oncotree_name: String,
     pub icd_o3_code: Option<String>,
     pub tissue: Option<String>,
@@ -85,14 +84,14 @@ impl EvidenceType {
     /// See ARCHITECTURE.md §3.2
     pub fn base_weight(&self) -> f64 {
         match self {
-            EvidenceType::ExperimentalInVivo         => 1.00,
-            EvidenceType::ExperimentalInVitro        => 0.85,
-            EvidenceType::ClinicalTrialPhase3Plus    => 1.00,
-            EvidenceType::ClinicalTrialPhase12       => 0.75,
-            EvidenceType::ComputationalMl            => 0.50,
-            EvidenceType::ComputationalRuleBased     => 0.35,
-            EvidenceType::TextMined                  => 0.30,
-            EvidenceType::DatabaseAssertion          => 0.40,
+            EvidenceType::ExperimentalInVivo => 1.00,
+            EvidenceType::ExperimentalInVitro => 0.85,
+            EvidenceType::ClinicalTrialPhase3Plus => 1.00,
+            EvidenceType::ClinicalTrialPhase12 => 0.75,
+            EvidenceType::ComputationalMl => 0.50,
+            EvidenceType::ComputationalRuleBased => 0.35,
+            EvidenceType::TextMined => 0.30,
+            EvidenceType::DatabaseAssertion => 0.40,
         }
     }
 }
@@ -131,28 +130,28 @@ impl EvidenceType {
     /// Serialize to the string stored in the DB.
     pub fn as_str(&self) -> &'static str {
         match self {
-            EvidenceType::ExperimentalInVivo         => "experimental_in_vivo",
-            EvidenceType::ExperimentalInVitro        => "experimental_in_vitro",
-            EvidenceType::ClinicalTrialPhase3Plus    => "clinical_trial_phase3_plus",
-            EvidenceType::ClinicalTrialPhase12       => "clinical_trial_phase1_2",
-            EvidenceType::ComputationalMl            => "computational_ml",
-            EvidenceType::ComputationalRuleBased     => "computational_rule_based",
-            EvidenceType::TextMined                  => "text_mined",
-            EvidenceType::DatabaseAssertion          => "database_assertion",
+            EvidenceType::ExperimentalInVivo => "experimental_in_vivo",
+            EvidenceType::ExperimentalInVitro => "experimental_in_vitro",
+            EvidenceType::ClinicalTrialPhase3Plus => "clinical_trial_phase3_plus",
+            EvidenceType::ClinicalTrialPhase12 => "clinical_trial_phase1_2",
+            EvidenceType::ComputationalMl => "computational_ml",
+            EvidenceType::ComputationalRuleBased => "computational_rule_based",
+            EvidenceType::TextMined => "text_mined",
+            EvidenceType::DatabaseAssertion => "database_assertion",
         }
     }
 
     /// Parse from the string stored in the DB.
     pub fn from_str(s: &str) -> Self {
         match s {
-            "experimental_in_vivo"        => EvidenceType::ExperimentalInVivo,
-            "experimental_in_vitro"       => EvidenceType::ExperimentalInVitro,
-            "clinical_trial_phase3_plus"  => EvidenceType::ClinicalTrialPhase3Plus,
-            "clinical_trial_phase1_2"     => EvidenceType::ClinicalTrialPhase12,
-            "computational_ml"            => EvidenceType::ComputationalMl,
-            "computational_rule_based"    => EvidenceType::ComputationalRuleBased,
-            "text_mined"                  => EvidenceType::TextMined,
-            _                             => EvidenceType::DatabaseAssertion,
+            "experimental_in_vivo" => EvidenceType::ExperimentalInVivo,
+            "experimental_in_vitro" => EvidenceType::ExperimentalInVitro,
+            "clinical_trial_phase3_plus" => EvidenceType::ClinicalTrialPhase3Plus,
+            "clinical_trial_phase1_2" => EvidenceType::ClinicalTrialPhase12,
+            "computational_ml" => EvidenceType::ComputationalMl,
+            "computational_rule_based" => EvidenceType::ComputationalRuleBased,
+            "text_mined" => EvidenceType::TextMined,
+            _ => EvidenceType::DatabaseAssertion,
         }
     }
 }

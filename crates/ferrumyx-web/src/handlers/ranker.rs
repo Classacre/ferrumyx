@@ -1,26 +1,24 @@
 //! Target ranking API — computes composite scores using the ranker engine.
 
+use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
 use axum::{
-    extract::{State, Query},
+    extract::{Query, State},
     response::{Html, IntoResponse},
     Json,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use crate::state::SharedState;
-use crate::handlers::dashboard::NAV_HTML;
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::{
-    entities::EntityRepository,
-    kg_facts::KgFactRepository,
-    target_scores::TargetScoreRepository,
+    entities::EntityRepository, kg_facts::KgFactRepository, target_scores::TargetScoreRepository,
 };
 use ferrumyx_ranker::{
+    depmap_provider::{DepMapClientAdapter, DepMapProvider},
+    normalise::normalise_ceres,
     scorer::ComponentScoresNormed,
     weights::WeightVector,
-    normalise::normalise_ceres,
-    depmap_provider::{DepMapProvider, DepMapClientAdapter},
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Deserialize)]
 pub struct RankerFilter {
@@ -74,7 +72,11 @@ pub async fn api_ranker_score(
     let row = all
         .into_iter()
         .find(|r| r.gene.eq_ignore_ascii_case(gene))
-        .ok_or_else(|| ApiError::NotFound(format!("No persisted score found for {gene} in {cancer_type}")))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!(
+                "No persisted score found for {gene} in {cancer_type}"
+            ))
+        })?;
 
     Ok(Json(row))
 }
@@ -115,7 +117,7 @@ pub async fn api_ranker_stats(
         secondary_count,
         excluded_count,
     };
-    
+
     Ok(Json(stats))
 }
 
@@ -149,8 +151,10 @@ async fn load_ranked_targets(
     let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
     let mut out = Vec::new();
     for s in rows {
-        let raw_json: serde_json::Value = serde_json::from_str(&s.components_raw).unwrap_or_default();
-        let norm_json: serde_json::Value = serde_json::from_str(&s.components_normed).unwrap_or_default();
+        let raw_json: serde_json::Value =
+            serde_json::from_str(&s.components_raw).unwrap_or_default();
+        let norm_json: serde_json::Value =
+            serde_json::from_str(&s.components_normed).unwrap_or_default();
         let mut gene = raw_json
             .get("gene")
             .and_then(|v| v.as_str())
@@ -188,7 +192,10 @@ async fn load_ranked_targets(
         }
 
         let mut component_scores = ComponentScoresNormed {
-            mutation_freq: norm_json.get("mutation_score").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            mutation_freq: norm_json
+                .get("mutation_score")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
             crispr_dependency: 0.0,
             survival_correlation: 0.0,
             expression_specificity: 0.0,
@@ -196,7 +203,10 @@ async fn load_ranked_targets(
             pocket_detectability: 0.0,
             novelty_score: 0.0,
             pathway_independence: 0.0,
-            literature_novelty: norm_json.get("literature_score").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            literature_novelty: norm_json
+                .get("literature_score")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
         };
         if let Some(depmap) = &depmap {
             if let Some(ceres) = depmap.get_mean_ceres(&gene, &cancer_type) {

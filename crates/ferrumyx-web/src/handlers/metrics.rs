@@ -6,10 +6,7 @@ use axum::{extract::State, response::Html};
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
-use ferrumyx_db::{
-    kg_facts::KgFactRepository,
-    target_scores::TargetScoreRepository,
-};
+use ferrumyx_db::{kg_facts::KgFactRepository, target_scores::TargetScoreRepository};
 
 pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     let fact_repo = KgFactRepository::new(state.db.clone());
@@ -35,7 +32,11 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
         .count() as f64;
 
     let avg_conf_adj = if scored_count > 0.0 {
-        scores.iter().map(|s| s.confidence_adjusted_score).sum::<f64>() / scored_count
+        scores
+            .iter()
+            .map(|s| s.confidence_adjusted_score)
+            .sum::<f64>()
+            / scored_count
     } else {
         0.0
     };

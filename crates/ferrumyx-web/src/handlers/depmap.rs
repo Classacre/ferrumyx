@@ -1,13 +1,13 @@
 //! DepMap integration page — CRISPR dependency scores and gene essentiality.
 
+use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
 use axum::{
-    extract::{State, Query},
+    extract::{Query, State},
     response::{Html, IntoResponse, Json},
 };
-use serde::{Deserialize, Serialize};
-use crate::state::SharedState;
-use crate::handlers::dashboard::NAV_HTML;
 use ferrumyx_ranker::depmap_provider::DepMapClientAdapter;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct DepMapFilter {

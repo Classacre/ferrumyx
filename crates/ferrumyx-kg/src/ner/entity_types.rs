@@ -32,7 +32,8 @@ impl EntityType {
 
 pub fn normalize_entity_label(label: &str) -> EntityType {
     let clean_label = label.trim_start_matches("B-").trim_start_matches("I-");
-    get_label_map().get(clean_label)
+    get_label_map()
+        .get(clean_label)
         .or_else(|| get_label_map().get(label))
         .copied()
         .unwrap_or(EntityType::Other)

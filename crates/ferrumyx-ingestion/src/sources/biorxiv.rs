@@ -7,21 +7,21 @@
 //! which returns article metadata matching a query string.
 
 use async_trait::async_trait;
+use chrono::NaiveDate;
 use reqwest::Client;
 use tracing::{debug, instrument, warn};
-use chrono::NaiveDate;
 
-use crate::models::{Author, IngestionSource, PaperMetadata};
 use super::LiteratureSource;
+use crate::models::{Author, IngestionSource, PaperMetadata};
 
 const BIORXIV_SEARCH_URL: &str = "https://api.biorxiv.org/details/biorxiv";
 const MEDRXIV_SEARCH_URL: &str = "https://api.biorxiv.org/details/medrxiv";
 
 pub struct BioRxivClient {
-    client:  Client,
+    client: Client,
     /// "biorxiv" or "medrxiv"
-    server:  &'static str,
-    base:    &'static str,
+    server: &'static str,
+    base: &'static str,
 }
 
 impl BioRxivClient {
@@ -29,7 +29,7 @@ impl BioRxivClient {
         Self {
             client: Client::new(),
             server: "biorxiv",
-            base:   BIORXIV_SEARCH_URL,
+            base: BIORXIV_SEARCH_URL,
         }
     }
 
@@ -37,7 +37,7 @@ impl BioRxivClient {
         Self {
             client: Client::new(),
             server: "medrxiv",
-            base:   MEDRXIV_SEARCH_URL,
+            base: MEDRXIV_SEARCH_URL,
         }
     }
 
@@ -46,31 +46,42 @@ impl BioRxivClient {
     #[instrument(skip(self))]
     async fn fetch_recent(
         &self,
-        interval: &str,    // e.g. "2024-01-01/2025-01-01"
+        interval: &str, // e.g. "2024-01-01/2025-01-01"
         query: &str,
         max_results: usize,
     ) -> anyhow::Result<Vec<PaperMetadata>> {
         let url = format!("{}/{}/0/json", self.base, interval);
-        let resp = self.client.get(&url).send().await?.json::<serde_json::Value>().await?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
 
-        let collection = resp["collection"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
+        let collection = resp["collection"].as_array().cloned().unwrap_or_default();
 
-        debug!(server = self.server, fetched = collection.len(), "bioRxiv API response");
+        debug!(
+            server = self.server,
+            fetched = collection.len(),
+            "bioRxiv API response"
+        );
 
         // Client-side keyword filter (API doesn't support free-text search natively)
         let query_lower = query.to_lowercase();
-        let keywords: Vec<&str> = query_lower.split(" AND ")
+        let keywords: Vec<&str> = query_lower
+            .split(" AND ")
             .map(|k| k.trim().trim_end_matches("[tiab]").trim())
             .collect();
 
-        let mut papers: Vec<PaperMetadata> = collection.iter()
+        let mut papers: Vec<PaperMetadata> = collection
+            .iter()
             .filter(|item| {
-                let title    = item["title"].as_str().unwrap_or("").to_lowercase();
+                let title = item["title"].as_str().unwrap_or("").to_lowercase();
                 let abstract_ = item["abstract"].as_str().unwrap_or("").to_lowercase();
-                keywords.iter().any(|kw| title.contains(kw) || abstract_.contains(kw))
+                keywords
+                    .iter()
+                    .any(|kw| title.contains(kw) || abstract_.contains(kw))
             })
             .map(|item| {
                 let source = if self.server == "biorxiv" {
@@ -79,7 +90,8 @@ impl BioRxivClient {
                     IngestionSource::MedRxiv
                 };
 
-                let authors: Vec<Author> = item["authors"].as_str()
+                let authors: Vec<Author> = item["authors"]
+                    .as_str()
                     .unwrap_or("")
                     .split(';')
                     .filter(|s| !s.trim().is_empty())
@@ -90,25 +102,26 @@ impl BioRxivClient {
                     })
                     .collect();
 
-                let pub_date = item["date"].as_str()
+                let pub_date = item["date"]
+                    .as_str()
                     .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
 
                 let doi = item["doi"].as_str().map(String::from);
-                let full_text_url = doi.as_ref().map(|d| {
-                    format!("https://www.biorxiv.org/content/{}.full.pdf", d)
-                });
+                let full_text_url = doi
+                    .as_ref()
+                    .map(|d| format!("https://www.biorxiv.org/content/{}.full.pdf", d));
 
                 PaperMetadata {
                     doi,
-                    pmid:          None,
-                    pmcid:         None,
-                    title:         item["title"].as_str().unwrap_or("").to_string(),
+                    pmid: None,
+                    pmcid: None,
+                    title: item["title"].as_str().unwrap_or("").to_string(),
                     abstract_text: item["abstract"].as_str().map(String::from),
                     authors,
-                    journal:       Some(format!("{} preprint", self.server)),
+                    journal: Some(format!("{} preprint", self.server)),
                     pub_date,
                     source,
-                    open_access:   true,  // all bioRxiv/medRxiv are OA
+                    open_access: true, // all bioRxiv/medRxiv are OA
                     full_text_url,
                 }
             })
@@ -117,7 +130,10 @@ impl BioRxivClient {
 
         // If we got nothing from recent, try the previous year
         if papers.is_empty() {
-            warn!(server = self.server, "No results for recent interval; try broadening date range");
+            warn!(
+                server = self.server,
+                "No results for recent interval; try broadening date range"
+            );
         }
 
         Ok(papers)
@@ -143,7 +159,11 @@ impl LiteratureSource for BioRxivClient {
             return Ok(None);
         }
         let html = resp.text().await?;
-        Ok(if html.trim().is_empty() { None } else { Some(html) })
+        Ok(if html.trim().is_empty() {
+            None
+        } else {
+            Some(html)
+        })
     }
 }
 

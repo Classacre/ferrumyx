@@ -1,10 +1,10 @@
 //! Scientific query interface — NL query → ranked target output.
 
-use axum::{extract::State, response::Html, Form};
-use ferrumyx_ranker::TargetQueryEngine;
-use ferrumyx_common::query::{QueryRequest, QueryResult};
-use crate::state::SharedState;
 use crate::handlers::dashboard::NAV_HTML;
+use crate::state::SharedState;
+use axum::{extract::State, response::Html, Form};
+use ferrumyx_common::query::{QueryRequest, QueryResult};
+use ferrumyx_ranker::TargetQueryEngine;
 
 pub async fn query_page(State(_state): State<SharedState>) -> Html<String> {
     Html(render_query_page(None))
@@ -74,7 +74,8 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                 t.gene_symbol, t.cancer_code, t.gene_symbol)
             }).collect();
 
-            format!(r#"
+            format!(
+                r#"
             <div class="card mt-4">
                 <div class="card-header">
                     <div>Results for: <em class="text-gradient">{}</em></div>
@@ -98,11 +99,16 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                         <tbody>{}</tbody>
                     </table>
                 </div>
-            </div>"#, query, targets.len(), rows)
+            </div>"#,
+                query,
+                targets.len(),
+                rows
+            )
         }
     };
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -208,5 +214,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, NAV_HTML, results_html)
+</html>"#,
+        NAV_HTML, results_html
+    )
 }

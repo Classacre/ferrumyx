@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use reqwest::Client;
 use tracing::{debug, instrument};
 
-use crate::models::{Author, IngestionSource, PaperMetadata};
 use super::LiteratureSource;
+use crate::models::{Author, IngestionSource, PaperMetadata};
 
 const EPMC_SEARCH_URL: &str = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
@@ -18,12 +18,16 @@ pub struct EuropePmcClient {
 
 impl EuropePmcClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 }
 
 impl Default for EuropePmcClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -37,7 +41,8 @@ impl LiteratureSource for EuropePmcClient {
             ("format", "json"),
         ];
 
-        let resp = self.client
+        let resp = self
+            .client
             .get(EPMC_SEARCH_URL)
             .query(&params)
             .send()
@@ -52,39 +57,42 @@ impl LiteratureSource for EuropePmcClient {
 
         debug!(count = results.len(), "Europe PMC search returned results");
 
-        let papers = results.iter().map(|r| {
-            let authors: Vec<Author> = r["authorList"]["author"]
-                .as_array()
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|a| Author {
-                    name: a["fullName"].as_str().unwrap_or("").to_string(),
-                    affiliation: None,
-                    orcid: a["authorId"]["value"].as_str().map(String::from),
-                })
-                .collect();
-
-            PaperMetadata {
-                doi: r["doi"].as_str().map(String::from),
-                pmid: r["pmid"].as_str().map(String::from),
-                pmcid: r["pmcid"].as_str().map(String::from),
-                title: r["title"].as_str().unwrap_or("").to_string(),
-                abstract_text: r["abstractText"].as_str().map(String::from),
-                authors,
-                journal: r["journalTitle"].as_str().map(String::from),
-                pub_date: None, // TODO: parse r["firstPublicationDate"]
-                source: IngestionSource::EuropePmc,
-                open_access: r["isOpenAccess"].as_str() == Some("Y"),
-                full_text_url: r["fullTextUrlList"]["fullTextUrl"]
+        let papers = results
+            .iter()
+            .map(|r| {
+                let authors: Vec<Author> = r["authorList"]["author"]
                     .as_array()
-                    .and_then(|urls: &Vec<serde_json::Value>| {
-                        urls.iter()
-                            .find(|u| u["documentStyle"].as_str() == Some("pdf"))
-                            .and_then(|u| u["url"].as_str())
-                            .map(String::from)
-                    }),
-            }
-        }).collect();
+                    .unwrap_or(&vec![])
+                    .iter()
+                    .map(|a| Author {
+                        name: a["fullName"].as_str().unwrap_or("").to_string(),
+                        affiliation: None,
+                        orcid: a["authorId"]["value"].as_str().map(String::from),
+                    })
+                    .collect();
+
+                PaperMetadata {
+                    doi: r["doi"].as_str().map(String::from),
+                    pmid: r["pmid"].as_str().map(String::from),
+                    pmcid: r["pmcid"].as_str().map(String::from),
+                    title: r["title"].as_str().unwrap_or("").to_string(),
+                    abstract_text: r["abstractText"].as_str().map(String::from),
+                    authors,
+                    journal: r["journalTitle"].as_str().map(String::from),
+                    pub_date: None, // TODO: parse r["firstPublicationDate"]
+                    source: IngestionSource::EuropePmc,
+                    open_access: r["isOpenAccess"].as_str() == Some("Y"),
+                    full_text_url: r["fullTextUrlList"]["fullTextUrl"].as_array().and_then(
+                        |urls: &Vec<serde_json::Value>| {
+                            urls.iter()
+                                .find(|u| u["documentStyle"].as_str() == Some("pdf"))
+                                .and_then(|u| u["url"].as_str())
+                                .map(String::from)
+                        },
+                    ),
+                }
+            })
+            .collect();
 
         Ok(papers)
     }
@@ -99,6 +107,10 @@ impl LiteratureSource for EuropePmcClient {
             return Ok(None);
         }
         let xml = resp.text().await?;
-        Ok(if xml.trim().is_empty() { None } else { Some(xml) })
+        Ok(if xml.trim().is_empty() {
+            None
+        } else {
+            Some(xml)
+        })
     }
 }

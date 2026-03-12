@@ -12,12 +12,13 @@ use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::{
-    entities::EntityRepository,
-    kg_facts::KgFactRepository,
-    papers::PaperRepository,
+    entities::EntityRepository, kg_facts::KgFactRepository, papers::PaperRepository,
     target_scores::TargetScoreRepository,
 };
-use ferrumyx_ranker::{depmap_provider::{DepMapClientAdapter, DepMapProvider}, normalise::normalise_ceres};
+use ferrumyx_ranker::{
+    depmap_provider::{DepMapClientAdapter, DepMapProvider},
+    normalise::normalise_ceres,
+};
 
 #[derive(Deserialize, Default)]
 pub struct TargetFilter {
@@ -121,14 +122,8 @@ pub async fn api_target_detail(
     Path(gene): Path<String>,
     Query(filter): Query<TargetFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let rows = load_target_rows(
-        &state,
-        filter.cancer.as_deref(),
-        Some(&gene),
-        None,
-        50_000,
-    )
-    .await?;
+    let rows =
+        load_target_rows(&state, filter.cancer.as_deref(), Some(&gene), None, 50_000).await?;
 
     let row = rows
         .into_iter()
@@ -317,7 +312,8 @@ pub async fn targets_page(
         String::new()
     };
 
-    Html(format!(r#"<!DOCTYPE html>
+    Html(format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -377,16 +373,16 @@ pub async fn targets_page(
 </main>
 <script src="/static/js/main.js"></script>
 </body>
-</html>"#, 
-    NAV_HTML,
-    cancer,
-    if cancer == "PAAD" { "selected" } else { "" },
-    if cancer == "NSCLC" { "selected" } else { "" },
-    if cancer == "BRCA" { "selected" } else { "" },
-    if cancer == "COAD" { "selected" } else { "" },
-    total,
-    rows_html,
-    pagination
+</html>"#,
+        NAV_HTML,
+        cancer,
+        if cancer == "PAAD" { "selected" } else { "" },
+        if cancer == "NSCLC" { "selected" } else { "" },
+        if cancer == "BRCA" { "selected" } else { "" },
+        if cancer == "COAD" { "selected" } else { "" },
+        total,
+        rows_html,
+        pagination
     ))
 }
 
@@ -423,8 +419,10 @@ async fn load_target_rows(
     let mut rows = Vec::new();
 
     for s in scores {
-        let raw_json: serde_json::Value = serde_json::from_str(&s.components_raw).unwrap_or_default();
-        let norm_json: serde_json::Value = serde_json::from_str(&s.components_normed).unwrap_or_default();
+        let raw_json: serde_json::Value =
+            serde_json::from_str(&s.components_raw).unwrap_or_default();
+        let norm_json: serde_json::Value =
+            serde_json::from_str(&s.components_normed).unwrap_or_default();
 
         let gene = if let Some(v) = raw_json.get("gene").and_then(|v| v.as_str()) {
             v.to_string()

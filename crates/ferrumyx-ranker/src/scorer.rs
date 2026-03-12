@@ -1,28 +1,28 @@
 //! Composite target score computation.
 //! Implements S(g, c) formula from ARCHITECTURE.md §4.1
 
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use ferrumyx_common::query::{TargetMetrics, TargetScoreResult};
-use crate::weights::WeightVector;
 use crate::depmap_provider::DepMapProvider;
-use crate::tcga_provider::TcgaProvider;
 use crate::gtex_provider::GtexProvider;
 use crate::normalise::normalise_ceres;
+use crate::tcga_provider::TcgaProvider;
+use crate::weights::WeightVector;
+use ferrumyx_common::query::{TargetMetrics, TargetScoreResult};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Raw component scores for a (gene, cancer) pair.
 /// All values should be in their natural units before normalisation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentScoresRaw {
-    pub mutation_freq: Option<f64>,          // 0.0–1.0 (fraction of tumours)
-    pub crispr_dependency: Option<f64>,      // CERES score (typically -2.0 to 0)
-    pub survival_correlation: Option<f64>,   // hazard ratio or log-rank p-value
+    pub mutation_freq: Option<f64>,        // 0.0–1.0 (fraction of tumours)
+    pub crispr_dependency: Option<f64>,    // CERES score (typically -2.0 to 0)
+    pub survival_correlation: Option<f64>, // hazard ratio or log-rank p-value
     pub expression_specificity: Option<f64>, // tumour_tpm / normal_tpm
-    pub structural_tractability: Option<f64>,// 0.0–1.0
-    pub pocket_detectability: Option<f64>,   // fpocket score 0.0–1.0
-    pub novelty_score: Option<f64>,          // 1 / (1 + inhibitor_count)
-    pub pathway_independence: Option<f64>,   // 1 / (1 + escape_pathway_count)
-    pub literature_novelty: Option<f64>,     // underexplored ratio
+    pub structural_tractability: Option<f64>, // 0.0–1.0
+    pub pocket_detectability: Option<f64>, // fpocket score 0.0–1.0
+    pub novelty_score: Option<f64>,        // 1 / (1 + inhibitor_count)
+    pub pathway_independence: Option<f64>, // 1 / (1 + escape_pathway_count)
+    pub literature_novelty: Option<f64>,   // underexplored ratio
 }
 
 /// Normalised component scores (all in [0, 1]).
@@ -129,7 +129,7 @@ pub fn compute_composite_score(
         .sum();
 
     let composite = (weighted_sum - penalty).clamp(0.0, 1.0);
-    let adjusted  = (composite * mean_confidence).clamp(0.0, 1.0);
+    let adjusted = (composite * mean_confidence).clamp(0.0, 1.0);
 
     (composite, adjusted)
 }
@@ -146,7 +146,9 @@ pub enum ShortlistTier {
 pub struct PrioritizationEngine;
 
 impl PrioritizationEngine {
-    pub fn calculate_scores(cohort: &[(Uuid, TargetMetrics)]) -> std::collections::HashMap<Uuid, TargetScoreResult> {
+    pub fn calculate_scores(
+        cohort: &[(Uuid, TargetMetrics)],
+    ) -> std::collections::HashMap<Uuid, TargetScoreResult> {
         let n = cohort.len() as f64;
         let mut results = std::collections::HashMap::new();
 
@@ -164,7 +166,7 @@ impl PrioritizationEngine {
             let n3 = survival_corr_ranks.get(id).unwrap_or(&0.0) / n;
             let n4 = expr_spec_ranks.get(id).unwrap_or(&0.0) / n;
             let n9 = lit_novelty_ranks.get(id).unwrap_or(&0.0) / n;
-            
+
             let ceres_normalized = (metrics.crispr_dependency + 2.0) / 2.0;
             let n2 = 1.0 - ceres_normalized.clamp(0.0, 1.0);
 
@@ -172,7 +174,8 @@ impl PrioritizationEngine {
             let n5 = if metrics.pdb_structure_count > 0 {
                 0.40 * pdb_cov + 0.25 * metrics.fpocket_best_score.clamp(0.0, 1.0)
             } else {
-                0.35 * (metrics.af_plddt_mean / 100.0) + 0.25 * metrics.fpocket_best_score.clamp(0.0, 1.0)
+                0.35 * (metrics.af_plddt_mean / 100.0)
+                    + 0.25 * metrics.fpocket_best_score.clamp(0.0, 1.0)
             };
 
             let n6 = metrics.fpocket_best_score.clamp(0.0, 1.0);
@@ -180,40 +183,62 @@ impl PrioritizationEngine {
             let n8 = 1.0 / (1.0 + metrics.reactome_escape_pathway_count as f64);
 
             let mut penalty = 0.0;
-            if metrics.chembl_inhibitor_count > 50 { penalty += 0.15; }
-            if metrics.expression_specificity < 1.5 { penalty += 0.10; }
-            if metrics.pdb_structure_count == 0 && metrics.af_plddt_mean < 50.0 { penalty += 0.08; }
+            if metrics.chembl_inhibitor_count > 50 {
+                penalty += 0.15;
+            }
+            if metrics.expression_specificity < 1.5 {
+                penalty += 0.10;
+            }
+            if metrics.pdb_structure_count == 0 && metrics.af_plddt_mean < 50.0 {
+                penalty += 0.08;
+            }
 
-            let mut composite = (
-                0.20 * n1 + 0.18 * n2 + 0.15 * n3 + 0.12 * n4 + 0.12 * n5 + 0.08 * n6 + 0.07 * n7 + 0.05 * n8 + 0.03 * n9
-            ) - penalty;
+            let mut composite = (0.20 * n1
+                + 0.18 * n2
+                + 0.15 * n3
+                + 0.12 * n4
+                + 0.12 * n5
+                + 0.08 * n6
+                + 0.07 * n7
+                + 0.05 * n8
+                + 0.03 * n9)
+                - penalty;
 
             composite = composite.clamp(0.0, 1.0);
 
-            results.insert(*id, TargetScoreResult {
-                n1_mutation_freq: n1,
-                n2_crispr_dependency: n2,
-                n3_survival_correlation: n3,
-                n4_expression_specificity: n4,
-                n5_structural_tractability: n5,
-                n6_pocket_detectability: n6,
-                n7_novelty_score: n7,
-                n8_pathway_independence: n8,
-                n9_literature_novelty: n9,
-                penalty,
-                composite_score: composite,
-                is_disputed: false,
-            });
+            results.insert(
+                *id,
+                TargetScoreResult {
+                    n1_mutation_freq: n1,
+                    n2_crispr_dependency: n2,
+                    n3_survival_correlation: n3,
+                    n4_expression_specificity: n4,
+                    n5_structural_tractability: n5,
+                    n6_pocket_detectability: n6,
+                    n7_novelty_score: n7,
+                    n8_pathway_independence: n8,
+                    n9_literature_novelty: n9,
+                    penalty,
+                    composite_score: composite,
+                    is_disputed: false,
+                },
+            );
         }
 
         results
     }
 
-    fn rank_cohort<F>(cohort: &[(Uuid, TargetMetrics)], key_fn: F) -> std::collections::HashMap<Uuid, f64> 
-    where F: Fn(&TargetMetrics) -> f64 {
-        let mut sortable: Vec<(&Uuid, f64)> = cohort.iter().map(|(id, m)| (id, key_fn(m))).collect();
+    fn rank_cohort<F>(
+        cohort: &[(Uuid, TargetMetrics)],
+        key_fn: F,
+    ) -> std::collections::HashMap<Uuid, f64>
+    where
+        F: Fn(&TargetMetrics) -> f64,
+    {
+        let mut sortable: Vec<(&Uuid, f64)> =
+            cohort.iter().map(|(id, m)| (id, key_fn(m))).collect();
         sortable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let mut ranks = std::collections::HashMap::new();
         for (i, (id, _)) in sortable.iter().enumerate() {
             ranks.insert(**id, (i + 1) as f64);
@@ -265,7 +290,7 @@ pub fn compute_crispr_component(
 ) -> Option<f64> {
     // Try mean CERES first
     let ceres = depmap.get_mean_ceres(gene, cancer_type)?;
-    
+
     // Normalize: more essential (more negative) → higher score
     Some(normalise_ceres(ceres))
 }
@@ -289,20 +314,20 @@ pub fn compute_expression_component(
 ) -> Option<f64> {
     let t_tpm = tumour_tpm?;
     let median_exprs = gtex.get_median_expression(gene)?;
-    
+
     // Average normal expression across all GTEx tissues
     let sum: f64 = median_exprs.values().sum();
     let count = median_exprs.len() as f64;
-    
+
     if count == 0.0 {
         return None;
     }
     let baseline = sum / count;
-    
+
     if baseline == 0.0 {
         return Some(1.0); // Extremely tumor specific
     }
-    
+
     let ratio = t_tpm / baseline;
     // Cap at 10x ratio
     Some((ratio / 10.0).clamp(0.0, 1.0))
@@ -328,12 +353,12 @@ pub fn compute_component_scores_with_providers(
 ) -> ComponentScoresRaw {
     let crispr_dependency = depmap.get_mean_ceres(gene, cancer_type);
     let survival_correlation = tcga.get_survival_correlation(gene, cancer_type);
-    
+
     let expression_specificity = match tumour_tpm {
         Some(tpm) => compute_expression_component(gene, Some(tpm), gtex),
-        None => None
+        None => None,
     };
-    
+
     ComponentScoresRaw {
         mutation_freq,
         crispr_dependency,
@@ -351,8 +376,8 @@ pub fn compute_component_scores_with_providers(
 mod tests {
     use super::*;
     use crate::depmap_provider::MockDepMapProvider;
-    use crate::tcga_provider::MockTcgaProvider;
     use crate::gtex_provider::MockGtexProvider;
+    use crate::tcga_provider::MockTcgaProvider;
 
     #[test]
     fn test_composite_score_range() {
@@ -380,24 +405,28 @@ mod tests {
     #[test]
     fn test_penalty_reduces_score() {
         let normed = ComponentScoresNormed {
-            mutation_freq: 0.5, crispr_dependency: 0.5, survival_correlation: 0.5,
-            expression_specificity: 0.5, structural_tractability: 0.5,
-            pocket_detectability: 0.5, novelty_score: 0.5,
-            pathway_independence: 0.5, literature_novelty: 0.5,
+            mutation_freq: 0.5,
+            crispr_dependency: 0.5,
+            survival_correlation: 0.5,
+            expression_specificity: 0.5,
+            structural_tractability: 0.5,
+            pocket_detectability: 0.5,
+            novelty_score: 0.5,
+            pathway_independence: 0.5,
+            literature_novelty: 0.5,
         };
         let weights = WeightVector::default();
-        let (no_pen, _)   = compute_composite_score(&normed, &weights, 0.0,  1.0);
+        let (no_pen, _) = compute_composite_score(&normed, &weights, 0.0, 1.0);
         let (with_pen, _) = compute_composite_score(&normed, &weights, 0.15, 1.0);
         assert!(no_pen >= with_pen);
     }
 
     #[test]
     fn test_crispr_component_normalized() {
-        let provider = MockDepMapProvider::new()
-            .with("KRAS", "PAAD", -1.2);  // Strongly essential
-        
+        let provider = MockDepMapProvider::new().with("KRAS", "PAAD", -1.2); // Strongly essential
+
         let score = compute_crispr_component("KRAS", "PAAD", &provider);
-        
+
         // -1.2 should normalize to ~0.6 (moderate-high)
         assert!(score.is_some());
         let s = score.unwrap();
@@ -406,27 +435,24 @@ mod tests {
 
     #[test]
     fn test_crispr_component_missing_gene() {
-        let provider = MockDepMapProvider::new()
-            .with("KRAS", "PAAD", -1.0);
-        
+        let provider = MockDepMapProvider::new().with("KRAS", "PAAD", -1.0);
+
         let score = compute_crispr_component("TP53", "PAAD", &provider);
         assert!(score.is_none());
     }
 
     #[test]
     fn test_crispr_component_missing_cancer() {
-        let provider = MockDepMapProvider::new()
-            .with("KRAS", "PAAD", -1.0);
-        
+        let provider = MockDepMapProvider::new().with("KRAS", "PAAD", -1.0);
+
         let score = compute_crispr_component("KRAS", "LUAD", &provider);
         assert!(score.is_none());
     }
 
     #[test]
     fn test_compute_survival_component() {
-        let tcga = MockTcgaProvider::new()
-            .with("TP53", "BRCA", -0.5); // Better survival -> negative correlation
-        
+        let tcga = MockTcgaProvider::new().with("TP53", "BRCA", -0.5); // Better survival -> negative correlation
+
         let score = compute_survival_component("TP53", "BRCA", &tcga);
         assert!(score.is_some());
         // -0.5 mapped to 0.0-1.0 is (-0.5 + 1.0) / 2.0 = 0.25
@@ -438,7 +464,7 @@ mod tests {
         let gtex = MockGtexProvider::new()
             .with("HER2", "Breast", 5.0)
             .with("HER2", "Lung", 2.0); // Mean = 3.5
-        
+
         // Tumour TPM = 35.0 (10x ratio)
         let score_max = compute_expression_component("HER2", Some(35.0), &gtex);
         assert!(score_max.is_some());

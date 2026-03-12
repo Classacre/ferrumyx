@@ -14,8 +14,7 @@ use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::{kg_facts::KgFactRepository, papers::PaperRepository};
 use ferrumyx_ingestion::embedding::{
-    hybrid_search as ingestion_hybrid_search, EmbeddingClient, EmbeddingConfig,
-    HybridSearchConfig,
+    hybrid_search as ingestion_hybrid_search, EmbeddingClient, EmbeddingConfig, HybridSearchConfig,
 };
 use ferrumyx_ingestion::repository::IngestionRepository;
 
@@ -127,7 +126,10 @@ pub async fn hybrid_search(
     }
 
     let paper_ids: Vec<uuid::Uuid> = hybrid_rows.iter().map(|r| r.paper_id).collect();
-    let titles_by_id = paper_repo.find_titles_by_ids(&paper_ids).await.unwrap_or_default();
+    let titles_by_id = paper_repo
+        .find_titles_by_ids(&paper_ids)
+        .await
+        .unwrap_or_default();
 
     let results: Vec<SearchResult> = hybrid_rows
         .into_iter()
@@ -152,12 +154,7 @@ pub async fn hybrid_search(
 
     let mut fact_counts: HashMap<(String, String, String), i32> = HashMap::new();
     for fact in kg_repo
-        .list_filtered(
-            None,
-            Some(&q_lower),
-            None,
-            (limit * 15).clamp(50, 1200),
-        )
+        .list_filtered(None, Some(&q_lower), None, (limit * 15).clamp(50, 1200))
         .await
         .unwrap_or_default()
     {
@@ -167,12 +164,14 @@ pub async fn hybrid_search(
 
     let mut kg_facts: Vec<KgFactBrief> = fact_counts
         .into_iter()
-        .map(|((fact_type, subject, object), evidence_count)| KgFactBrief {
-            fact_type,
-            subject,
-            object,
-            evidence_count,
-        })
+        .map(
+            |((fact_type, subject, object), evidence_count)| KgFactBrief {
+                fact_type,
+                subject,
+                object,
+                evidence_count,
+            },
+        )
         .collect();
 
     kg_facts.sort_by(|a, b| b.evidence_count.cmp(&a.evidence_count));

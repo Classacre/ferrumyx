@@ -538,7 +538,10 @@ mod tests {
     #[test]
     fn test_detect_openai_key() {
         let detector = LeakDetector::new();
-        let content = format!("API key: {}{}", "sk-proj-abc123def456ghi789jkl012mno345pqr", "T3BlbkFJtest123");
+        let content = format!(
+            "API key: {}{}",
+            "sk-proj-abc123def456ghi789jkl012mno345pqr", "T3BlbkFJtest123"
+        );
 
         let result = detector.scan(content);
         assert!(!result.is_clean());

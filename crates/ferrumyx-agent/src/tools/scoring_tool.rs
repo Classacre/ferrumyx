@@ -3,6 +3,7 @@ use ironclaw::context::JobContext;
 use ironclaw::tools::{Tool, ToolError, ToolOutput};
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ferrumyx_db::Database;
 
@@ -34,6 +35,11 @@ impl Tool for RecomputeTargetScoresTool {
         })
     }
 
+    fn execution_timeout(&self) -> Duration {
+        // Score recomputation can exceed default chat/tool limits on larger KG states.
+        Duration::from_secs(20 * 60)
+    }
+
     async fn execute(
         &self,
         _params: serde_json::Value,
@@ -42,7 +48,9 @@ impl Tool for RecomputeTargetScoresTool {
         let started = std::time::Instant::now();
         let upserted = ferrumyx_kg::compute_target_scores(self.db.clone())
             .await
-            .map_err(|e| ToolError::ExecutionFailed(format!("target score recompute failed: {e}")))?;
+            .map_err(|e| {
+                ToolError::ExecutionFailed(format!("target score recompute failed: {e}"))
+            })?;
 
         Ok(ToolOutput::success(
             json!({

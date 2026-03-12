@@ -7,7 +7,7 @@
 //!   - Self-improvement metrics dashboard
 //!   - System status & audit log
 
-pub mod router;
 pub mod handlers;
-pub mod state;
+pub mod router;
 pub mod sse;
+pub mod state;

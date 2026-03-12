@@ -106,5 +106,7 @@ fn require_str<'a>(params: &'a serde_json::Value, name: &str) -> Result<&'a str,
         .get(name)
         .and_then(|v| v.as_str())
         .filter(|v| !v.trim().is_empty())
-        .ok_or_else(|| ToolError::InvalidParameters(format!("missing required string parameter: {name}")))
+        .ok_or_else(|| {
+            ToolError::InvalidParameters(format!("missing required string parameter: {name}"))
+        })
 }

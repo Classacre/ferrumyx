@@ -11,23 +11,23 @@ use std::collections::HashMap;
 pub struct TargetConfig {
     /// Target gene/mutation specification
     pub target: TargetSpec,
-    
+
     /// Constraints for filtering results
     #[serde(default)]
     pub constraints: Constraints,
-    
+
     /// Data sources to query
     #[serde(default)]
     pub data_sources: DataSourceConfig,
-    
+
     /// Scoring weights
     #[serde(default)]
     pub scoring: ScoringConfig,
-    
+
     /// Output options
     #[serde(default)]
     pub output: OutputConfig,
-    
+
     /// Execution options
     #[serde(default)]
     pub execution: ExecutionConfig,
@@ -53,20 +53,20 @@ impl Default for TargetConfig {
 pub struct TargetSpec {
     /// Primary gene symbol (e.g., "KRAS")
     pub gene: String,
-    
+
     /// Optional mutation (e.g., "G12D")
     pub mutation: Option<String>,
-    
+
     /// Cancer type name (e.g., "Pancreatic Adenocarcinoma")
     pub cancer_type: String,
-    
+
     /// Cancer type code for DepMap (e.g., "PAAD")
     pub cancer_code: Option<String>,
-    
+
     /// Alternative: multiple genes for synthetic lethality
     #[serde(default)]
     pub genes: Vec<GeneSpec>,
-    
+
     /// Alternative: pathway-based targeting
     pub pathway: Option<String>,
 }
@@ -98,36 +98,44 @@ pub struct Constraints {
     /// Minimum druggability score (0.0 - 1.0)
     #[serde(default = "default_min_druggability")]
     pub min_druggability_score: f32,
-    
+
     /// Require protein structure (PDB or AlphaFold)
     #[serde(default)]
     pub require_structure: bool,
-    
+
     /// Minimum CERES score from DepMap (more negative = more essential)
     #[serde(default = "default_min_ceres")]
     pub min_ceres_score: f32,
-    
+
     /// Minimum cancer specificity ratio
     #[serde(default)]
     pub min_cancer_specificity: f32,
-    
+
     /// Minimum supporting papers
     #[serde(default = "default_min_papers")]
     pub min_papers: usize,
-    
+
     /// Maximum publication age in years
     #[serde(default = "default_max_age")]
     pub max_publication_age_years: usize,
-    
+
     /// Exclude targets at these clinical stages
     #[serde(default)]
     pub exclude_clinical_stage: Vec<String>,
 }
 
-fn default_min_druggability() -> f32 { 0.5 }
-fn default_min_ceres() -> f32 { -0.5 }
-fn default_min_papers() -> usize { 10 }
-fn default_max_age() -> usize { 5 }
+fn default_min_druggability() -> f32 {
+    0.5
+}
+fn default_min_ceres() -> f32 {
+    -0.5
+}
+fn default_min_papers() -> usize {
+    10
+}
+fn default_max_age() -> usize {
+    5
+}
 
 impl Default for Constraints {
     fn default() -> Self {
@@ -151,37 +159,39 @@ pub struct DataSourceConfig {
     /// Enable PubMed
     #[serde(default = "default_true")]
     pub pubmed: bool,
-    
+
     /// Enable Europe PMC
     #[serde(default = "default_true")]
     pub europe_pmc: bool,
-    
+
     /// Enable bioRxiv/medRxiv
     #[serde(default = "default_true")]
     pub biorxiv: bool,
-    
+
     /// Enable ClinicalTrials.gov
     #[serde(default)]
     pub clinical_trials: bool,
-    
+
     /// Enable DepMap
     #[serde(default = "default_true")]
     pub depmap: bool,
-    
+
     /// Enable COSMIC
     #[serde(default = "default_true")]
     pub cosmic: bool,
-    
+
     /// Enable ChEMBL
     #[serde(default = "default_true")]
     pub chembl: bool,
-    
+
     /// Custom data sources (user-provided files)
     #[serde(default)]
     pub custom: Vec<CustomDataSource>,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 impl Default for DataSourceConfig {
     fn default() -> Self {
@@ -203,14 +213,14 @@ impl Default for DataSourceConfig {
 pub struct CustomDataSource {
     /// Name for reference
     pub name: String,
-    
+
     /// File type (csv, json, tsv)
     #[serde(rename = "type")]
     pub file_type: String,
-    
+
     /// Path to file
     pub path: String,
-    
+
     /// Column mapping for the file
     pub mapping: HashMap<String, String>,
 }
@@ -223,42 +233,56 @@ pub struct ScoringConfig {
     /// Weight for CRISPR dependency score (DepMap)
     #[serde(default = "default_crispr_weight")]
     pub crispr_dependency: f32,
-    
+
     /// Weight for mutation frequency (COSMIC)
     #[serde(default = "default_mutation_weight")]
     pub mutation_frequency: f32,
-    
+
     /// Weight for expression dysregulation
     #[serde(default = "default_expression_weight")]
     pub expression_dysregulation: f32,
-    
+
     /// Weight for literature evidence
     #[serde(default = "default_literature_weight")]
     pub literature_evidence: f32,
-    
+
     /// Weight for druggability assessment
     #[serde(default = "default_druggability_weight")]
     pub druggability: f32,
-    
+
     /// Weight for pathway position
     #[serde(default = "default_pathway_weight")]
     pub pathway_position: f32,
-    
+
     /// Weight for clinical status
     #[serde(default = "default_clinical_weight")]
     pub clinical_status: f32,
-    
+
     /// Path to custom scorer plugin (WASM or Rust)
     pub custom_scorer: Option<String>,
 }
 
-fn default_crispr_weight() -> f32 { 0.25 }
-fn default_mutation_weight() -> f32 { 0.15 }
-fn default_expression_weight() -> f32 { 0.15 }
-fn default_literature_weight() -> f32 { 0.15 }
-fn default_druggability_weight() -> f32 { 0.15 }
-fn default_pathway_weight() -> f32 { 0.10 }
-fn default_clinical_weight() -> f32 { 0.05 }
+fn default_crispr_weight() -> f32 {
+    0.25
+}
+fn default_mutation_weight() -> f32 {
+    0.15
+}
+fn default_expression_weight() -> f32 {
+    0.15
+}
+fn default_literature_weight() -> f32 {
+    0.15
+}
+fn default_druggability_weight() -> f32 {
+    0.15
+}
+fn default_pathway_weight() -> f32 {
+    0.10
+}
+fn default_clinical_weight() -> f32 {
+    0.05
+}
 
 impl Default for ScoringConfig {
     fn default() -> Self {
@@ -287,7 +311,7 @@ impl ScoringConfig {
             + self.clinical_status;
         (sum - 1.0).abs() < 0.01
     }
-    
+
     /// Normalize weights to sum to 1.0
     pub fn normalize(&mut self) {
         let sum = self.crispr_dependency
@@ -297,7 +321,7 @@ impl ScoringConfig {
             + self.druggability
             + self.pathway_position
             + self.clinical_status;
-        
+
         if sum > 0.0 {
             self.crispr_dependency /= sum;
             self.mutation_frequency /= sum;
@@ -317,22 +341,26 @@ pub struct OutputConfig {
     /// Output format (json, csv, html)
     #[serde(default = "default_format")]
     pub format: String,
-    
+
     /// Number of top results to return
     #[serde(default = "default_top_n")]
     pub top_n: usize,
-    
+
     /// Include evidence links
     #[serde(default = "default_true")]
     pub include_evidence: bool,
-    
+
     /// Generate PDF report
     #[serde(default)]
     pub generate_report: bool,
 }
 
-fn default_format() -> String { "json".to_string() }
-fn default_top_n() -> usize { 50 }
+fn default_format() -> String {
+    "json".to_string()
+}
+fn default_top_n() -> usize {
+    50
+}
 
 impl Default for OutputConfig {
     fn default() -> Self {
@@ -352,24 +380,32 @@ pub struct ExecutionConfig {
     /// Execution mode (full, quick, custom)
     #[serde(default = "default_mode")]
     pub mode: String,
-    
+
     /// Sources for quick mode
     #[serde(default = "default_quick_sources")]
     pub quick_mode_sources: Vec<String>,
-    
+
     /// Maximum runtime in minutes
     #[serde(default = "default_max_runtime")]
     pub max_runtime_minutes: usize,
-    
+
     /// Number of parallel workers
     #[serde(default = "default_workers")]
     pub parallel_workers: usize,
 }
 
-fn default_mode() -> String { "full".to_string() }
-fn default_quick_sources() -> Vec<String> { vec!["pubmed".to_string(), "depmap".to_string()] }
-fn default_max_runtime() -> usize { 60 }
-fn default_workers() -> usize { 4 }
+fn default_mode() -> String {
+    "full".to_string()
+}
+fn default_quick_sources() -> Vec<String> {
+    vec!["pubmed".to_string(), "depmap".to_string()]
+}
+fn default_max_runtime() -> usize {
+    60
+}
+fn default_workers() -> usize {
+    4
+}
 
 impl Default for ExecutionConfig {
     fn default() -> Self {
@@ -391,51 +427,65 @@ impl TargetConfig {
         let config: Self = serde_yaml::from_str(&content)?;
         Ok(config)
     }
-    
+
     /// Load from JSON file
     pub fn from_json(path: &str) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let config: Self = serde_json::from_str(&content)?;
         Ok(config)
     }
-    
+
     /// Save to YAML file
     pub fn to_yaml(&self, path: &str) -> anyhow::Result<()> {
         let content = serde_yaml::to_string(self)?;
         std::fs::write(path, content)?;
         Ok(())
     }
-    
+
     /// Build search query for literature sources
     pub fn build_search_query(&self) -> String {
         let mut parts = vec![
             format!("{}[tiab]", self.target.gene),
             format!("{}[tiab]", self.target.cancer_type),
         ];
-        
+
         if let Some(ref m) = self.target.mutation {
             parts.push(format!("{m}[tiab]"));
         }
-        
+
         parts.join(" AND ")
     }
-    
+
     /// Get list of enabled sources
     pub fn enabled_sources(&self) -> Vec<String> {
         let mut sources = Vec::new();
-        
-        if self.data_sources.pubmed { sources.push("pubmed".to_string()); }
-        if self.data_sources.europe_pmc { sources.push("europe_pmc".to_string()); }
-        if self.data_sources.biorxiv { sources.push("biorxiv".to_string()); }
-        if self.data_sources.clinical_trials { sources.push("clinical_trials".to_string()); }
-        if self.data_sources.depmap { sources.push("depmap".to_string()); }
-        if self.data_sources.cosmic { sources.push("cosmic".to_string()); }
-        if self.data_sources.chembl { sources.push("chembl".to_string()); }
-        
+
+        if self.data_sources.pubmed {
+            sources.push("pubmed".to_string());
+        }
+        if self.data_sources.europe_pmc {
+            sources.push("europe_pmc".to_string());
+        }
+        if self.data_sources.biorxiv {
+            sources.push("biorxiv".to_string());
+        }
+        if self.data_sources.clinical_trials {
+            sources.push("clinical_trials".to_string());
+        }
+        if self.data_sources.depmap {
+            sources.push("depmap".to_string());
+        }
+        if self.data_sources.cosmic {
+            sources.push("cosmic".to_string());
+        }
+        if self.data_sources.chembl {
+            sources.push("chembl".to_string());
+        }
+
         for custom in &self.data_sources.custom {
             sources.push(custom.name.clone());
         }
-        
+
         sources
     }
 }
@@ -461,7 +511,7 @@ mod tests {
         let original_crispr = config.crispr_dependency;
         config.normalize();
         assert!((config.crispr_dependency - original_crispr).abs() < 0.01);
-        
+
         // Test with non-normalized weights
         config.crispr_dependency = 0.5;
         config.mutation_frequency = 0.5;

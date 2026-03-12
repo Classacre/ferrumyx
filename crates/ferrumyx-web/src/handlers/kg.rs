@@ -104,7 +104,8 @@ pub async fn api_kg_stats(State(state): State<SharedState>) -> Result<impl IntoR
     // Derive dashboard counts from KG facts so stats stay meaningful.
     if entity_count == 0 && fact_count > 0 {
         let facts = fact_repo.list(0, 20_000).await.unwrap_or_default();
-        let (derived_entities, derived_genes, derived_cancers) = derive_entity_stats_from_facts(&facts);
+        let (derived_entities, derived_genes, derived_cancers) =
+            derive_entity_stats_from_facts(&facts);
         entity_count = derived_entities;
         gene_count = derived_genes;
         cancer_count = derived_cancers;
@@ -185,16 +186,22 @@ pub async fn api_entity_suggest(
     Ok(Json(out))
 }
 
-pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFilter>) -> Html<String> {
+pub async fn kg_page(
+    State(state): State<SharedState>,
+    Query(filter): Query<KgFilter>,
+) -> Html<String> {
     const FACT_SCAN_LIMIT: usize = 4_000;
     const FILTERED_FACT_CAP: usize = 4_000;
     const MAX_GRAPH_NODES: usize = 260;
     const MAX_GRAPH_LINKS: usize = 1_000;
-    const MAX_ROWS_PER_PAPER: usize = 120;
+    const MAX_ROWS_PER_PAPER: usize = 40;
 
     let gene = filter.gene.clone().unwrap_or_default().trim().to_string();
     let q = filter.q.clone().unwrap_or_default();
-    let predicate_filter = filter.predicate.clone().unwrap_or_else(|| "all".to_string());
+    let predicate_filter = filter
+        .predicate
+        .clone()
+        .unwrap_or_else(|| "all".to_string());
     let max_papers = filter.max_papers.unwrap_or(50).clamp(10, 200);
     let expanded_paper = filter.expanded.clone().unwrap_or_default();
     let cache_key = format!(
@@ -225,8 +232,16 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
 
     let scanned = fact_repo
         .list_filtered(
-            if gene.trim().is_empty() { None } else { Some(gene.trim()) },
-            if q.trim().is_empty() { None } else { Some(q.trim()) },
+            if gene.trim().is_empty() {
+                None
+            } else {
+                Some(gene.trim())
+            },
+            if q.trim().is_empty() {
+                None
+            } else {
+                Some(q.trim())
+            },
             Some(predicate_filter.trim()),
             FACT_SCAN_LIMIT,
         )
@@ -335,7 +350,11 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
     let graph_nodes: Vec<_> = final_node_degree
         .iter()
         .map(|(name, deg)| {
-            let group = if name.eq_ignore_ascii_case(&gene) { 1 } else { 2 };
+            let group = if name.eq_ignore_ascii_case(&gene) {
+                1
+            } else {
+                2
+            };
             let size = 3.2 + (*deg as f64).ln_1p() * 1.9;
             let short = truncate(name, 42);
 
@@ -357,7 +376,8 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
     .unwrap_or_else(|_| "{}".to_string());
 
     // Group evidence by paper; default collapsed to avoid huge page heights.
-    let mut paper_groups: HashMap<String, Vec<(String, String, String, Option<String>)>> = HashMap::new();
+    let mut paper_groups: HashMap<String, Vec<(String, String, String, Option<String>)>> =
+        HashMap::new();
     for f in &filtered_facts {
         let paper_key = if f.paper_id.is_nil() {
             "unknown-paper".to_string()
@@ -365,15 +385,12 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
             format!("paper-{}", f.paper_id)
         };
 
-        paper_groups
-            .entry(paper_key)
-            .or_default()
-            .push((
-                f.subject_name.clone(),
-                f.predicate.clone(),
-                f.object_name.clone(),
-                f.evidence.clone(),
-            ));
+        paper_groups.entry(paper_key).or_default().push((
+            f.subject_name.clone(),
+            f.predicate.clone(),
+            f.object_name.clone(),
+            f.evidence.clone(),
+        ));
     }
 
     let mut paper_entries: Vec<(String, Vec<(String, String, String, Option<String>)>)> =
@@ -510,6 +527,8 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
 
         .paper-group {{
             border-top: 1px solid var(--border-color);
+            content-visibility: auto;
+            contain-intrinsic-size: 320px;
         }}
 
         .paper-group summary {{
@@ -766,10 +785,26 @@ pub async fn kg_page(State(state): State<SharedState>, Query(filter): Query<KgFi
         html_escape(&gene),
         q,
         if pred_lc == "all" { "selected" } else { "" },
-        if pred_lc == "mentions" { "selected" } else { "" },
-        if pred_lc == "interacts_with" { "selected" } else { "" },
-        if pred_lc == "inhibits" { "selected" } else { "" },
-        if pred_lc == "activates" { "selected" } else { "" },
+        if pred_lc == "mentions" {
+            "selected"
+        } else {
+            ""
+        },
+        if pred_lc == "interacts_with" {
+            "selected"
+        } else {
+            ""
+        },
+        if pred_lc == "inhibits" {
+            "selected"
+        } else {
+            ""
+        },
+        if pred_lc == "activates" {
+            "selected"
+        } else {
+            ""
+        },
         max_papers,
         html_escape(&focus_label),
         total_papers,
@@ -852,9 +887,7 @@ fn is_suggestable_name(name: &str) -> bool {
     true
 }
 
-fn derive_entity_stats_from_facts(
-    facts: &[ferrumyx_db::schema::KgFact],
-) -> (u64, u64, u64) {
+fn derive_entity_stats_from_facts(facts: &[ferrumyx_db::schema::KgFact]) -> (u64, u64, u64) {
     let mut entities = HashSet::new();
     let mut genes = HashSet::new();
     let mut cancers = HashSet::new();
@@ -871,7 +904,9 @@ fn derive_entity_stats_from_facts(
 
             let is_gene_like = name.len() <= 10
                 && name.chars().any(|c| c.is_ascii_uppercase())
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
             if is_gene_like {
                 genes.insert(lc.clone());
             }
@@ -888,5 +923,9 @@ fn derive_entity_stats_from_facts(
         }
     }
 
-    (entities.len() as u64, genes.len() as u64, cancers.len() as u64)
+    (
+        entities.len() as u64,
+        genes.len() as u64,
+        cancers.len() as u64,
+    )
 }

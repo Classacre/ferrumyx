@@ -1,11 +1,11 @@
 //! Dashboard handler — main landing page with system overview.
 
-use axum::{extract::State, response::Html};
 use crate::state::SharedState;
-use ferrumyx_db::papers::PaperRepository;
+use axum::{extract::State, response::Html};
 use ferrumyx_db::chunks::ChunkRepository;
 use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
+use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::target_scores::TargetScoreRepository;
 
 /// Navigation HTML template shared across all pages
@@ -14,24 +14,41 @@ pub const NAV_HTML: &str = include_str!("../../templates/nav.html");
 pub async fn dashboard(State(state): State<SharedState>) -> Html<String> {
     // Query DB for summary stats using repositories
     let paper_count: u64 = PaperRepository::new(state.db.clone())
-        .count().await.unwrap_or(0);
+        .count()
+        .await
+        .unwrap_or(0);
 
     let chunk_count: u64 = ChunkRepository::new(state.db.clone())
-        .count().await.unwrap_or(0);
+        .count()
+        .await
+        .unwrap_or(0);
 
     let entity_count: u64 = EntityRepository::new(state.db.clone())
-        .count().await.unwrap_or(0);
+        .count()
+        .await
+        .unwrap_or(0);
 
     let kg_fact_count: u64 = KgFactRepository::new(state.db.clone())
-        .count().await.unwrap_or(0);
+        .count()
+        .await
+        .unwrap_or(0);
 
     let top_targets: Vec<(String, String, f64)> = load_top_targets(&state).await;
 
-    Html(render_dashboard(paper_count, chunk_count, entity_count, kg_fact_count, top_targets))
+    Html(render_dashboard(
+        paper_count,
+        chunk_count,
+        entity_count,
+        kg_fact_count,
+        top_targets,
+    ))
 }
 
 fn render_dashboard(
-    papers: u64, chunks: u64, entities: u64, facts: u64,
+    papers: u64,
+    chunks: u64,
+    entities: u64,
+    facts: u64,
     top_targets: Vec<(String, String, f64)>,
 ) -> String {
     let targets_html = if top_targets.is_empty() {
@@ -58,7 +75,8 @@ fn render_dashboard(
         }).collect()
     };
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -175,10 +193,8 @@ fn render_dashboard(
     </div>
 </main>
 </body>
-</html>"#, 
-    NAV_HTML,
-    papers, chunks, entities, facts,
-    targets_html
+</html>"#,
+        NAV_HTML, papers, chunks, entities, facts, targets_html
     )
 }
 

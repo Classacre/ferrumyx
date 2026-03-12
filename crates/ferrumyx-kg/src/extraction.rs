@@ -48,12 +48,12 @@ pub fn extract_cancer_type(text: &str) -> Option<String> {
 pub fn extract_mutations(text: &str) -> Vec<MutationMention> {
     lazy_mutation_regex();
     let re = lazy_mutation_regex();
-    
+
     let mut mutations = Vec::new();
     for cap in re.captures_iter(text) {
         let full_match = cap[0].to_string();
         let protein_change = cap.get(1).map(|m| m.as_str().to_string());
-        
+
         mutations.push(MutationMention {
             text: full_match,
             protein_change,
@@ -147,27 +147,24 @@ impl RelationExtractor {
 }
 
 fn object_matches_cancer_code(text_lower: &str, object_lower: &str) -> bool {
-    CANCER_KEYWORDS
-        .iter()
-        .any(|(keyword, cancer_code)| cancer_code.eq_ignore_ascii_case(object_lower) && text_lower.contains(keyword))
+    CANCER_KEYWORDS.iter().any(|(keyword, cancer_code)| {
+        cancer_code.eq_ignore_ascii_case(object_lower) && text_lower.contains(keyword)
+    })
 }
 
 /// Build KG facts from gene mentions and text.
-pub fn build_facts(
-    gene_symbol: &str,
-    text: &str,
-) -> Vec<ExtractedFact> {
+pub fn build_facts(gene_symbol: &str, text: &str) -> Vec<ExtractedFact> {
     let mut facts = Vec::new();
     let extractor = RelationExtractor::new();
-    
+
     // 1. Gene-Cancer relationships
     // First, check co-occurrence as a fallback, but prioritize patterns.
     if let Some(cancer) = extract_cancer_type(text) {
         let predicates = extractor.extract_relations(gene_symbol, &cancer, text);
-        
+
         if predicates.is_empty() {
-             // Fallback to generic association if co-occurring
-             facts.push(ExtractedFact {
+            // Fallback to generic association if co-occurring
+            facts.push(ExtractedFact {
                 fact_type: "associated_with".to_string(),
                 subject: gene_symbol.to_uppercase(),
                 object: cancer,
@@ -184,12 +181,12 @@ pub fn build_facts(
             }
         }
     }
-    
+
     // 2. Gene-Mutation relationships
     for mutation in extract_mutations(text) {
         if let Some(protein_change) = mutation.protein_change {
-             // Usually mutations IN genes.
-             facts.push(ExtractedFact {
+            // Usually mutations IN genes.
+            facts.push(ExtractedFact {
                 fact_type: "has_mutation".to_string(),
                 subject: gene_symbol.to_uppercase(),
                 object: protein_change,
@@ -197,7 +194,7 @@ pub fn build_facts(
             });
         }
     }
-    
+
     facts
 }
 
@@ -207,8 +204,14 @@ mod tests {
 
     #[test]
     fn test_extract_cancer_type() {
-        assert_eq!(extract_cancer_type("KRAS mutations in pancreatic cancer"), Some("PAAD".to_string()));
-        assert_eq!(extract_cancer_type("lung adenocarcinoma"), Some("LUAD".to_string()));
+        assert_eq!(
+            extract_cancer_type("KRAS mutations in pancreatic cancer"),
+            Some("PAAD".to_string())
+        );
+        assert_eq!(
+            extract_cancer_type("lung adenocarcinoma"),
+            Some("LUAD".to_string())
+        );
         assert_eq!(extract_cancer_type("no cancer mentioned"), None);
     }
 
@@ -224,6 +227,8 @@ mod tests {
     fn test_build_facts_with_patterns() {
         let text = "KRAS is overexpressed in lung adenocarcinoma";
         let facts = build_facts("KRAS", text);
-        assert!(facts.iter().any(|f| f.fact_type == "upregulated_in" && f.object == "LUAD"));
+        assert!(facts
+            .iter()
+            .any(|f| f.fact_type == "upregulated_in" && f.object == "LUAD"));
     }
 }

@@ -1,12 +1,12 @@
 //! Ligand generation and retrieval.
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use async_trait::async_trait;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 /// A generated or retrieved molecule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,23 +121,30 @@ impl LigandGenerator {
     /// In this implementation we fetch known inhibitors from ChEMBL for the target.
     pub async fn generate(&self, target_uniprot_id: &str) -> Result<Vec<Molecule>> {
         info!("Fetching ChEMBL ligands for target: {}", target_uniprot_id);
-        
+
         let mut results = Vec::new();
-        
+
         // 1. Get Target ChEMBL ID from UniProt
-        let target_url = format!("{}/target.json?target_components__accession={}", CHX_API_BASE, target_uniprot_id);
+        let target_url = format!(
+            "{}/target.json?target_components__accession={}",
+            CHX_API_BASE, target_uniprot_id
+        );
         let resp = match self.client.get(&target_url).send().await {
             Ok(r) => r,
             Err(e) => {
                 warn!("Failed to fetch target from ChEMBL: {}", e);
-                return Ok(vec![Molecule::new("CC(=O)OC1=CC=CC=C1C(=O)O", "fallback_dummy")]);
+                return Ok(vec![Molecule::new(
+                    "CC(=O)OC1=CC=CC=C1C(=O)O",
+                    "fallback_dummy",
+                )]);
             }
         };
-        
+
         let targets_body: serde_json::Value = resp.json().await.unwrap_or_default();
-        let target_chembl_id = targets_body["targets"].as_array().and_then(|targets| {
-            targets.first().and_then(|t| t["target_chembl_id"].as_str())
-        }).map(|s| s.to_string());
+        let target_chembl_id = targets_body["targets"]
+            .as_array()
+            .and_then(|targets| targets.first().and_then(|t| t["target_chembl_id"].as_str()))
+            .map(|s| s.to_string());
 
         let target_chembl_id = match target_chembl_id {
             Some(id) => id,
@@ -151,20 +158,23 @@ impl LigandGenerator {
         debug!("Resolved target ChEMBL ID: {}", target_chembl_id);
 
         // Also filter out molecules that don't pass Lipinski's Rule of 5 (already pre-filtered mostly, but good to add max_phase)
-        let mech_url = format!("{}/mechanism.json?target_chembl_id={}&limit=100", CHX_API_BASE, target_chembl_id);
+        let mech_url = format!(
+            "{}/mechanism.json?target_chembl_id={}&limit=100",
+            CHX_API_BASE, target_chembl_id
+        );
         let mech_resp = match self.client.get(&mech_url).send().await {
             Ok(r) => r,
             Err(_) => return Ok(results),
         };
-        
+
         let mech_body: ChemblMechanismResponse = match mech_resp.json().await {
             Ok(m) => m,
             Err(_) => return Ok(results),
         };
 
         if mech_body.mechanisms.is_empty() {
-             results.push(Molecule::new("CC(=O)OC1=CC=CC=C1C(=O)O", "fallback_dummy"));
-             return Ok(results);
+            results.push(Molecule::new("CC(=O)OC1=CC=CC=C1C(=O)O", "fallback_dummy"));
+            return Ok(results);
         }
 
         // 3. Fetch molecule details
@@ -173,7 +183,7 @@ impl LigandGenerator {
                 "https://www.ebi.ac.uk/chembl/api/data/molecule?molecule_chembl_id={}&format=json",
                 mech.molecule_chembl_id
             );
-            
+
             if let Ok(resp) = self.client.get(&mol_url).send().await {
                 if let Ok(mol_body) = resp.json::<ChemblMoleculeResponse>().await {
                     if let Some(mol_data) = mol_body.molecules.first() {
@@ -183,13 +193,15 @@ impl LigandGenerator {
                                 m.chembl_id = Some(mol_data.molecule_chembl_id.clone());
                                 m.name = mol_data.pref_name.clone();
                                 m.inchi_key = structs.standard_inchi_key.clone();
-                                
+
                                 if let Some(props) = &mol_data.molecule_properties {
-                                    m.mw = props.full_mwt.as_ref().and_then(|s| s.parse::<f64>().ok());
-                                    m.logp = props.alogp.as_ref().and_then(|s| s.parse::<f64>().ok());
+                                    m.mw =
+                                        props.full_mwt.as_ref().and_then(|s| s.parse::<f64>().ok());
+                                    m.logp =
+                                        props.alogp.as_ref().and_then(|s| s.parse::<f64>().ok());
                                     m.tpsa = props.psa.as_ref().and_then(|s| s.parse::<f64>().ok());
                                 }
-                                
+
                                 results.push(m);
                             }
                         }
@@ -197,7 +209,7 @@ impl LigandGenerator {
                 }
             }
         }
-        
+
         if results.is_empty() {
             results.push(Molecule::new("CC(=O)OC1=CC=CC=C1C(=O)O", "fallback_dummy"));
         }

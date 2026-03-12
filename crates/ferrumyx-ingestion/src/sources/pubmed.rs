@@ -12,11 +12,11 @@ use quick_xml::Reader;
 use reqwest::Client;
 use tracing::{debug, instrument, warn};
 
-use crate::models::{Author, IngestionSource, PaperMetadata};
 use super::LiteratureSource;
+use crate::models::{Author, IngestionSource, PaperMetadata};
 
 const ESEARCH_URL: &str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
-const EFETCH_URL:  &str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
+const EFETCH_URL: &str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
 
 pub struct PubMedClient {
     client: Client,
@@ -48,7 +48,8 @@ impl PubMedClient {
         params.push(("retmax", max.to_string()));
         params.push(("usehistory", "n".to_string()));
 
-        let resp: serde_json::Value = self.client
+        let resp: serde_json::Value = self
+            .client
             .get(ESEARCH_URL)
             .query(&params)
             .send()
@@ -84,7 +85,8 @@ impl PubMedClient {
             params.push(("api_key", key.clone()));
         }
 
-        let xml = self.client
+        let xml = self
+            .client
             .get(EFETCH_URL)
             .query(&params)
             .send()
@@ -127,106 +129,131 @@ fn parse_pubmed_xml(xml: &str) -> anyhow::Result<Vec<PaperMetadata>> {
 
     // State machine for XML parsing
     let mut current: Option<PaperMetadata> = None;
-    let mut in_pmid       = false;
-    let mut in_title      = false;
-    let mut in_abstract   = false;
-    let mut in_author     = false;
-    let mut in_last_name  = false;
-    let mut in_fore_name  = false;
-    let mut in_journal    = false;
-    let mut in_doi        = false;
-    let mut in_pmc        = false;
-    let mut current_last  = String::new();
-    let mut current_fore  = String::new();
+    let mut in_pmid = false;
+    let mut in_title = false;
+    let mut in_abstract = false;
+    let mut in_author = false;
+    let mut in_last_name = false;
+    let mut in_fore_name = false;
+    let mut in_journal = false;
+    let mut in_doi = false;
+    let mut in_pmc = false;
+    let mut current_last = String::new();
+    let mut current_fore = String::new();
     let mut buf = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                match e.name().as_ref() {
-                    b"PubmedArticle" => {
-                        current = Some(PaperMetadata {
-                            doi: None, pmid: None, pmcid: None,
-                            title: String::new(),
-                            abstract_text: None,
-                            authors: vec![],
-                            journal: None,
-                            pub_date: None,
-                            source: IngestionSource::PubMed,
-                            open_access: false,
-                            full_text_url: None,
-                        });
-                    }
-                    b"PMID"         => in_pmid = true,
-                    b"ArticleTitle" => in_title = true,
-                    b"AbstractText" => in_abstract = true,
-                    b"Author"       => { in_author = true; current_last.clear(); current_fore.clear(); }
-                    b"LastName"     => in_last_name = true,
-                    b"ForeName"     => in_fore_name = true,
-                    b"Title"        => in_journal = true,
-                    b"ArticleId"    => {
-                        for attr in e.attributes() {
-                            if let Ok(attr) = attr {
-                                if attr.key.as_ref() == b"IdType" {
-                                    if attr.value.as_ref() == b"doi" {
-                                        in_doi = true;
-                                    } else if attr.value.as_ref() == b"pmc" {
-                                        in_pmc = true;
-                                    }
+            Ok(Event::Start(ref e)) => match e.name().as_ref() {
+                b"PubmedArticle" => {
+                    current = Some(PaperMetadata {
+                        doi: None,
+                        pmid: None,
+                        pmcid: None,
+                        title: String::new(),
+                        abstract_text: None,
+                        authors: vec![],
+                        journal: None,
+                        pub_date: None,
+                        source: IngestionSource::PubMed,
+                        open_access: false,
+                        full_text_url: None,
+                    });
+                }
+                b"PMID" => in_pmid = true,
+                b"ArticleTitle" => in_title = true,
+                b"AbstractText" => in_abstract = true,
+                b"Author" => {
+                    in_author = true;
+                    current_last.clear();
+                    current_fore.clear();
+                }
+                b"LastName" => in_last_name = true,
+                b"ForeName" => in_fore_name = true,
+                b"Title" => in_journal = true,
+                b"ArticleId" => {
+                    for attr in e.attributes() {
+                        if let Ok(attr) = attr {
+                            if attr.key.as_ref() == b"IdType" {
+                                if attr.value.as_ref() == b"doi" {
+                                    in_doi = true;
+                                } else if attr.value.as_ref() == b"pmc" {
+                                    in_pmc = true;
                                 }
                             }
                         }
                     }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
             Ok(Event::Text(ref e)) => {
                 let text = e.unescape().unwrap_or_default().to_string();
                 if let Some(ref mut p) = current {
-                    if in_pmid      { p.pmid = Some(text.clone()); }
-                    if in_title     { p.title = text.clone(); }
-                    if in_abstract  { p.abstract_text = Some(text.clone()); }
-                    if in_last_name { current_last = text.clone(); }
-                    if in_fore_name { current_fore = text.clone(); }
-                    if in_journal   { p.journal = Some(text.clone()); }
-                    if in_doi       { p.doi = Some(text.clone()); }
-                    if in_pmc       { p.pmcid = Some(text.clone()); }
+                    if in_pmid {
+                        p.pmid = Some(text.clone());
+                    }
+                    if in_title {
+                        p.title = text.clone();
+                    }
+                    if in_abstract {
+                        p.abstract_text = Some(text.clone());
+                    }
+                    if in_last_name {
+                        current_last = text.clone();
+                    }
+                    if in_fore_name {
+                        current_fore = text.clone();
+                    }
+                    if in_journal {
+                        p.journal = Some(text.clone());
+                    }
+                    if in_doi {
+                        p.doi = Some(text.clone());
+                    }
+                    if in_pmc {
+                        p.pmcid = Some(text.clone());
+                    }
                 }
             }
-            Ok(Event::End(ref e)) => {
-                match e.name().as_ref() {
-                    b"PMID"         => in_pmid = false,
-                    b"ArticleTitle" => in_title = false,
-                    b"AbstractText" => in_abstract = false,
-                    b"LastName"     => in_last_name = false,
-                    b"ForeName"     => in_fore_name = false,
-                    b"Title"        => in_journal = false,
-                    b"ArticleId"    => { in_doi = false; in_pmc = false; },
-                    b"Author" => {
-                        if in_author {
-                            if let Some(ref mut p) = current {
-                                let name = if current_fore.is_empty() {
-                                    current_last.clone()
-                                } else {
-                                    format!("{} {}", current_fore, current_last)
-                                };
-                                p.authors.push(Author { name, affiliation: None, orcid: None });
-                            }
-                            in_author = false;
-                        }
-                    }
-                    b"PubmedArticle" => {
-                        if let Some(p) = current.take() {
-                            if !p.title.is_empty() {
-                                papers.push(p);
+            Ok(Event::End(ref e)) => match e.name().as_ref() {
+                b"PMID" => in_pmid = false,
+                b"ArticleTitle" => in_title = false,
+                b"AbstractText" => in_abstract = false,
+                b"LastName" => in_last_name = false,
+                b"ForeName" => in_fore_name = false,
+                b"Title" => in_journal = false,
+                b"ArticleId" => {
+                    in_doi = false;
+                    in_pmc = false;
+                }
+                b"Author" => {
+                    if in_author {
+                        if let Some(ref mut p) = current {
+                            let name = if current_fore.is_empty() {
+                                current_last.clone()
                             } else {
-                                warn!("Skipping paper with empty title");
-                            }
+                                format!("{} {}", current_fore, current_last)
+                            };
+                            p.authors.push(Author {
+                                name,
+                                affiliation: None,
+                                orcid: None,
+                            });
+                        }
+                        in_author = false;
+                    }
+                }
+                b"PubmedArticle" => {
+                    if let Some(p) = current.take() {
+                        if !p.title.is_empty() {
+                            papers.push(p);
+                        } else {
+                            warn!("Skipping paper with empty title");
                         }
                     }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
             Ok(Event::Eof) => break,
             Err(e) => {
                 warn!("XML parse error: {}", e);

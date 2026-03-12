@@ -9,11 +9,7 @@ use serde::Deserialize;
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
-use ferrumyx_db::{
-    entities::EntityRepository,
-    kg_facts::KgFactRepository,
-    schema::EntityType,
-};
+use ferrumyx_db::{entities::EntityRepository, kg_facts::KgFactRepository, schema::EntityType};
 use ferrumyx_molecules::pipeline::MoleculesPipeline;
 
 #[derive(Deserialize)]
@@ -44,7 +40,12 @@ pub async fn molecules_page(
     State(state): State<SharedState>,
     Query(filter): Query<MolFilter>,
 ) -> Html<String> {
-    let gene = filter.gene.as_deref().unwrap_or_default().trim().to_string();
+    let gene = filter
+        .gene
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
     let entity_repo = EntityRepository::new(state.db.clone());
     let kg_repo = KgFactRepository::new(state.db.clone());
@@ -183,7 +184,11 @@ pub async fn molecules_page(
 <script src="/static/js/main.js"></script>
 </body>
 </html>"#,
-        NAV_HTML, total_mols, total_docking, html_escape(&gene), result_rows
+        NAV_HTML,
+        total_mols,
+        total_docking,
+        html_escape(&gene),
+        result_rows
     ))
 }
 

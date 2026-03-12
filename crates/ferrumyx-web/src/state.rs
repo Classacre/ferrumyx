@@ -1,22 +1,38 @@
 //! Shared application state for the web server.
 
-use std::sync::Arc;
 use ferrumyx_db::Database;
-use tokio::sync::broadcast;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::broadcast;
 
 /// Events pushed to connected clients via SSE.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AppEvent {
     /// A paper was ingested
-    PaperIngested { paper_id: String, title: String, source: String },
+    PaperIngested {
+        paper_id: String,
+        title: String,
+        source: String,
+    },
     /// A target score was computed
-    TargetScored { gene: String, cancer: String, score: f64 },
+    TargetScored {
+        gene: String,
+        cancer: String,
+        score: f64,
+    },
     /// A docking job completed
-    DockingComplete { molecule_id: String, gene: String, vina_score: f64 },
+    DockingComplete {
+        molecule_id: String,
+        gene: String,
+        vina_score: f64,
+    },
     /// Ingestion pipeline status update
-    PipelineStatus { stage: String, message: String, count: u64 },
+    PipelineStatus {
+        stage: String,
+        message: String,
+        count: u64,
+    },
     /// Feedback metric computed
     FeedbackMetric { metric: String, value: f64 },
     /// General system notification
@@ -40,20 +56,25 @@ impl AppState {
     /// Create state with embedded database (LanceDB)
     pub async fn new_with_db() -> anyhow::Result<Self> {
         // Get data directory from environment or use default
-        let data_dir = std::env::var("FERRUMYX_DATA_DIR")
-            .unwrap_or_else(|_| "./data".to_string());
-        
+        let data_dir = std::env::var("FERRUMYX_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
+
         // Create data directory if it doesn't exist
         std::fs::create_dir_all(&data_dir)?;
-        
+
         // Connect to LanceDB (embedded, no external server needed)
         let db = Database::open(&data_dir).await?;
         db.initialize().await?;
-        
-        tracing::info!("Connected to LanceDB at: {} and initialized tables", data_dir);
-        
+
+        tracing::info!(
+            "Connected to LanceDB at: {} and initialized tables",
+            data_dir
+        );
+
         let (event_tx, _) = broadcast::channel(256);
-        Ok(Self { db: Arc::new(db), event_tx })
+        Ok(Self {
+            db: Arc::new(db),
+            event_tx,
+        })
     }
 
     /// Create state without database (for testing/demo)

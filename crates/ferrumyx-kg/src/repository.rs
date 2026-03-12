@@ -2,15 +2,15 @@
 //! Uses LanceDB for KG fact storage and retrieval.
 //! See ARCHITECTURE.md §3.7 for query patterns.
 
-use async_trait::async_trait;
-use uuid::Uuid;
-use std::sync::Arc;
 use anyhow::Result;
-use ferrumyx_db::Database;
+use async_trait::async_trait;
 use ferrumyx_db::kg_facts::KgFactRepository;
-use ferrumyx_db::schema::{KgFact, KgConflict};
-use lancedb::query::{ExecutableQuery, QueryBase};
+use ferrumyx_db::schema::{KgConflict, KgFact};
+use ferrumyx_db::Database;
 use futures::StreamExt;
+use lancedb::query::{ExecutableQuery, QueryBase};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Knowledge Graph repository trait.
 #[async_trait]
@@ -19,11 +19,7 @@ pub trait KgRepositoryTrait: Send + Sync {
     async fn insert_fact(&self, fact: &KgFact) -> Result<Uuid>;
 
     /// Get all current facts for a (subject, predicate) pair.
-    async fn get_facts(
-        &self,
-        subject_id: Uuid,
-        predicate: &str,
-    ) -> Result<Vec<KgFact>>;
+    async fn get_facts(&self, subject_id: Uuid, predicate: &str) -> Result<Vec<KgFact>>;
 
     /// Supersede an existing fact (set valid_until = now).
     async fn supersede_fact(&self, fact_id: Uuid) -> Result<()>;
@@ -45,16 +41,26 @@ pub struct KgRepository {
 }
 
 impl KgRepository {
-    pub fn new(db: Arc<Database>) -> Self { Self { db, event_queue: None } }
-    
-    pub fn with_event_queue(mut self, tx: tokio::sync::mpsc::UnboundedSender<crate::update::KgUpdateTrigger>) -> Self {
+    pub fn new(db: Arc<Database>) -> Self {
+        Self {
+            db,
+            event_queue: None,
+        }
+    }
+
+    pub fn with_event_queue(
+        mut self,
+        tx: tokio::sync::mpsc::UnboundedSender<crate::update::KgUpdateTrigger>,
+    ) -> Self {
         self.event_queue = Some(tx);
         self
     }
 
     /// Get underlying database reference.
-    pub fn db(&self) -> Arc<Database> { self.db.clone() }
-    
+    pub fn db(&self) -> Arc<Database> {
+        self.db.clone()
+    }
+
     fn fact_repo(&self) -> KgFactRepository {
         KgFactRepository::new(self.db.clone())
     }
@@ -90,12 +96,17 @@ impl KgRepository {
         }
 
         // Detect conflicts with existing facts
-        let existing = self.db.connection()
+        let existing = self
+            .db
+            .connection()
             .open_table(ferrumyx_db::schema::TABLE_KG_FACTS)
             .execute()
             .await?
             .query()
-            .only_if(&format!("subject_id = '{}' AND object_id = '{}'", fact.subject_id, fact.object_id))
+            .only_if(&format!(
+                "subject_id = '{}' AND object_id = '{}'",
+                fact.subject_id, fact.object_id
+            ))
             .execute()
             .await?;
 
@@ -104,32 +115,40 @@ impl KgRepository {
             let batch: arrow_array::RecordBatch = batch_result?;
             for i in 0..batch.num_rows() {
                 let existing_fact = ferrumyx_db::schema_arrow::record_to_kg_fact(&batch, i)?;
-                
+
                 // Compare fact predicates for directional opposites
-                let opposite = (fact.predicate.contains("inhibits") && existing_fact.predicate.contains("activates")) ||
-                               (fact.predicate.contains("activates") && existing_fact.predicate.contains("inhibits"));
+                let opposite = (fact.predicate.contains("inhibits")
+                    && existing_fact.predicate.contains("activates"))
+                    || (fact.predicate.contains("activates")
+                        && existing_fact.predicate.contains("inhibits"));
 
                 if let Some(conflict) = crate::conflict::evaluate_conflict(
-                    fact.confidence as f64, 
-                    existing_fact.confidence as f64, 
-                    opposite
+                    fact.confidence as f64,
+                    existing_fact.confidence as f64,
+                    opposite,
                 ) {
                     let conflict_record = KgConflict::new(
                         fact.id,
                         existing_fact.id,
                         format!("{:?}", conflict.conflict_type),
                         conflict.net_confidence as f32,
-                        format!("{:?}", conflict.resolution)
+                        format!("{:?}", conflict.resolution),
                     );
 
-                    let conflict_table = self.db.connection()
+                    let conflict_table = self
+                        .db
+                        .connection()
                         .open_table(ferrumyx_db::schema::TABLE_KG_CONFLICTS)
                         .execute()
                         .await?;
 
-                    let record = ferrumyx_db::schema_arrow::kg_conflict_to_record(&conflict_record)?;
+                    let record =
+                        ferrumyx_db::schema_arrow::kg_conflict_to_record(&conflict_record)?;
                     let schema = record.schema();
-                    let iter = arrow_array::RecordBatchIterator::new(vec![Ok::<_, arrow_schema::ArrowError>(record)], schema);
+                    let iter = arrow_array::RecordBatchIterator::new(
+                        vec![Ok::<_, arrow_schema::ArrowError>(record)],
+                        schema,
+                    );
                     conflict_table.add(iter).execute().await?;
                 }
             }
@@ -167,13 +186,13 @@ impl KgRepository {
         let fact_repo = self.fact_repo();
         Ok(fact_repo.count().await?)
     }
-    
+
     /// Find all facts involving an entity (as subject or object).
     pub async fn find_by_entity(&self, entity_id: Uuid) -> Result<Vec<KgFact>> {
         let fact_repo = self.fact_repo();
         Ok(fact_repo.find_by_entity(entity_id).await?)
     }
-    
+
     /// Find facts by subject and predicate.
     pub async fn find_by_subject_and_predicate(
         &self,
@@ -181,7 +200,9 @@ impl KgRepository {
         predicate: &str,
     ) -> Result<Vec<KgFact>> {
         let fact_repo = self.fact_repo();
-        Ok(fact_repo.find_by_subject_and_predicate(subject_id, predicate).await?)
+        Ok(fact_repo
+            .find_by_subject_and_predicate(subject_id, predicate)
+            .await?)
     }
 }
 
@@ -196,7 +217,10 @@ impl KgRepositoryTrait for KgRepository {
         let facts = self
             .find_by_subject_and_predicate(subject_id, predicate)
             .await?;
-        Ok(facts.into_iter().filter(|f| f.valid_until.is_none()).collect())
+        Ok(facts
+            .into_iter()
+            .filter(|f| f.valid_until.is_none())
+            .collect())
     }
 
     async fn supersede_fact(&self, fact_id: Uuid) -> Result<()> {
@@ -211,7 +235,10 @@ impl KgRepositoryTrait for KgRepository {
             table
                 .update()
                 .only_if(&format!("id = '{}'", fact_id))
-                .column("valid_until", format!("'{}'", chrono::Utc::now().to_rfc3339()))
+                .column(
+                    "valid_until",
+                    format!("'{}'", chrono::Utc::now().to_rfc3339()),
+                )
                 .execute()
                 .await?;
 

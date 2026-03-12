@@ -1,24 +1,26 @@
 //! Ferrumyx — Autonomous Oncology Drug Discovery Engine
 //! Entry point for the agent binary.
 
-use std::sync::Arc;
-use std::process::Stdio;
-use std::time::Duration;
 use std::io::IsTerminal;
+use std::process::Stdio;
+use std::sync::Arc;
+use std::time::Duration;
 
 mod config;
 mod tools;
-use rig::providers::openai::Client as OpenAiClient;
-use rig::providers::openai::CompletionsClient as OpenAiCompletionsClient;
+use rig::client::CompletionClient;
 use rig::providers::anthropic::Client as AnthropicClient;
 use rig::providers::gemini::Client as GeminiClient;
-use rig::client::CompletionClient;
+use rig::providers::openai::Client as OpenAiClient;
+use rig::providers::openai::CompletionsClient as OpenAiCompletionsClient;
 use serde::Deserialize;
 use tokio::process::Command;
 
 /// Returns a Boxed CompletionModel to inject into the Agent.
 /// It natively maps the Ferrumyx config directly to `rig-core` LLM clients.
-async fn build_completion_model(config: &config::Config) -> anyhow::Result<Arc<dyn ironclaw::llm::LlmProvider>> {
+async fn build_completion_model(
+    config: &config::Config,
+) -> anyhow::Result<Arc<dyn ironclaw::llm::LlmProvider>> {
     let mode = config.llm.mode.to_lowercase();
     let default_backend = config.llm.default_backend.to_lowercase();
 
@@ -74,7 +76,9 @@ async fn build_completion_model(config: &config::Config) -> anyhow::Result<Arc<d
     anyhow::bail!("No LLM providers were successfully configured in ferrumyx.toml")
 }
 
-fn try_build_openai(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+fn try_build_openai(
+    config: &config::Config,
+) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref openai) = config.llm.openai {
         let key = if openai.api_key.is_empty() {
             std::env::var("FERRUMYX_OPENAI_API_KEY").unwrap_or_default()
@@ -84,13 +88,18 @@ fn try_build_openai(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ir
         if !key.is_empty() {
             tracing::info!("Using OpenAI: {}", openai.model);
             let client: OpenAiClient = OpenAiClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&openai.model), &openai.model))));
+            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+                client.completion_model(&openai.model),
+                &openai.model,
+            ))));
         }
     }
     Ok(None)
 }
 
-fn try_build_anthropic(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+fn try_build_anthropic(
+    config: &config::Config,
+) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref anthropic) = config.llm.anthropic {
         let key = if anthropic.api_key.is_empty() {
             std::env::var("FERRUMYX_ANTHROPIC_API_KEY").unwrap_or_default()
@@ -100,13 +109,18 @@ fn try_build_anthropic(config: &config::Config) -> anyhow::Result<Option<Arc<dyn
         if !key.is_empty() {
             tracing::info!("Using Anthropic: {}", anthropic.model);
             let client: AnthropicClient = AnthropicClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&anthropic.model), &anthropic.model))));
+            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+                client.completion_model(&anthropic.model),
+                &anthropic.model,
+            ))));
         }
     }
     Ok(None)
 }
 
-fn try_build_gemini(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+fn try_build_gemini(
+    config: &config::Config,
+) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref gemini) = config.llm.gemini {
         let key = if gemini.api_key.is_empty() {
             std::env::var("FERRUMYX_GEMINI_API_KEY").unwrap_or_default()
@@ -116,13 +130,18 @@ fn try_build_gemini(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ir
         if !key.is_empty() {
             tracing::info!("Using Gemini: {}", gemini.model);
             let client: GeminiClient = GeminiClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&gemini.model), &gemini.model))));
+            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+                client.completion_model(&gemini.model),
+                &gemini.model,
+            ))));
         }
     }
     Ok(None)
 }
 
-fn try_build_openai_compatible(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+fn try_build_openai_compatible(
+    config: &config::Config,
+) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref compat) = config.llm.openai_compatible {
         let key = if compat.api_key.is_empty() {
             std::env::var("FERRUMYX_COMPAT_API_KEY").unwrap_or_default()
@@ -137,7 +156,11 @@ fn try_build_openai_compatible(config: &config::Config) -> anyhow::Result<Option
             );
             return Ok(None);
         }
-        let api_key = if key.is_empty() { "none".to_string() } else { key };
+        let api_key = if key.is_empty() {
+            "none".to_string()
+        } else {
+            key
+        };
         tracing::info!(
             "Using OpenAI-compatible backend: {} ({}) [cached_chat={}]",
             compat.model,
@@ -150,12 +173,17 @@ fn try_build_openai_compatible(config: &config::Config) -> anyhow::Result<Option
             .base_url(&compat.base_url)
             .api_key(&api_key)
             .build()?;
-        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&compat.model), &compat.model))));
+        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+            client.completion_model(&compat.model),
+            &compat.model,
+        ))));
     }
     Ok(None)
 }
 
-async fn try_build_ollama(config: &config::Config) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+async fn try_build_ollama(
+    config: &config::Config,
+) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref ollama) = config.llm.ollama {
         let model = ensure_ollama_ready(&ollama.base_url, &ollama.model).await;
         let tags_url = format!("{}/api/tags", ollama.base_url.trim_end_matches('/'));
@@ -173,7 +201,10 @@ async fn try_build_ollama(config: &config::Config) -> anyhow::Result<Option<Arc<
             .base_url(&format!("{}/v1", ollama.base_url))
             .api_key("ollama")
             .build()?;
-        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(client.completion_model(&model), &model))));
+        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+            client.completion_model(&model),
+            &model,
+        ))));
     }
     Ok(None)
 }
@@ -194,11 +225,12 @@ struct OllamaTagModel {
 }
 
 async fn ensure_ollama_ready(base_url: &str, configured_model: &str) -> String {
-    let selected = if configured_model.trim().is_empty() || configured_model.eq_ignore_ascii_case("auto") {
-        pick_ollama_model_for_hardware()
-    } else {
-        configured_model.to_string()
-    };
+    let selected =
+        if configured_model.trim().is_empty() || configured_model.eq_ignore_ascii_case("auto") {
+            pick_ollama_model_for_hardware()
+        } else {
+            configured_model.to_string()
+        };
     tracing::info!("Ollama selected model: {}", selected);
 
     let tags_url = format!("{}/api/tags", base_url.trim_end_matches('/'));
@@ -221,7 +253,10 @@ async fn ensure_ollama_ready(base_url: &str, configured_model: &str) -> String {
                 .iter()
                 .any(|m| m.name.eq_ignore_ascii_case(&selected));
             if !has_model {
-                tracing::info!("Ollama model '{}' not found locally. Starting background pull...", selected);
+                tracing::info!(
+                    "Ollama model '{}' not found locally. Starting background pull...",
+                    selected
+                );
                 let _ = Command::new("ollama")
                     .arg("pull")
                     .arg(&selected)
@@ -343,9 +378,9 @@ fn sync_ironclaw_env_from_config(config: &config::Config) {
     }
 }
 
+use ironclaw::agent::SessionManager;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-use ironclaw::agent::SessionManager;
 
 fn main() -> anyhow::Result<()> {
     // Slightly larger per-thread stacks reduce risk of overflow under
@@ -372,8 +407,10 @@ async fn async_main() -> anyhow::Result<()> {
     // Load configuration
     let config = match config::Config::load() {
         Ok(c) => {
-            info!("Configuration loaded. LLM mode: {}, Focus: {} {}",
-                c.llm.mode, c.scoring.focus_cancer, c.scoring.focus_mutation);
+            info!(
+                "Configuration loaded. LLM mode: {}, Focus: {} {}",
+                c.llm.mode, c.scoring.focus_cancer, c.scoring.focus_mutation
+            );
             c
         }
         Err(e) => {
@@ -402,18 +439,34 @@ async fn async_main() -> anyhow::Result<()> {
 
     // Build Tool Registry
     let tool_registry = Arc::new(ironclaw::tools::ToolRegistry::new());
-    tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::workflow_status_tool::WorkflowStatusTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::scoring_tool::RecomputeTargetScoresTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::provider_refresh_tool::RefreshProviderSignalsTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::molecule_tool::RunMoleculePipelineTool::new()));
-    tool_registry.register_sync(Arc::new(tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone())));
-    tool_registry.register_sync(Arc::new(tools::system_command_tool::SystemCommandTool::new()));
+    tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(
+        db.clone(),
+    )));
+    tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(
+        db.clone(),
+    )));
+    tool_registry.register_sync(Arc::new(
+        tools::workflow_status_tool::WorkflowStatusTool::new(db.clone()),
+    ));
+    tool_registry.register_sync(Arc::new(
+        tools::scoring_tool::RecomputeTargetScoresTool::new(db.clone()),
+    ));
+    tool_registry.register_sync(Arc::new(
+        tools::provider_refresh_tool::RefreshProviderSignalsTool::new(db.clone()),
+    ));
+    tool_registry.register_sync(Arc::new(
+        tools::molecule_tool::RunMoleculePipelineTool::new(),
+    ));
+    tool_registry.register_sync(Arc::new(
+        tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone()),
+    ));
+    tool_registry.register_sync(Arc::new(
+        tools::system_command_tool::SystemCommandTool::new(),
+    ));
 
     // Build Skill Registry
     let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(
-        ironclaw::skills::registry::SkillRegistry::new(std::path::PathBuf::from("./data/skills"))
+        ironclaw::skills::registry::SkillRegistry::new(std::path::PathBuf::from("./data/skills")),
     ));
     let skill_catalog = std::sync::Arc::new(ironclaw::skills::catalog::SkillCatalog::new());
 
@@ -421,10 +474,12 @@ async fn async_main() -> anyhow::Result<()> {
         store: None,
         llm: ironclaw_llm.clone(),
         cheap_llm: None,
-        safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(&ironclaw::config::SafetyConfig {
-            max_output_length: 100_000,
-            injection_check_enabled: true,
-        })),
+        safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(
+            &ironclaw::config::SafetyConfig {
+                max_output_length: 100_000,
+                injection_check_enabled: true,
+            },
+        )),
         tools: tool_registry.clone(),
         workspace: None,
         extension_manager: None,
@@ -432,7 +487,9 @@ async fn async_main() -> anyhow::Result<()> {
         skill_catalog: Some(skill_catalog.clone()),
         skills_config: ironclaw::config::SkillsConfig::default(),
         hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
-        cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(ironclaw::agent::cost_guard::CostGuardConfig::default())),
+        cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(
+            ironclaw::agent::cost_guard::CostGuardConfig::default(),
+        )),
         sse_tx: None,
         http_interceptor: None,
         transcription: None,
@@ -445,7 +502,9 @@ async fn async_main() -> anyhow::Result<()> {
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     if !disable_repl && std::io::stdin().is_terminal() {
-        channels.add(Box::new(ironclaw::channels::ReplChannel::new())).await;
+        channels
+            .add(Box::new(ironclaw::channels::ReplChannel::new()))
+            .await;
     } else {
         tracing::info!("Non-interactive runtime detected; skipping REPL channel.");
     }
@@ -500,8 +559,7 @@ async fn async_main() -> anyhow::Result<()> {
     let router = ferrumyx_web::router::build_router(state);
 
     // Start web server
-    let bind_addr = std::env::var("FERRUMYX_BIND")
-        .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let bind_addr = std::env::var("FERRUMYX_BIND").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     info!("🌐 Web GUI listening on http://{}", bind_addr);

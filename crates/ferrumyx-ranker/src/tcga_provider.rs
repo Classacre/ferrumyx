@@ -20,7 +20,8 @@ impl MockTcgaProvider {
     }
 
     pub fn with(mut self, gene: &str, cancer_type: &str, correlation: f64) -> Self {
-        self.data.insert((gene.to_string(), cancer_type.to_string()), correlation);
+        self.data
+            .insert((gene.to_string(), cancer_type.to_string()), correlation);
         self
     }
 }
@@ -33,7 +34,9 @@ impl Default for MockTcgaProvider {
 
 impl TcgaProvider for MockTcgaProvider {
     fn get_survival_correlation(&self, gene_symbol: &str, cancer_type: &str) -> Option<f64> {
-        self.data.get(&(gene_symbol.to_string(), cancer_type.to_string())).copied()
+        self.data
+            .get(&(gene_symbol.to_string(), cancer_type.to_string()))
+            .copied()
     }
 }
 
@@ -53,7 +56,10 @@ impl TcgaProvider for TcgaClientAdapter {
     fn get_survival_correlation(&self, gene_symbol: &str, cancer_type: &str) -> Option<f64> {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let res: anyhow::Result<Option<f64>> = self.client.get_survival_correlation(gene_symbol, cancer_type).await;
+                let res: anyhow::Result<Option<f64>> = self
+                    .client
+                    .get_survival_correlation(gene_symbol, cancer_type)
+                    .await;
                 res.unwrap_or(None)
             })
         })

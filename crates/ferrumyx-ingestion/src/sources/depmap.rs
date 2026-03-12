@@ -44,11 +44,17 @@ pub struct DepMapClient {
 
 impl DepMapClient {
     pub fn new() -> Self {
-        Self { client: Client::new(), api_key: None }
+        Self {
+            client: Client::new(),
+            api_key: None,
+        }
     }
 
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
-        Self { client: Client::new(), api_key: Some(api_key.into()) }
+        Self {
+            client: Client::new(),
+            api_key: Some(api_key.into()),
+        }
     }
 
     /// Fetch gene dependency scores for a specific gene across cancer types.
@@ -64,13 +70,13 @@ impl DepMapClient {
         // DepMap API requires authentication for bulk downloads
         // For now, we use the public download URL for the CERES dataset
         // In production, this would use the API with proper authentication
-        
+
         // Placeholder: In real implementation, this would:
         // 1. Query the DepMap API for gene effect scores
         // 2. Filter by cancer_type if provided
         // 3. Filter by score_threshold (e.g., < -0.5 for strong dependencies)
         // 4. Return top max_results
-        
+
         debug!(
             gene = gene_symbol,
             cancer_type = cancer_type,
@@ -82,7 +88,7 @@ impl DepMapClient {
         // The DepMap portal provides bulk downloads at:
         // https://depmap.org/portal/download/all/
         // CRISPR gene effect file: CRISPR_gene_effect.csv
-        
+
         Ok(Vec::new())
     }
 
@@ -103,26 +109,34 @@ impl DepMapClient {
 
         // TODO: Implement when API access is available
         // Would aggregate CERES scores across cell lines of the same cancer type
-        
+
         Ok(Vec::new())
     }
 
     /// Check if a gene is a known essential gene in DepMap.
     pub async fn is_essential_gene(&self, gene_symbol: &str) -> anyhow::Result<bool> {
-        let deps = self.fetch_gene_dependencies(gene_symbol, None, -0.5, 1).await?;
+        let deps = self
+            .fetch_gene_dependencies(gene_symbol, None, -0.5, 1)
+            .await?;
         Ok(!deps.is_empty())
     }
 }
 
 impl Default for DepMapClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // DepMap is not a literature source, but we implement the trait
 // for consistency with the ingestion pipeline (returns empty list).
 #[async_trait]
 impl LiteratureSource for DepMapClient {
-    async fn search(&self, _query: &str, _max_results: usize) -> anyhow::Result<Vec<PaperMetadata>> {
+    async fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+    ) -> anyhow::Result<Vec<PaperMetadata>> {
         // DepMap doesn't provide literature; return empty
         Ok(Vec::new())
     }

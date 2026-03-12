@@ -1,7 +1,7 @@
 //! Entity aggregation for knowledge graph construction.
 
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
 use tracing::info;
 use uuid::Uuid;
 

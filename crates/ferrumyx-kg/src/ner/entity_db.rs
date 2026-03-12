@@ -1,8 +1,8 @@
 //! Comprehensive biomedical entity database for fast dictionary-based NER.
 
-use std::collections::{HashMap, HashSet};
 use ahash::AHashMap;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct EntityDatabase {

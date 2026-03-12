@@ -93,7 +93,10 @@ mod tests {
         let c = conflict.unwrap();
         assert_eq!(c.conflict_type, ConflictType::Directional);
         // Both > 0.70 → ManualReview; 0.7 is not strictly > 0.70 so Unresolved is also valid
-        assert!(matches!(c.resolution, ConflictResolution::ManualReview | ConflictResolution::Unresolved));
+        assert!(matches!(
+            c.resolution,
+            ConflictResolution::ManualReview | ConflictResolution::Unresolved
+        ));
     }
 
     #[test]

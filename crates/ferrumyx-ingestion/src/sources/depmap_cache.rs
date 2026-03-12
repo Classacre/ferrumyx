@@ -82,7 +82,10 @@ impl DepMapCache {
 
         // Load cell line → cancer type mapping
         let cell_line_cancers = load_model_csv(&model_file)?;
-        info!(n_cell_lines = cell_line_cancers.len(), "Loaded cell line metadata");
+        info!(
+            n_cell_lines = cell_line_cancers.len(),
+            "Loaded cell line metadata"
+        );
 
         // Build reverse index: cancer type → cell lines
         let mut cancer_cell_lines: HashMap<String, Vec<String>> = HashMap::new();
@@ -303,7 +306,10 @@ fn load_gene_effect_csv(path: &Path) -> Result<HashMap<String, HashMap<String, f
 
     // First column is gene, rest are cell lines
     let cell_line_ids: Vec<&str> = header[1..].iter().map(|s| s.as_str()).collect();
-    debug!(n_cell_lines = cell_line_ids.len(), "Parsed gene effect header");
+    debug!(
+        n_cell_lines = cell_line_ids.len(),
+        "Parsed gene effect header"
+    );
 
     let mut gene_effects = HashMap::new();
 
@@ -316,11 +322,7 @@ fn load_gene_effect_csv(path: &Path) -> Result<HashMap<String, HashMap<String, f
 
         // Parse gene symbol (format: "GENE (EntrezID)")
         let gene_col = cols[0].trim();
-        let gene_symbol = gene_col
-            .split(' ')
-            .next()
-            .unwrap_or(gene_col)
-            .to_string();
+        let gene_symbol = gene_col.split(' ').next().unwrap_or(gene_col).to_string();
 
         // Parse CERES scores for each cell line
         let mut cell_line_scores = HashMap::new();

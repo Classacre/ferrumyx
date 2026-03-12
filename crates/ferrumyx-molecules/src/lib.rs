@@ -8,12 +8,12 @@
 //! 5. ADMET prediction
 //! 6. Scoring and ranking molecules
 
-pub mod pdb;
-pub mod pocket;
-pub mod ligand;
-pub mod docking;
 pub mod admet;
-pub mod scoring;
+pub mod docking;
+pub mod ligand;
+pub mod pdb;
 pub mod pipeline;
+pub mod pocket;
+pub mod scoring;
 
 pub type Result<T> = anyhow::Result<T>;

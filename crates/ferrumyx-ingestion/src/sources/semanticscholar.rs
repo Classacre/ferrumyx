@@ -175,10 +175,10 @@ impl SemanticScholarClient {
 
         let fields = "title,abstract,authors,venue,year,externalIds,isOpenAccess,openAccessPdf";
         let url = format!("{}/{}/{}", S2_PAPER_URL, paper_id, edge);
-        let req = self.client.get(url).query(&[
-            ("fields", fields),
-            ("limit", &limit.to_string()),
-        ]);
+        let req = self
+            .client
+            .get(url)
+            .query(&[("fields", fields), ("limit", &limit.to_string())]);
         let resp = self.apply_auth(req).send().await?;
         if !resp.status().is_success() {
             return Ok(Vec::new());
@@ -253,21 +253,15 @@ impl Default for SemanticScholarClient {
 #[async_trait]
 impl LiteratureSource for SemanticScholarClient {
     #[instrument(skip(self))]
-    async fn search(
-        &self,
-        query: &str,
-        max_results: usize,
-    ) -> anyhow::Result<Vec<PaperMetadata>> {
+    async fn search(&self, query: &str, max_results: usize) -> anyhow::Result<Vec<PaperMetadata>> {
         let limit = max_results.clamp(1, 100);
-        let fields = "paperId,title,abstract,authors,venue,year,externalIds,isOpenAccess,openAccessPdf";
-        let req = self
-            .client
-            .get(S2_SEARCH_URL)
-            .query(&[
-                ("query", query),
-                ("limit", &limit.to_string()),
-                ("fields", fields),
-            ]);
+        let fields =
+            "paperId,title,abstract,authors,venue,year,externalIds,isOpenAccess,openAccessPdf";
+        let req = self.client.get(S2_SEARCH_URL).query(&[
+            ("query", query),
+            ("limit", &limit.to_string()),
+            ("fields", fields),
+        ]);
         let resp = self.apply_auth(req).send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
@@ -275,7 +269,10 @@ impl LiteratureSource for SemanticScholarClient {
             anyhow::bail!("Semantic Scholar search failed: HTTP {} - {}", status, body);
         }
         let parsed = resp.json::<SearchResponse>().await?;
-        debug!(count = parsed.data.len(), "Semantic Scholar search returned results");
+        debug!(
+            count = parsed.data.len(),
+            "Semantic Scholar search returned results"
+        );
 
         let mut seed_ids = Vec::new();
         let mut papers = Vec::new();
@@ -288,7 +285,8 @@ impl LiteratureSource for SemanticScholarClient {
             }
         }
 
-        let max_expand = Self::citation_expansion_limit(max_results).min(max_results.saturating_sub(papers.len()));
+        let max_expand = Self::citation_expansion_limit(max_results)
+            .min(max_results.saturating_sub(papers.len()));
         if max_expand > 0 && !seed_ids.is_empty() {
             if let Ok(extra) = self.expand_citation_graph(&seed_ids, max_expand).await {
                 papers.extend(extra);
@@ -311,10 +309,7 @@ impl LiteratureSource for SemanticScholarClient {
     }
 
     #[instrument(skip(self))]
-    async fn fetch_full_text(
-        &self,
-        paper_id: &str,
-    ) -> anyhow::Result<Option<String>> {
+    async fn fetch_full_text(&self, paper_id: &str) -> anyhow::Result<Option<String>> {
         if paper_id.trim().is_empty() {
             return Ok(None);
         }

@@ -12,20 +12,23 @@ pub struct GtexClient {
 
 impl GtexClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 
     /// Fetch median gene expression in normal tissues.
     /// Returns a map of Tissue Site Detail -> Median TPM.
-    pub async fn get_median_expression(&self, gene_symbol: &str) -> anyhow::Result<HashMap<String, f64>> {
+    pub async fn get_median_expression(
+        &self,
+        gene_symbol: &str,
+    ) -> anyhow::Result<HashMap<String, f64>> {
         let url = format!("{}/expression/medianGeneExpression", GTEX_API_URL);
-        
-        let resp = self.client
+
+        let resp = self
+            .client
             .get(&url)
-            .query(&[
-                ("gencodeId", gene_symbol),
-                ("format", "json"),
-            ])
+            .query(&[("gencodeId", gene_symbol), ("format", "json")])
             .send()
             .await?
             .json::<serde_json::Value>()
@@ -37,7 +40,7 @@ impl GtexClient {
             for entry in data {
                 if let (Some(tissue), Some(tpm)) = (
                     entry["tissueSiteDetailId"].as_str(),
-                    entry["median"].as_f64()
+                    entry["median"].as_f64(),
                 ) {
                     expression_map.insert(tissue.to_string(), tpm);
                 }

@@ -132,7 +132,7 @@ impl std::fmt::Display for EntityType {
 
 impl std::str::FromStr for EntityType {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "gene" => Ok(EntityType::Gene),
@@ -164,7 +164,12 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(entity_type: EntityType, name: String, external_id: String, source_db: String) -> Self {
+    pub fn new(
+        entity_type: EntityType,
+        name: String,
+        external_id: String,
+        source_db: String,
+    ) -> Self {
         let now = chrono::Utc::now();
         Self {
             id: uuid::Uuid::new_v4(),
@@ -467,7 +472,13 @@ pub struct KgConflict {
 }
 
 impl KgConflict {
-    pub fn new(fact_a_id: uuid::Uuid, fact_b_id: uuid::Uuid, conflict_type: String, net_confidence: f32, resolution: String) -> Self {
+    pub fn new(
+        fact_a_id: uuid::Uuid,
+        fact_b_id: uuid::Uuid,
+        conflict_type: String,
+        net_confidence: f32,
+        resolution: String,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
             fact_a_id,
@@ -502,7 +513,14 @@ pub struct TargetScore {
 }
 
 impl TargetScore {
-    pub fn new(gene_id: uuid::Uuid, cancer_id: uuid::Uuid, composite_score: f64, confidence_adjusted_score: f64, penalty_score: f64, shortlist_tier: String) -> Self {
+    pub fn new(
+        gene_id: uuid::Uuid,
+        cancer_id: uuid::Uuid,
+        composite_score: f64,
+        confidence_adjusted_score: f64,
+        penalty_score: f64,
+        shortlist_tier: String,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
             gene_id,
@@ -575,4 +593,3 @@ pub const TABLE_ENT_TCGA_SURVIVAL: &str = "ent_tcga_survival";
 pub const TABLE_ENT_GTEX_EXPRESSION: &str = "ent_gtex_expression";
 pub const TABLE_ENT_CHEMBL_TARGETS: &str = "ent_chembl_targets";
 pub const TABLE_ENT_REACTOME_GENES: &str = "ent_reactome_genes";
-

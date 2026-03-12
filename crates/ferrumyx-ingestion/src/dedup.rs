@@ -21,10 +21,7 @@ pub enum DedupResult {
 ///
 /// In production, stages 2 and 3 require database lookups.
 /// This module provides the pure computation logic.
-pub fn check_duplicate(
-    incoming: &PaperMetadata,
-    existing_dois: &[String],
-) -> DedupResult {
+pub fn check_duplicate(incoming: &PaperMetadata, existing_dois: &[String]) -> DedupResult {
     // Stage 1: DOI exact match
     if let Some(doi) = &incoming.doi {
         if existing_dois.contains(doi) {
@@ -40,10 +37,7 @@ pub fn check_duplicate(
 /// Stage 3: Fuzzy title match (tertiary).
 /// Checks if incoming paper closely matches any existing paper's title (Jaro-Winkler >= 0.92)
 /// AND the first author's surname matches.
-pub fn check_fuzzy_duplicate<'a, I>(
-    incoming: &PaperMetadata,
-    existing_papers: I,
-) -> DedupResult 
+pub fn check_fuzzy_duplicate<'a, I>(incoming: &PaperMetadata, existing_papers: I) -> DedupResult
 where
     I: IntoIterator<Item = &'a PaperMetadata>,
 {
@@ -52,31 +46,39 @@ where
 
     for paper in existing_papers {
         let title_sim = strsim::jaro_winkler(&incoming_title, &paper.title.to_lowercase());
-        
+
         if title_sim >= 0.92 {
             let existing_author = get_first_author_surname(paper);
             if incoming_author == existing_author && !incoming_author.is_empty() {
-                return DedupResult::ProbableDuplicate { 
-                    method: "fuzzy_title_author".to_string(), 
-                    similarity: title_sim 
+                return DedupResult::ProbableDuplicate {
+                    method: "fuzzy_title_author".to_string(),
+                    similarity: title_sim,
                 };
             }
         }
     }
-    
+
     DedupResult::New
 }
 
 fn get_first_author_surname(paper: &PaperMetadata) -> String {
-    paper.authors.first()
-        .map(|a| a.name.split_whitespace().last().unwrap_or("").to_lowercase())
+    paper
+        .authors
+        .first()
+        .map(|a| {
+            a.name
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .to_lowercase()
+        })
         .unwrap_or_default()
 }
 
 /// Compute a simple 64-bit SimHash of text for approximate deduplication.
 /// Production implementation should use a proper SimHash library.
 /// This is a simplified version for bootstrapping.
-/// 
+///
 /// Returns i64 for PostgreSQL BIGINT compatibility.
 /// Clamps to valid i64 range to avoid "bigint out of range" errors.
 pub fn simhash(text: &str) -> i64 {
@@ -87,7 +89,9 @@ pub fn simhash(text: &str) -> i64 {
 
     for word in &words {
         // Skip common stop words
-        if STOP_WORDS.contains(word) { continue; }
+        if STOP_WORDS.contains(word) {
+            continue;
+        }
 
         let hash = fnv64(word.as_bytes());
         for i in 0..64usize {
@@ -105,7 +109,7 @@ pub fn simhash(text: &str) -> i64 {
             fingerprint |= 1u64 << i;
         }
     }
-    
+
     // Clamp to valid i64 range for PostgreSQL BIGINT
     // PostgreSQL BIGINT range: -9223372036854775808 to 9223372036854775807
     // u64 max: 18446744073709551615
@@ -143,9 +147,8 @@ pub fn hamming_distance(a: i64, b: i64) -> u32 {
 
 /// Stop words to exclude from SimHash computation.
 const STOP_WORDS: &[&str] = &[
-    "the", "a", "an", "and", "or", "in", "of", "to", "is", "was",
-    "for", "on", "with", "this", "that", "are", "were", "be", "been",
-    "by", "from", "we", "our", "their", "which", "also",
+    "the", "a", "an", "and", "or", "in", "of", "to", "is", "was", "for", "on", "with", "this",
+    "that", "are", "were", "be", "been", "by", "from", "we", "our", "their", "which", "also",
 ];
 
 #[cfg(test)]
@@ -178,30 +181,49 @@ mod tests {
     #[test]
     fn test_fuzzy_duplicate_match() {
         let p1 = PaperMetadata {
-            doi: None, pmid: None, pmcid: None,
+            doi: None,
+            pmid: None,
+            pmcid: None,
             title: "The role of KRAS in pancreatic cancer".to_string(),
             abstract_text: None,
-            authors: vec![crate::models::Author { name: "John Doe".to_string(), affiliation: None, orcid: None }],
-            journal: None, pub_date: None, source: crate::models::IngestionSource::PubMed, open_access: false, full_text_url: None,
+            authors: vec![crate::models::Author {
+                name: "John Doe".to_string(),
+                affiliation: None,
+                orcid: None,
+            }],
+            journal: None,
+            pub_date: None,
+            source: crate::models::IngestionSource::PubMed,
+            open_access: false,
+            full_text_url: None,
         };
         let p2 = PaperMetadata {
-            doi: None, pmid: None, pmcid: None,
+            doi: None,
+            pmid: None,
+            pmcid: None,
             title: "The roles of KRAS in pancreatic cancer".to_string(),
             abstract_text: None,
-            authors: vec![crate::models::Author { name: "Jane Doe".to_string(), affiliation: None, orcid: None }],
-            journal: None, pub_date: None, source: crate::models::IngestionSource::PubMed, open_access: false, full_text_url: None,
+            authors: vec![crate::models::Author {
+                name: "Jane Doe".to_string(),
+                affiliation: None,
+                orcid: None,
+            }],
+            journal: None,
+            pub_date: None,
+            source: crate::models::IngestionSource::PubMed,
+            open_access: false,
+            full_text_url: None,
         };
-        
+
         let res = check_fuzzy_duplicate(&p1, vec![&p2]);
         match res {
             DedupResult::ProbableDuplicate { method, similarity } => {
                 assert_eq!(method, "fuzzy_title_author");
                 assert!(similarity >= 0.92);
-            },
+            }
             _ => panic!("Expected ProbableDuplicate"),
         }
     }
-
 
     #[test]
     fn test_simhash_within_i64_range() {
@@ -213,7 +235,7 @@ mod tests {
             "Short text",
             "",
         ];
-        
+
         for text in &texts {
             let hash = simhash(text);
             // Verify it's within valid i64 range (should never fail if clamp works)

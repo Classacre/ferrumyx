@@ -1,34 +1,34 @@
 //! ferrumyx-ranker — Target prioritization scoring engine.
 //! Implements Phase 4 of ARCHITECTURE.md.
 
-pub mod providers;
-pub mod scorer;
-pub mod normalise;
 pub mod depmap_provider;
 pub mod gtex_provider;
+pub mod normalise;
+pub mod providers;
+pub mod scorer;
 pub mod tcga_provider;
 pub mod weights;
 
-use std::sync::Arc;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
-use ferrumyx_db::Database;
-use ferrumyx_db::papers::PaperRepository;
-use ferrumyx_db::kg_facts::KgFactRepository;
+use ferrumyx_common::query::{QueryRequest, QueryResult, TargetMetrics};
 use ferrumyx_db::kg_conflicts::KgConflictRepository;
+use ferrumyx_db::kg_facts::KgFactRepository;
+use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::target_scores::TargetScoreRepository;
+use ferrumyx_db::Database;
 use ferrumyx_db::{
     EntChemblTarget, EntGtexExpression, EntReactomeGene, EntStageRepository, EntTcgaSurvival,
     Phase4SignalRepository,
 };
-use ferrumyx_common::query::{QueryRequest, QueryResult, TargetMetrics};
 use ferrumyx_ingestion::sources::ChemblClient;
 use ferrumyx_ingestion::sources::DepMapCache;
 use ferrumyx_ingestion::sources::GtexClient;
 use ferrumyx_ingestion::sources::TcgaClient;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 use tracing::info;
 
 const PROVIDER_SIGNAL_TTL_DAYS: i64 = 14;
@@ -103,7 +103,10 @@ impl TargetQueryEngine {
         let t_conflicts = Instant::now();
         let mut conflicts_by_fact: HashMap<uuid::Uuid, Vec<_>> = HashMap::new();
         for c in conflicts {
-            conflicts_by_fact.entry(c.fact_a_id).or_default().push(c.clone());
+            conflicts_by_fact
+                .entry(c.fact_a_id)
+                .or_default()
+                .push(c.clone());
             conflicts_by_fact.entry(c.fact_b_id).or_default().push(c);
         }
 
@@ -269,10 +272,7 @@ impl TargetQueryEngine {
         let ent_repo = EntStageRepository::new(self.db.clone());
         let signal_repo = Phase4SignalRepository::new(self.db.clone());
         let paper_repo = PaperRepository::new(self.db.clone());
-        let symbol_list: Vec<String> = candidates
-            .values()
-            .map(|c| c.gene_symbol.clone())
-            .collect();
+        let symbol_list: Vec<String> = candidates.values().map(|c| c.gene_symbol.clone()).collect();
         let enrichment_by_symbol = ent_repo
             .get_enrichment_by_symbol(&symbol_list)
             .await
@@ -298,7 +298,8 @@ impl TargetQueryEngine {
                 if enrich.mutation_count > 0 {
                     let source_mutation = (enrich.mutation_count as f64 / 20.0).clamp(0.0, 1.0);
                     metrics.mutation_freq = metrics.mutation_freq.max(source_mutation);
-                    component_sources.insert("n1_mutation_freq".to_string(), "ent_stage".to_string());
+                    component_sources
+                        .insert("n1_mutation_freq".to_string(), "ent_stage".to_string());
                 }
                 if enrich.pdb_structure_count > 0 {
                     metrics.pdb_structure_count =
@@ -366,7 +367,8 @@ impl TargetQueryEngine {
             }
 
             if let Some(depmap) = depmap_cache() {
-                if let Some(ceres) = depmap.get_mean_ceres(&candidate.gene_symbol, &inferred_cancer) {
+                if let Some(ceres) = depmap.get_mean_ceres(&candidate.gene_symbol, &inferred_cancer)
+                {
                     metrics.crispr_dependency = ceres;
                     component_sources.insert(
                         "n2_crispr_dependency".to_string(),
@@ -399,8 +401,7 @@ impl TargetQueryEngine {
                 if let Some(gtex_expr_score) =
                     get_cached_gtex_expression_score(&signal_repo, &candidate.gene_symbol).await
                 {
-                    metrics.expression_specificity =
-                        (1.0 + 4.0 * gtex_expr_score).clamp(0.5, 5.0);
+                    metrics.expression_specificity = (1.0 + 4.0 * gtex_expr_score).clamp(0.5, 5.0);
                     component_sources.insert(
                         "n4_expression_specificity".to_string(),
                         "gtex_table".to_string(),
@@ -414,7 +415,8 @@ impl TargetQueryEngine {
                 {
                     metrics.chembl_inhibitor_count =
                         metrics.chembl_inhibitor_count.max(chembl_count);
-                    component_sources.insert("n7_novelty_score".to_string(), "chembl_table".to_string());
+                    component_sources
+                        .insert("n7_novelty_score".to_string(), "chembl_table".to_string());
                 }
             }
 
@@ -422,9 +424,8 @@ impl TargetQueryEngine {
                 if let Some(reactome_count) =
                     get_cached_reactome_pathway_count(&signal_repo, &candidate.gene_symbol).await
                 {
-                    metrics.reactome_escape_pathway_count = metrics
-                        .reactome_escape_pathway_count
-                        .max(reactome_count);
+                    metrics.reactome_escape_pathway_count =
+                        metrics.reactome_escape_pathway_count.max(reactome_count);
                     component_sources.insert(
                         "n8_pathway_independence".to_string(),
                         "reactome_table".to_string(),
@@ -454,7 +455,8 @@ impl TargetQueryEngine {
 
                 let persisted_score = score_map_gene.get(gene_id).copied();
                 let effective_score = persisted_score.unwrap_or(score_res.composite_score);
-                let confidence_adj = (effective_score * candidate.mean_confidence()).clamp(0.0, 1.0);
+                let confidence_adj =
+                    (effective_score * candidate.mean_confidence()).clamp(0.0, 1.0);
 
                 let penalties = scorer::PenaltyInputs {
                     chembl_inhibitor_count: metrics.chembl_inhibitor_count,
@@ -595,7 +597,11 @@ impl TargetQueryEngine {
                 report.genes_processed += 1;
 
                 report.gtex_attempted += 1;
-                if retry_fetch_f64(retries, || get_cached_gtex_expression_score(&signal_repo, gene)).await {
+                if retry_fetch_f64(retries, || {
+                    get_cached_gtex_expression_score(&signal_repo, gene)
+                })
+                .await
+                {
                     report.gtex_success += 1;
                 } else {
                     report.gtex_failed += 1;
@@ -778,7 +784,7 @@ async fn get_cached_gtex_expression_score(
     }
 
     // Bounded network call with timeout so ranker latency stays controlled.
-    let fetched = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+    let fetched = tokio::time::timeout(std::time::Duration::from_secs(8), async {
         let client = GtexClient::new();
         let map = client.get_median_expression(&key).await.ok()?;
         if map.is_empty() {
@@ -804,10 +810,21 @@ async fn get_cached_gtex_expression_score(
             .await;
     }
 
+    let resolved = if fetched.is_some() {
+        fetched
+    } else {
+        signal_repo
+            .find_gtex_expression(&key)
+            .await
+            .ok()
+            .flatten()
+            .map(|row| row.expression_score.clamp(0.0, 1.0))
+    };
+
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, fetched);
+        guard.insert(key, resolved);
     }
-    fetched
+    resolved
 }
 
 fn to_tcga_project_id(cancer_code: &str) -> Option<String> {
@@ -817,9 +834,8 @@ fn to_tcga_project_id(cancer_code: &str) -> Option<String> {
     }
     let mapped = match code.as_str() {
         "NSCLC" => "LUAD",
-        "SKCM" | "PAAD" | "LUAD" | "LUSC" | "BRCA" | "COAD" | "READ" | "GBM" | "HNSC"
-        | "OV" | "KIRC" | "KIRP" | "THCA" | "STAD" | "BLCA" | "UCEC" | "LIHC"
-        | "PRAD" => code.as_str(),
+        "SKCM" | "PAAD" | "LUAD" | "LUSC" | "BRCA" | "COAD" | "READ" | "GBM" | "HNSC" | "OV"
+        | "KIRC" | "KIRP" | "THCA" | "STAD" | "BLCA" | "UCEC" | "LIHC" | "PRAD" => code.as_str(),
         other if other.len() == 4 && other.chars().all(|c| c.is_ascii_uppercase()) => other,
         _ => return None,
     };
@@ -855,7 +871,7 @@ async fn get_cached_tcga_survival_score(
         return value;
     }
 
-    let fetched = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+    let fetched = tokio::time::timeout(std::time::Duration::from_secs(8), async {
         let client = TcgaClient::new();
         let corr = client
             .get_survival_correlation(&gene, &project)
@@ -873,7 +889,7 @@ async fn get_cached_tcga_survival_score(
             .upsert_tcga_survival(&EntTcgaSurvival {
                 id: uuid::Uuid::new_v4(),
                 gene_symbol: gene.clone(),
-                cancer_code: normalized_cancer,
+                cancer_code: normalized_cancer.clone(),
                 tcga_project_id: project.clone(),
                 survival_score,
                 source: "tcga_api".to_string(),
@@ -882,10 +898,21 @@ async fn get_cached_tcga_survival_score(
             .await;
     }
 
+    let resolved = if fetched.is_some() {
+        fetched
+    } else {
+        signal_repo
+            .find_tcga_survival(&gene, &normalized_cancer)
+            .await
+            .ok()
+            .flatten()
+            .map(|row| row.survival_score.clamp(0.0, 1.0))
+    };
+
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, fetched);
+        guard.insert(key, resolved);
     }
-    fetched
+    resolved
 }
 
 #[derive(Debug, Deserialize)]
@@ -923,7 +950,7 @@ async fn get_cached_chembl_inhibitor_count(
     }
 
     let key_for_fetch = key.clone();
-    let fetched = tokio::time::timeout(std::time::Duration::from_secs(4), async move {
+    let fetched = tokio::time::timeout(std::time::Duration::from_secs(8), async move {
         let client = ChemblClient::new();
         let targets = client.search_targets_by_gene(&key_for_fetch).await.ok()?;
         if targets.is_empty() {
@@ -963,10 +990,21 @@ async fn get_cached_chembl_inhibitor_count(
             .await;
     }
 
+    let resolved = if fetched.is_some() {
+        fetched
+    } else {
+        signal_repo
+            .find_chembl_target(&key)
+            .await
+            .ok()
+            .flatten()
+            .map(|row| row.inhibitor_count.max(0) as u32)
+    };
+
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, fetched);
+        guard.insert(key, resolved);
     }
-    fetched
+    resolved
 }
 
 async fn get_cached_reactome_pathway_count(
@@ -997,7 +1035,7 @@ async fn get_cached_reactome_pathway_count(
     }
 
     let key_for_fetch = key.clone();
-    let fetched = tokio::time::timeout(std::time::Duration::from_secs(4), async move {
+    let fetched = tokio::time::timeout(std::time::Duration::from_secs(8), async move {
         let client = Client::new();
         let resp = client
             .post("https://reactome.org/AnalysisService/identifiers/projection?pageSize=200&page=1")
@@ -1031,22 +1069,48 @@ async fn get_cached_reactome_pathway_count(
             .await;
     }
 
+    let resolved = if fetched.is_some() {
+        fetched
+    } else {
+        signal_repo
+            .find_reactome_gene(&key)
+            .await
+            .ok()
+            .flatten()
+            .map(|row| row.pathway_count.max(0) as u32)
+    };
+
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, fetched);
+        guard.insert(key, resolved);
     }
-    fetched
+    resolved
 }
 
 fn default_component_sources() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     out.insert("n1_mutation_freq".to_string(), "proxy_kg".to_string());
     out.insert("n2_crispr_dependency".to_string(), "proxy_kg".to_string());
-    out.insert("n3_survival_correlation".to_string(), "proxy_kg".to_string());
-    out.insert("n4_expression_specificity".to_string(), "proxy_kg".to_string());
-    out.insert("n5_structural_tractability".to_string(), "proxy_kg".to_string());
-    out.insert("n6_pocket_detectability".to_string(), "proxy_kg".to_string());
+    out.insert(
+        "n3_survival_correlation".to_string(),
+        "proxy_kg".to_string(),
+    );
+    out.insert(
+        "n4_expression_specificity".to_string(),
+        "proxy_kg".to_string(),
+    );
+    out.insert(
+        "n5_structural_tractability".to_string(),
+        "proxy_kg".to_string(),
+    );
+    out.insert(
+        "n6_pocket_detectability".to_string(),
+        "proxy_kg".to_string(),
+    );
     out.insert("n7_novelty_score".to_string(), "proxy_kg".to_string());
-    out.insert("n8_pathway_independence".to_string(), "proxy_kg".to_string());
+    out.insert(
+        "n8_pathway_independence".to_string(),
+        "proxy_kg".to_string(),
+    );
     out.insert("n9_literature_novelty".to_string(), "proxy_kg".to_string());
     out
 }
@@ -1128,19 +1192,23 @@ impl GeneCandidate {
                 / self.survival_mentions as f64;
             ((signed + 1.0) / 2.0).clamp(0.0, 1.0)
         } else if self.sample_obs > 0 {
-            (self.sample_size_sum / self.sample_obs as f64).ln_1p().min(10.0) / 10.0
+            (self.sample_size_sum / self.sample_obs as f64)
+                .ln_1p()
+                .min(10.0)
+                / 10.0
         } else {
             confidence_mean
         };
 
         // Source-derived from expression predicates (tumor/normal ratio) when present.
-        let expression_specificity = if self.expression_tumor_mentions + self.expression_normal_mentions > 0 {
-            ((self.expression_tumor_mentions as f64 + 1.0)
-                / (self.expression_normal_mentions as f64 + 1.0))
-                .clamp(0.5, 5.0)
-        } else {
-            (1.0 + 4.0 * (self.cancer_mentions as f64 / evidence)).clamp(0.5, 5.0)
-        };
+        let expression_specificity =
+            if self.expression_tumor_mentions + self.expression_normal_mentions > 0 {
+                ((self.expression_tumor_mentions as f64 + 1.0)
+                    / (self.expression_normal_mentions as f64 + 1.0))
+                    .clamp(0.5, 5.0)
+            } else {
+                (1.0 + 4.0 * (self.cancer_mentions as f64 / evidence)).clamp(0.5, 5.0)
+            };
 
         let pdb_structure_count = self.structural_mentions;
         let af_plddt_mean = if pdb_structure_count > 0 {
@@ -1218,8 +1286,9 @@ fn is_cancer_like(name: &str) -> bool {
     if n.is_empty() {
         return false;
     }
-    let code_like =
-        n.len() <= 8 && n.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    let code_like = n.len() <= 8
+        && n.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
     if code_like {
         return true;
     }

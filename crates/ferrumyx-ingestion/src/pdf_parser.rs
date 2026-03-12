@@ -6,7 +6,7 @@ use anyhow::Result;
 use std::path::Path;
 use uuid::Uuid;
 
-use crate::chunker::{DocumentSection, ChunkerConfig, chunk_document};
+use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::models::SectionType;
 
 /// Parse a PDF file and extract structured sections.
@@ -15,7 +15,7 @@ pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
     use lopdf::Document as PdfDoc;
 
     let pdf = PdfDoc::load(pdf_path)?;
-    
+
     // Extract text from all pages
     let mut full_text = String::new();
     let mut pages: Vec<(u32, String)> = Vec::new();
@@ -29,13 +29,16 @@ pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
             // Basic extraction: look for text between BT/ET operators
             let mut in_text = false;
             for line in content_str.lines() {
-                if line.contains("BT") { in_text = true; }
-                else if line.contains("ET") { in_text = false; }
-                else if in_text {
+                if line.contains("BT") {
+                    in_text = true;
+                } else if line.contains("ET") {
+                    in_text = false;
+                } else if in_text {
                     // Extract text from Tj and TJ operators
                     if line.contains("Tj") || line.contains("TJ") {
                         // Very basic - just capture printable text
-                        let text: String = line.chars()
+                        let text: String = line
+                            .chars()
                             .filter(|c| c.is_alphanumeric() || c.is_whitespace())
                             .collect();
                         page_text.push_str(&text);
@@ -97,8 +100,15 @@ fn detect_sections(text: &str, pages: &[(u32, String)]) -> Vec<DocumentSection> 
 
 fn find_next_section(text: &str, after: usize) -> usize {
     let remaining = &text[after..];
-    let markers = ["\nintroduction", "\nmethods", "\nresults", "\ndiscussion", "\nconclusion", "\nreferences"];
-    
+    let markers = [
+        "\nintroduction",
+        "\nmethods",
+        "\nresults",
+        "\ndiscussion",
+        "\nconclusion",
+        "\nreferences",
+    ];
+
     let mut earliest = text.len();
     for marker in markers {
         if let Some(pos) = remaining.find(marker) {
@@ -136,11 +146,7 @@ pub fn parse_pdf_to_chunks(
     let config = config.unwrap_or_default();
 
     // Use existing chunker with section-aware splitting
-    let chunks = chunk_document(
-        paper_id,
-        parsed.sections,
-        &config,
-    );
+    let chunks = chunk_document(paper_id, parsed.sections, &config);
 
     Ok(chunks)
 }

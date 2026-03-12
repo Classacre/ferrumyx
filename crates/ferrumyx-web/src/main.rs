@@ -1,5 +1,5 @@
 //! Ferrumyx Web Server
-//! 
+//!
 //! Run with: cargo run -p ferrumyx-web
 
 use std::net::SocketAddr;

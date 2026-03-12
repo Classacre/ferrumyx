@@ -9,8 +9,8 @@ use quick_xml::Reader;
 use reqwest::Client;
 use tracing::{debug, instrument, warn};
 
-use crate::models::{Author, IngestionSource, PaperMetadata};
 use super::LiteratureSource;
+use crate::models::{Author, IngestionSource, PaperMetadata};
 
 const ARXIV_API_URL: &str = "http://export.arxiv.org/api/query";
 
@@ -30,7 +30,9 @@ pub struct ArxivClient {
 
 impl ArxivClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 }
 
@@ -216,4 +218,3 @@ mod tests {
             .contains("/pdf/2501.12345v1.pdf"));
     }
 }
-

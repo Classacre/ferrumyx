@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Default DepMap data URL for bulk downloads
 pub const DEPMAP_DOWNLOAD_URL: &str = "https://depmap.org/portal/download/all/";
@@ -91,21 +91,21 @@ impl DepMapClient {
 
     async fn download_data(&self) -> Result<()> {
         let client = reqwest::Client::new();
-        
+
         for file in &[CRISPR_GENE_EFFECT_FILE, MODEL_FILE] {
             let url = format!("{}/{}", DEPMAP_DOWNLOAD_URL, file);
             let path = self.data_dir.join(file);
             info!("Downloading {}...", file);
-            
+
             let response = client.get(&url).send().await?;
             if !response.status().is_success() {
                 anyhow::bail!("Failed to download {}: HTTP {}", file, response.status());
             }
-            
+
             let content = response.bytes().await?;
             tokio::fs::write(path, content).await?;
         }
-        
+
         Ok(())
     }
 
@@ -119,12 +119,14 @@ impl DepMapClient {
         let path = self.model_path();
         let content = tokio::fs::read_to_string(&path).await?;
         let mut reader = csv::Reader::from_reader(content.as_bytes());
-        
+
         for result in reader.records() {
             let record = result?;
             let model_id = record.get(0).map(|s| s.to_string());
-            let oncotree_code = record.iter().find(|&s| s.len() == 4 && s.chars().all(|c| c.is_ascii_uppercase()));
-            
+            let oncotree_code = record
+                .iter()
+                .find(|&s| s.len() == 4 && s.chars().all(|c| c.is_ascii_uppercase()));
+
             if let (Some(id), Some(cancer_type)) = (model_id, oncotree_code) {
                 self.cell_line_cancers.insert(id, cancer_type.to_string());
             }
@@ -136,10 +138,14 @@ impl DepMapClient {
         let path = self.gene_effect_path();
         let content = tokio::fs::read_to_string(&path).await?;
         let mut reader = csv::Reader::from_reader(content.as_bytes());
-        
-        let headers = reader.headers()?.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        let headers = reader
+            .headers()?
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
         let gene_names: Vec<String> = headers.iter().skip(1).cloned().collect();
-        
+
         for result in reader.records() {
             let record = result?;
             let cell_line_id = record.get(0).map(|s| s.to_string());
@@ -163,7 +169,7 @@ impl DepMapClient {
         let gene_upper = gene.to_uppercase();
         let cancer_upper = cancer_type.to_uppercase();
         let mut scores = Vec::new();
-        
+
         if let Some(cell_lines) = self.gene_effects.get(&gene_upper) {
             for (cell_line_id, score) in cell_lines {
                 if let Some(cell_cancer) = self.cell_line_cancers.get(cell_line_id) {
@@ -178,29 +184,48 @@ impl DepMapClient {
 
     pub fn get_mean_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
         let scores = self.get_gene_scores(gene, cancer_type);
-        if scores.is_empty() { None } else { Some(scores.iter().sum::<f64>() / scores.len() as f64) }
+        if scores.is_empty() {
+            None
+        } else {
+            Some(scores.iter().sum::<f64>() / scores.len() as f64)
+        }
     }
 
     pub fn get_median_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
         let mut scores = self.get_gene_scores(gene, cancer_type);
-        if scores.is_empty() { None } else {
+        if scores.is_empty() {
+            None
+        } else {
             scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
             let mid = scores.len() / 2;
-            if scores.len() % 2 == 0 { Some((scores[mid - 1] + scores[mid]) / 2.0) } else { Some(scores[mid]) }
+            if scores.len() % 2 == 0 {
+                Some((scores[mid - 1] + scores[mid]) / 2.0)
+            } else {
+                Some(scores[mid])
+            }
         }
     }
 
     pub fn get_top_dependencies(&self, cancer_type: &str, n: usize) -> Vec<(String, f64)> {
         let cancer_upper = cancer_type.to_uppercase();
         let mut gene_means = Vec::new();
-        
+
         for (gene, cell_lines) in &self.gene_effects {
-            let scores: Vec<f64> = cell_lines.iter().filter_map(|(id, score)| {
-                self.cell_line_cancers.get(id).filter(|ct| ct.to_uppercase() == cancer_upper).map(|_| *score)
-            }).collect();
-            
+            let scores: Vec<f64> = cell_lines
+                .iter()
+                .filter_map(|(id, score)| {
+                    self.cell_line_cancers
+                        .get(id)
+                        .filter(|ct| ct.to_uppercase() == cancer_upper)
+                        .map(|_| *score)
+                })
+                .collect();
+
             if !scores.is_empty() {
-                gene_means.push((gene.clone(), scores.iter().sum::<f64>() / scores.len() as f64));
+                gene_means.push((
+                    gene.clone(),
+                    scores.iter().sum::<f64>() / scores.len() as f64,
+                ));
             }
         }
         gene_means.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());

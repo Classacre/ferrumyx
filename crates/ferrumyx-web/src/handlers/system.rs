@@ -4,19 +4,25 @@ use axum::{extract::State, response::Html};
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
-use ferrumyx_db::{
-    papers::PaperRepository,
-    target_scores::TargetScoreRepository,
-};
+use ferrumyx_db::{papers::PaperRepository, target_scores::TargetScoreRepository};
 
 pub async fn system_page(State(state): State<SharedState>) -> Html<String> {
     let paper_repo = PaperRepository::new(state.db.clone());
     let score_repo = TargetScoreRepository::new(state.db.clone());
 
     let stats = state.db.stats().await.unwrap_or_default();
-    let pending = paper_repo.count_by_parse_status("pending").await.unwrap_or(0);
-    let parsed = paper_repo.count_by_parse_status("parsed").await.unwrap_or(0);
-    let failed = paper_repo.count_by_parse_status("failed").await.unwrap_or(0);
+    let pending = paper_repo
+        .count_by_parse_status("pending")
+        .await
+        .unwrap_or(0);
+    let parsed = paper_repo
+        .count_by_parse_status("parsed")
+        .await
+        .unwrap_or(0);
+    let failed = paper_repo
+        .count_by_parse_status("failed")
+        .await
+        .unwrap_or(0);
     let score_rows = score_repo.count().await.unwrap_or(0);
 
     let mut recent_papers = paper_repo.list(0, 40).await.unwrap_or_default();

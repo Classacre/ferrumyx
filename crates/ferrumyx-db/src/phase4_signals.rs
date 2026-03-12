@@ -134,10 +134,7 @@ impl Phase4SignalRepository {
         Ok(())
     }
 
-    pub async fn find_chembl_target(
-        &self,
-        gene_symbol: &str,
-    ) -> Result<Option<EntChemblTarget>> {
+    pub async fn find_chembl_target(&self, gene_symbol: &str) -> Result<Option<EntChemblTarget>> {
         let gene = normalize_symbol(gene_symbol);
         if gene.is_empty() {
             return Ok(None);
@@ -184,10 +181,7 @@ impl Phase4SignalRepository {
         Ok(())
     }
 
-    pub async fn find_reactome_gene(
-        &self,
-        gene_symbol: &str,
-    ) -> Result<Option<EntReactomeGene>> {
+    pub async fn find_reactome_gene(&self, gene_symbol: &str) -> Result<Option<EntReactomeGene>> {
         let gene = normalize_symbol(gene_symbol);
         if gene.is_empty() {
             return Ok(None);

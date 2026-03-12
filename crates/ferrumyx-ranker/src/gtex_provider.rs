@@ -58,7 +58,8 @@ impl GtexProvider for GtexClientAdapter {
         // We will execute a block_on internally for now.
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let res: anyhow::Result<HashMap<String, f64>> = self.client.get_median_expression(gene_symbol).await;
+                let res: anyhow::Result<HashMap<String, f64>> =
+                    self.client.get_median_expression(gene_symbol).await;
                 res.ok()
             })
         })

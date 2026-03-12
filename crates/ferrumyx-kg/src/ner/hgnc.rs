@@ -1,9 +1,11 @@
 //! HGNC gene symbol normalisation logic.
 //! Ported from ferrumyx-ingestion to ferrumyx-kg.
 
-use std::collections::HashMap;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
 /// Tier of a gene symbol match — affects confidence scoring.
 /// Preferred = approved HGNC symbol (highest signal).
@@ -44,15 +46,36 @@ pub struct HgncNormaliser {
 }
 
 impl HgncNormaliser {
+    fn cache_path() -> PathBuf {
+        let root =
+            std::env::var("FERRUMYX_CACHE_DIR").unwrap_or_else(|_| "./data/cache/ner".to_string());
+        PathBuf::from(root).join("hgnc_complete_set.txt")
+    }
+
     /// Build from the HGNC complete set downloaded at runtime.
     pub async fn from_download() -> Result<Self> {
-        tracing::info!("Downloading HGNC complete set from {}", HGNC_COMPLETE_SET_URL);
+        let cache_path = Self::cache_path();
+        if let Ok(tsv) = fs::read_to_string(&cache_path) {
+            tracing::info!("Loaded HGNC dataset from cache: {}", cache_path.display());
+            return Self::from_tsv(&tsv);
+        }
+
+        tracing::info!(
+            "Downloading HGNC complete set from {}",
+            HGNC_COMPLETE_SET_URL
+        );
         let resp = reqwest::get(HGNC_COMPLETE_SET_URL)
             .await
             .context("HGNC download failed")?
             .text()
             .await
             .context("HGNC response read failed")?;
+
+        if let Some(parent) = cache_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&cache_path, &resp);
+
         Self::from_tsv(&resp)
     }
 
@@ -70,61 +93,83 @@ impl HgncNormaliser {
         let mut n_records = 0usize;
 
         for (line_no, line) in tsv.lines().enumerate() {
-            if line_no == 0 { continue; }
+            if line_no == 0 {
+                continue;
+            }
 
             let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() < 2 { continue; }
+            if fields.len() < 2 {
+                continue;
+            }
 
             let get = |i: usize| fields.get(i).copied().unwrap_or("").trim();
 
-            let hgnc_id    = get(0).to_string();
-            let symbol     = get(1).to_string();
-            let name       = get(2).to_string();
-            let status     = get(5);
-            let entrez_id  = non_empty(get(18));
+            let hgnc_id = get(0).to_string();
+            let symbol = get(1).to_string();
+            let name = get(2).to_string();
+            let status = get(5);
+            let entrez_id = non_empty(get(18));
             let ensembl_id = non_empty(get(19));
 
-            if !status.contains("Approved") { continue; }
-            if symbol.is_empty() { continue; }
+            if !status.contains("Approved") {
+                continue;
+            }
+            if symbol.is_empty() {
+                continue;
+            }
 
             let record = HgncRecord {
                 hgnc_id: hgnc_id.clone(),
-                symbol:  symbol.clone(),
-                name:    name.clone(),
+                symbol: symbol.clone(),
+                name: name.clone(),
                 entrez_id,
                 ensembl_id,
             };
 
             // Preferred symbol — highest tier
-            lookup.insert(symbol.to_uppercase(), (record.clone(), SymbolTier::Preferred));
+            lookup.insert(
+                symbol.to_uppercase(),
+                (record.clone(), SymbolTier::Preferred),
+            );
 
             // Alias symbols — second tier
             for alias in get(8).split('|').filter(|s| !s.is_empty()) {
                 let key = alias.trim().to_uppercase();
-                lookup.entry(key).or_insert_with(|| (record.clone(), SymbolTier::Alias));
+                lookup
+                    .entry(key)
+                    .or_insert_with(|| (record.clone(), SymbolTier::Alias));
             }
 
             // Previous symbols — lowest tier
             for prev in get(10).split('|').filter(|s| !s.is_empty()) {
                 let key = prev.trim().to_uppercase();
-                lookup.entry(key).or_insert_with(|| (record.clone(), SymbolTier::Previous));
+                lookup
+                    .entry(key)
+                    .or_insert_with(|| (record.clone(), SymbolTier::Previous));
             }
 
             n_records += 1;
         }
 
-        tracing::info!("HGNC normaliser built: {} records, {} lookup entries", n_records, lookup.len());
+        tracing::info!(
+            "HGNC normaliser built: {} records, {} lookup entries",
+            n_records,
+            lookup.len()
+        );
         Ok(Self { lookup, n_records })
     }
 
     /// Look up a symbol, returning both the record and its tier.
     pub fn lookup_with_tier(&self, symbol: &str) -> Option<(&HgncRecord, SymbolTier)> {
-        self.lookup.get(&symbol.trim().to_uppercase())
+        self.lookup
+            .get(&symbol.trim().to_uppercase())
             .map(|(rec, tier)| (rec, *tier))
     }
 
     pub fn lookup(&self, symbol: &str) -> Option<&HgncRecord> {
-        self.lookup.get(&symbol.trim().to_uppercase()).map(|(rec, _)| rec)
+        self.lookup
+            .get(&symbol.trim().to_uppercase())
+            .map(|(rec, _)| rec)
     }
 
     pub fn normalise_symbol(&self, symbol: &str) -> Option<String> {
@@ -135,12 +180,19 @@ impl HgncNormaliser {
         self.lookup(symbol).map(|r| r.hgnc_id.clone())
     }
 
-    pub fn n_records(&self) -> usize { self.n_records }
-    pub fn n_lookup_entries(&self) -> usize { self.lookup.len() }
+    pub fn n_records(&self) -> usize {
+        self.n_records
+    }
+    pub fn n_lookup_entries(&self) -> usize {
+        self.lookup.len()
+    }
 
     /// All patterns for the trie, paired with their tier.
     pub fn all_patterns_with_tier(&self) -> Vec<(String, SymbolTier)> {
-        self.lookup.iter().map(|(k, (_, tier))| (k.clone(), *tier)).collect()
+        self.lookup
+            .iter()
+            .map(|(k, (_, tier))| (k.clone(), *tier))
+            .collect()
     }
 
     /// All patterns (for backward compat). Includes preferred + aliases + previous.
@@ -150,5 +202,9 @@ impl HgncNormaliser {
 }
 
 fn non_empty(s: &str) -> Option<String> {
-    if s.is_empty() { None } else { Some(s.to_string()) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
 }

@@ -36,9 +36,12 @@ impl TargetScoreRepository {
         let has_versioning = table_has_versioning(&table).await?;
         let mut score = score.clone();
         if has_versioning {
-            score.score_version = self.next_score_version(&table, score.gene_id, score.cancer_id).await?;
+            score.score_version = self
+                .next_score_version(&table, score.gene_id, score.cancer_id)
+                .await?;
             score.is_current = true;
-            self.mark_pair_not_current(&table, score.gene_id, score.cancer_id).await?;
+            self.mark_pair_not_current(&table, score.gene_id, score.cancer_id)
+                .await?;
         }
 
         let record = target_score_to_record(&score, has_versioning)?;
@@ -60,9 +63,12 @@ impl TargetScoreRepository {
         let has_versioning = table_has_versioning(&table).await?;
         let mut score = score.clone();
         if has_versioning {
-            score.score_version = self.next_score_version(&table, score.gene_id, score.cancer_id).await?;
+            score.score_version = self
+                .next_score_version(&table, score.gene_id, score.cancer_id)
+                .await?;
             score.is_current = true;
-            self.mark_pair_not_current(&table, score.gene_id, score.cancer_id).await?;
+            self.mark_pair_not_current(&table, score.gene_id, score.cancer_id)
+                .await?;
 
             let record = target_score_to_record(&score, true)?;
             let schema = record.schema();
@@ -102,7 +108,8 @@ impl TargetScoreRepository {
 
         let has_versioning = table_has_versioning(&table).await?;
         let mut stream = if has_versioning {
-            table.query()
+            table
+                .query()
                 .only_if("is_current = true")
                 .offset(offset)
                 .limit(limit)
@@ -213,7 +220,9 @@ impl TargetScoreRepository {
             .await?;
         let has_versioning = table_has_versioning(&table).await?;
         if has_versioning {
-            Ok(table.count_rows(Some("is_current = true".to_string())).await? as u64)
+            Ok(table
+                .count_rows(Some("is_current = true".to_string()))
+                .await? as u64)
         } else {
             let all = self.list(0, usize::MAX).await?;
             Ok(all.len() as u64)
@@ -324,7 +333,11 @@ fn record_to_target_score(batch: &RecordBatch, row: usize) -> Result<TargetScore
             .as_any()
             .downcast_ref::<Float64Array>()
             .ok_or_else(|| DbError::Arrow(format!("column {idx} is not Float64Array")))?;
-        if arr.is_null(row) { Ok(0.0) } else { Ok(arr.value(row)) }
+        if arr.is_null(row) {
+            Ok(0.0)
+        } else {
+            Ok(arr.value(row))
+        }
     };
     let get_i = |idx: usize| -> Result<i64> {
         let arr = batch
@@ -332,7 +345,11 @@ fn record_to_target_score(batch: &RecordBatch, row: usize) -> Result<TargetScore
             .as_any()
             .downcast_ref::<Int64Array>()
             .ok_or_else(|| DbError::Arrow(format!("column {idx} is not Int64Array")))?;
-        if arr.is_null(row) { Ok(0) } else { Ok(arr.value(row)) }
+        if arr.is_null(row) {
+            Ok(0)
+        } else {
+            Ok(arr.value(row))
+        }
     };
     let get_b = |idx: usize| -> Result<bool> {
         let arr = batch
@@ -340,7 +357,11 @@ fn record_to_target_score(batch: &RecordBatch, row: usize) -> Result<TargetScore
             .as_any()
             .downcast_ref::<BooleanArray>()
             .ok_or_else(|| DbError::Arrow(format!("column {idx} is not BooleanArray")))?;
-        if arr.is_null(row) { Ok(false) } else { Ok(arr.value(row)) }
+        if arr.is_null(row) {
+            Ok(false)
+        } else {
+            Ok(arr.value(row))
+        }
     };
 
     let id_idx = col_idx("id").unwrap_or(0);
@@ -356,12 +377,15 @@ fn record_to_target_score(batch: &RecordBatch, row: usize) -> Result<TargetScore
     let norm_idx = col_idx("components_normed").unwrap_or(8);
     let created_idx = col_idx("created_at").unwrap_or(9);
 
-    let id = uuid::Uuid::parse_str(&get_s(id_idx)?)
-        .map_err(|e| DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string()))))?;
-    let gene_id = uuid::Uuid::parse_str(&get_s(gene_idx)?)
-        .map_err(|e| DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string()))))?;
-    let cancer_id = uuid::Uuid::parse_str(&get_s(cancer_idx)?)
-        .map_err(|e| DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string()))))?;
+    let id = uuid::Uuid::parse_str(&get_s(id_idx)?).map_err(|e| {
+        DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string())))
+    })?;
+    let gene_id = uuid::Uuid::parse_str(&get_s(gene_idx)?).map_err(|e| {
+        DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string())))
+    })?;
+    let cancer_id = uuid::Uuid::parse_str(&get_s(cancer_idx)?).map_err(|e| {
+        DbError::Serialization(serde_json::Error::io(std::io::Error::other(e.to_string())))
+    })?;
 
     let created_at = chrono::DateTime::parse_from_rfc3339(&get_s(created_idx)?)
         .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -371,8 +395,14 @@ fn record_to_target_score(batch: &RecordBatch, row: usize) -> Result<TargetScore
         id,
         gene_id,
         cancer_id,
-        score_version: score_version_idx.map(|idx| get_i(idx)).transpose()?.unwrap_or(1),
-        is_current: is_current_idx.map(|idx| get_b(idx)).transpose()?.unwrap_or(true),
+        score_version: score_version_idx
+            .map(|idx| get_i(idx))
+            .transpose()?
+            .unwrap_or(1),
+        is_current: is_current_idx
+            .map(|idx| get_b(idx))
+            .transpose()?
+            .unwrap_or(true),
         composite_score: get_f(composite_idx)?,
         confidence_adjusted_score: get_f(conf_adj_idx)?,
         penalty_score: get_f(penalty_idx)?,
@@ -398,7 +428,9 @@ fn dedupe_latest(scores: Vec<TargetScore>) -> Vec<TargetScore> {
     for score in scores {
         let key = (score.gene_id, score.cancer_id);
         if let Some(existing) = latest.get(&key) {
-            if (score.score_version, score.created_at) > (existing.score_version, existing.created_at) {
+            if (score.score_version, score.created_at)
+                > (existing.score_version, existing.created_at)
+            {
                 latest.insert(key, score);
             }
         } else {

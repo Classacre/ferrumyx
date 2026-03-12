@@ -4,8 +4,6 @@
 //! to query gene dependency scores without being tightly coupled to the
 //! ingestion module's implementation.
 
-
-
 /// Trait for accessing CRISPR gene dependency data.
 ///
 /// Implementations can use:
@@ -52,7 +50,8 @@ impl MockDepMapProvider {
 
     /// Add a gene-cancer dependency score.
     pub fn with(mut self, gene: &str, cancer_type: &str, ceres: f64) -> Self {
-        self.data.insert((gene.to_string(), cancer_type.to_string()), ceres);
+        self.data
+            .insert((gene.to_string(), cancer_type.to_string()), ceres);
         self
     }
 }
@@ -65,7 +64,9 @@ impl Default for MockDepMapProvider {
 
 impl DepMapProvider for MockDepMapProvider {
     fn get_mean_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
-        self.data.get(&(gene.to_string(), cancer_type.to_string())).copied()
+        self.data
+            .get(&(gene.to_string(), cancer_type.to_string()))
+            .copied()
     }
 
     fn get_median_ceres(&self, gene: &str, cancer_type: &str) -> Option<f64> {
@@ -100,14 +101,14 @@ impl DepMapClientAdapter {
     pub fn new(client: crate::providers::depmap::DepMapClient) -> Self {
         Self { client }
     }
-    
+
     /// Create a new adapter by initializing a DepMapClient.
     /// This will download data if not already cached.
     pub async fn init() -> anyhow::Result<Self> {
         let client = crate::providers::depmap::DepMapClient::new().await?;
         Ok(Self { client })
     }
-    
+
     /// Get the underlying client (for advanced usage).
     pub fn client(&self) -> &crate::providers::depmap::DepMapClient {
         &self.client
@@ -132,7 +133,9 @@ impl DepMapProvider for DepMapClientAdapter {
     }
 
     fn has_cancer_type(&self, cancer_type: &str) -> bool {
-        self.client.cancer_types().contains(&cancer_type.to_uppercase())
+        self.client
+            .cancer_types()
+            .contains(&cancer_type.to_uppercase())
     }
 }
 
@@ -154,5 +157,4 @@ mod tests {
         assert!(provider.has_gene("KRAS"));
         assert!(!provider.has_gene("MYC"));
     }
-
 }

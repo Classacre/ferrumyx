@@ -69,36 +69,39 @@ pub struct ChemblClient {
 
 impl ChemblClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 
     /// Fetch compound by ChEMBL ID.
     #[instrument(skip(self))]
     pub async fn fetch_compound(&self, chembl_id: &str) -> anyhow::Result<Option<CompoundRecord>> {
         let url = format!("{}/molecule/{}.json", CHEMBL_API_URL, chembl_id);
-        
+
         debug!(chembl_id = chembl_id, "Fetching ChEMBL compound");
-        
-        let resp = self.client
-            .get(&url)
-            .send()
-            .await?;
+
+        let resp = self.client.get(&url).send().await?;
 
         if !resp.status().is_success() {
             return Ok(None);
         }
 
         let json: serde_json::Value = resp.json().await?;
-        
+
         Ok(Some(CompoundRecord {
-            chembl_id: json["molecule_chembl_id"].as_str().unwrap_or("").to_string(),
+            chembl_id: json["molecule_chembl_id"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             name: json["pref_name"].as_str().map(String::from),
             smiles: json["molecule_structures"]["canonical_smiles"]
-                .as_str().map(String::from),
+                .as_str()
+                .map(String::from),
             inchi_key: json["molecule_structures"]["standard_inchi_key"]
-                .as_str().map(String::from),
-            molecular_weight: json["molecule_properties"]["mw_freebase"]
-                .as_f64(),
+                .as_str()
+                .map(String::from),
+            molecular_weight: json["molecule_properties"]["mw_freebase"].as_f64(),
             alogp: json["molecule_properties"]["alogp"].as_f64(),
             max_phase: json["max_phase"].as_i64().map(|n| n as i32),
             indication_class: None, // Would need separate query
@@ -115,7 +118,7 @@ impl ChemblClient {
     ) -> anyhow::Result<Vec<CompoundRecord>> {
         // ChEMBL supports similarity search via the API
         // GET /molecule?molecule_structures__canonical_smiles__flexmatch=<SMILES>
-        
+
         debug!(
             smiles = smiles,
             threshold = similarity_threshold,
@@ -124,7 +127,7 @@ impl ChemblClient {
 
         // TODO: Implement similarity search
         // Would use ChEMBL's structure search endpoint
-        
+
         Ok(Vec::new())
     }
 
@@ -132,20 +135,17 @@ impl ChemblClient {
     #[instrument(skip(self))]
     pub async fn fetch_target(&self, chembl_id: &str) -> anyhow::Result<Option<TargetRecord>> {
         let url = format!("{}/target/{}.json", CHEMBL_API_URL, chembl_id);
-        
+
         debug!(chembl_id = chembl_id, "Fetching ChEMBL target");
-        
-        let resp = self.client
-            .get(&url)
-            .send()
-            .await?;
+
+        let resp = self.client.get(&url).send().await?;
 
         if !resp.status().is_success() {
             return Ok(None);
         }
 
         let json: serde_json::Value = resp.json().await?;
-        
+
         Ok(Some(TargetRecord {
             chembl_id: json["target_chembl_id"].as_str().unwrap_or("").to_string(),
             name: json["pref_name"].as_str().unwrap_or("").to_string(),
@@ -153,9 +153,11 @@ impl ChemblClient {
             target_type: json["target_type"].as_str().unwrap_or("").to_string(),
             gene_names: json["target_components"]
                 .as_array()
-                .map(|arr| arr.iter()
-                    .filter_map(|c| c["target_component_synonym"].as_str().map(String::from))
-                    .collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|c| c["target_component_synonym"].as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default(),
             uniprot_id: None, // Would need to parse from target_components
         }))
@@ -168,10 +170,11 @@ impl ChemblClient {
         gene_symbol: &str,
     ) -> anyhow::Result<Vec<TargetRecord>> {
         let url = format!("{}/target/search.json", CHEMBL_API_URL);
-        
+
         debug!(gene = gene_symbol, "Searching ChEMBL targets");
-        
-        let resp = self.client
+
+        let resp = self
+            .client
             .get(&url)
             .query(&[("q", gene_symbol)])
             .send()
@@ -182,19 +185,23 @@ impl ChemblClient {
         }
 
         let json: serde_json::Value = resp.json().await?;
-        
+
         let targets = json["targets"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|t| {
-                Some(TargetRecord {
-                    chembl_id: t["target_chembl_id"].as_str()?.to_string(),
-                    name: t["pref_name"].as_str().unwrap_or("").to_string(),
-                    organism: t["organism"].as_str().map(String::from),
-                    target_type: t["target_type"].as_str().unwrap_or("").to_string(),
-                    gene_names: Vec::new(),
-                    uniprot_id: None,
-                })
-            }).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|t| {
+                        Some(TargetRecord {
+                            chembl_id: t["target_chembl_id"].as_str()?.to_string(),
+                            name: t["pref_name"].as_str().unwrap_or("").to_string(),
+                            organism: t["organism"].as_str().map(String::from),
+                            target_type: t["target_type"].as_str().unwrap_or("").to_string(),
+                            gene_names: Vec::new(),
+                            uniprot_id: None,
+                        })
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         Ok(targets)
@@ -209,7 +216,7 @@ impl ChemblClient {
         max_results: usize,
     ) -> anyhow::Result<Vec<ActivityRecord>> {
         let url = format!("{}/activity.json", CHEMBL_API_URL);
-        
+
         debug!(
             target = target_chembl_id,
             activity_type = activity_type,
@@ -221,37 +228,37 @@ impl ChemblClient {
             ("target_chembl_id", target_chembl_id),
             ("limit", &limit_str),
         ];
-        
+
         if let Some(at) = activity_type {
             params.push(("standard_type", at));
         }
 
-        let resp = self.client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await?;
+        let resp = self.client.get(&url).query(&params).send().await?;
 
         if !resp.status().is_success() {
             return Ok(Vec::new());
         }
 
         let json: serde_json::Value = resp.json().await?;
-        
+
         let activities = json["activities"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|a| {
-                Some(ActivityRecord {
-                    compound_id: a["molecule_chembl_id"].as_str()?.to_string(),
-                    target_id: a["target_chembl_id"].as_str().unwrap_or("").to_string(),
-                    standard_type: a["standard_type"].as_str().unwrap_or("").to_string(),
-                    standard_value: a["standard_value"].as_f64()?,
-                    standard_units: a["standard_units"].as_str().unwrap_or("").to_string(),
-                    assay_type: a["assay_type"].as_str().unwrap_or("").to_string(),
-                    assay_organism: a["assay_organism"].as_str().map(String::from),
-                    pchembl_value: a["pchembl_value"].as_f64(),
-                })
-            }).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| {
+                        Some(ActivityRecord {
+                            compound_id: a["molecule_chembl_id"].as_str()?.to_string(),
+                            target_id: a["target_chembl_id"].as_str().unwrap_or("").to_string(),
+                            standard_type: a["standard_type"].as_str().unwrap_or("").to_string(),
+                            standard_value: a["standard_value"].as_f64()?,
+                            standard_units: a["standard_units"].as_str().unwrap_or("").to_string(),
+                            assay_type: a["assay_type"].as_str().unwrap_or("").to_string(),
+                            assay_organism: a["assay_organism"].as_str().map(String::from),
+                            pchembl_value: a["pchembl_value"].as_f64(),
+                        })
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         Ok(activities)
@@ -262,8 +269,10 @@ impl ChemblClient {
         &self,
         target_chembl_id: &str,
     ) -> anyhow::Result<Vec<CompoundRecord>> {
-        let activities = self.fetch_target_activities(target_chembl_id, None, 1000).await?;
-        
+        let activities = self
+            .fetch_target_activities(target_chembl_id, None, 1000)
+            .await?;
+
         let mut approved = Vec::new();
         for activity in activities {
             if let Some(compound) = self.fetch_compound(&activity.compound_id).await? {
@@ -278,12 +287,18 @@ impl ChemblClient {
 }
 
 impl Default for ChemblClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
 impl LiteratureSource for ChemblClient {
-    async fn search(&self, _query: &str, _max_results: usize) -> anyhow::Result<Vec<PaperMetadata>> {
+    async fn search(
+        &self,
+        _query: &str,
+        _max_results: usize,
+    ) -> anyhow::Result<Vec<PaperMetadata>> {
         Ok(Vec::new())
     }
 

@@ -7,8 +7,8 @@ use crate::database::Database;
 use crate::error::Result;
 use crate::schema;
 use crate::schema_arrow::{
-    record_to_ent_compound, record_to_ent_druggability, record_to_ent_gene,
-    record_to_ent_mutation, record_to_ent_pathway, record_to_ent_structure,
+    record_to_ent_compound, record_to_ent_druggability, record_to_ent_gene, record_to_ent_mutation,
+    record_to_ent_pathway, record_to_ent_structure,
 };
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -94,7 +94,10 @@ impl EntStageRepository {
         Ok(out)
     }
 
-    async fn fetch_genes_by_symbol(&self, symbols: &[String]) -> Result<Vec<crate::schema::EntGene>> {
+    async fn fetch_genes_by_symbol(
+        &self,
+        symbols: &[String],
+    ) -> Result<Vec<crate::schema::EntGene>> {
         if !self.db.table_exists(schema::TABLE_ENT_GENES).await? {
             return Ok(Vec::new());
         }
@@ -210,7 +213,8 @@ impl EntStageRepository {
         &self,
         structure_ids: &[uuid::Uuid],
     ) -> Result<HashMap<uuid::Uuid, f64>> {
-        if structure_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_DRUGGABILITY).await? {
+        if structure_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_DRUGGABILITY).await?
+        {
             return Ok(HashMap::new());
         }
         let table = self
@@ -328,4 +332,3 @@ impl EntStageRepository {
 fn escape_sql(input: &str) -> String {
     input.replace('\'', "''")
 }
-

@@ -11,11 +11,7 @@ pub fn rank_normalise(raw_scores: &[f64], higher_is_better: bool) -> Vec<f64> {
     }
 
     // Create (original_index, score) pairs and sort
-    let mut indexed: Vec<(usize, f64)> = raw_scores
-        .iter()
-        .copied()
-        .enumerate()
-        .collect();
+    let mut indexed: Vec<(usize, f64)> = raw_scores.iter().copied().enumerate().collect();
 
     // Sort ascending or descending based on direction
     if higher_is_better {
@@ -60,7 +56,7 @@ pub fn minmax_normalise(value: f64, min_val: f64, max_val: f64) -> f64 {
 pub fn normalise_ceres(ceres_score: f64) -> f64 {
     let clamped = ceres_score.clamp(-2.0, 0.0);
     let norm = minmax_normalise(clamped, -2.0, 0.0);
-    1.0 - norm  // invert: more essential (more negative) → higher normalised score
+    1.0 - norm // invert: more essential (more negative) → higher normalised score
 }
 
 #[cfg(test)]
@@ -74,9 +70,9 @@ mod tests {
         // 30.0 is rank 1 (best) → 1/3 ≈ 0.333 ... wait, rank 1/3 of 3 = 0.333
         // Actually: rank 1 → 1/3, rank 2 → 2/3, rank 3 → 3/3 = 1.0
         // 30.0 is best (rank 1), 20.0 rank 2, 10.0 rank 3
-        assert!((normed[2] - 1.0/3.0).abs() < 1e-6); // 30.0 → rank 1 → 1/3
-        assert!((normed[1] - 2.0/3.0).abs() < 1e-6); // 20.0 → rank 2 → 2/3
-        assert!((normed[0] - 3.0/3.0).abs() < 1e-6); // 10.0 → rank 3 → 3/3
+        assert!((normed[2] - 1.0 / 3.0).abs() < 1e-6); // 30.0 → rank 1 → 1/3
+        assert!((normed[1] - 2.0 / 3.0).abs() < 1e-6); // 20.0 → rank 2 → 2/3
+        assert!((normed[0] - 3.0 / 3.0).abs() < 1e-6); // 10.0 → rank 3 → 3/3
     }
 
     #[test]

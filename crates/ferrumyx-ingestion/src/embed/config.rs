@@ -1,7 +1,7 @@
 //! Configuration for the embedding service.
 
-use serde::{Deserialize, Serialize};
 use super::PoolingStrategy;
+use serde::{Deserialize, Serialize};
 
 /// Configuration for BiomedBERT embedder.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,11 +48,17 @@ impl Default for EmbeddingConfig {
 
 impl EmbeddingConfig {
     pub fn cpu() -> Self {
-        Self { use_gpu: false, ..Default::default() }
+        Self {
+            use_gpu: false,
+            ..Default::default()
+        }
     }
 
     pub fn gpu() -> Self {
-        Self { use_gpu: true, ..Default::default() }
+        Self {
+            use_gpu: true,
+            ..Default::default()
+        }
     }
 
     pub fn with_model(mut self, model_id: impl Into<String>) -> Self {

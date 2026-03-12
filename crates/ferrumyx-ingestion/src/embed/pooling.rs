@@ -13,7 +13,11 @@ pub enum PoolingStrategy {
 }
 
 impl PoolingStrategy {
-    pub fn apply(&self, embeddings: &Tensor, attention_mask: &Tensor) -> candle_core::Result<Tensor> {
+    pub fn apply(
+        &self,
+        embeddings: &Tensor,
+        attention_mask: &Tensor,
+    ) -> candle_core::Result<Tensor> {
         match self {
             PoolingStrategy::Mean => mean_pool(embeddings, attention_mask),
             PoolingStrategy::Cls => cls_pool(embeddings),
@@ -25,7 +29,10 @@ impl PoolingStrategy {
 fn mean_pool(embeddings: &Tensor, attention_mask: &Tensor) -> candle_core::Result<Tensor> {
     let mask_expanded = attention_mask.unsqueeze(2)?.expand(embeddings.shape())?;
     let sum_embeddings = (embeddings * &mask_expanded)?.sum(1)?;
-    let sum_mask = attention_mask.unsqueeze(2)?.sum(1)?.clamp(1e-9f32, f32::MAX)?;
+    let sum_mask = attention_mask
+        .unsqueeze(2)?
+        .sum(1)?
+        .clamp(1e-9f32, f32::MAX)?;
     sum_embeddings.broadcast_div(&sum_mask)
 }
 

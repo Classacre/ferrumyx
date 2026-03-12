@@ -42,13 +42,13 @@ pub enum IngestionSource {
 impl IngestionSource {
     pub fn as_str(&self) -> &'static str {
         match self {
-            IngestionSource::PubMed          => "pubmed",
-            IngestionSource::EuropePmc       => "europepmc",
-            IngestionSource::BioRxiv         => "biorxiv",
-            IngestionSource::MedRxiv         => "medrxiv",
-            IngestionSource::Arxiv           => "arxiv",
-            IngestionSource::ClinicalTrials  => "clinicaltrials",
-            IngestionSource::CrossRef        => "crossref",
+            IngestionSource::PubMed => "pubmed",
+            IngestionSource::EuropePmc => "europepmc",
+            IngestionSource::BioRxiv => "biorxiv",
+            IngestionSource::MedRxiv => "medrxiv",
+            IngestionSource::Arxiv => "arxiv",
+            IngestionSource::ClinicalTrials => "clinicaltrials",
+            IngestionSource::CrossRef => "crossref",
             IngestionSource::SemanticScholar => "semanticscholar",
         }
     }
@@ -75,29 +75,38 @@ impl SectionType {
     /// See ARCHITECTURE.md §2.6 for the inference rules.
     pub fn from_heading(heading: &str) -> Self {
         let h = heading.to_lowercase();
-        if h.contains("abstract")                              { SectionType::Abstract }
-        else if h.contains("introduction") || h.starts_with("background") { SectionType::Introduction }
-        else if h.contains("method") || h.contains("material") { SectionType::Methods }
-        else if h.contains("result")                           { SectionType::Results }
-        else if h.contains("discussion")                       { SectionType::Discussion }
-        else if h.contains("conclusion")                       { SectionType::Conclusion }
-        else if h.contains("supplement")                       { SectionType::SupplementaryMethods }
-        else                                                   { SectionType::Other }
+        if h.contains("abstract") {
+            SectionType::Abstract
+        } else if h.contains("introduction") || h.starts_with("background") {
+            SectionType::Introduction
+        } else if h.contains("method") || h.contains("material") {
+            SectionType::Methods
+        } else if h.contains("result") {
+            SectionType::Results
+        } else if h.contains("discussion") {
+            SectionType::Discussion
+        } else if h.contains("conclusion") {
+            SectionType::Conclusion
+        } else if h.contains("supplement") {
+            SectionType::SupplementaryMethods
+        } else {
+            SectionType::Other
+        }
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            SectionType::Abstract              => "abstract",
-            SectionType::Introduction          => "introduction",
-            SectionType::Methods               => "methods",
-            SectionType::Results               => "results",
-            SectionType::Discussion            => "discussion",
-            SectionType::Conclusion            => "conclusion",
-            SectionType::References            => "references",
-            SectionType::Table                 => "table",
-            SectionType::FigureCaption         => "figure_caption",
-            SectionType::SupplementaryMethods  => "supplementary_methods",
-            SectionType::Other                 => "other",
+            SectionType::Abstract => "abstract",
+            SectionType::Introduction => "introduction",
+            SectionType::Methods => "methods",
+            SectionType::Results => "results",
+            SectionType::Discussion => "discussion",
+            SectionType::Conclusion => "conclusion",
+            SectionType::References => "references",
+            SectionType::Table => "table",
+            SectionType::FigureCaption => "figure_caption",
+            SectionType::SupplementaryMethods => "supplementary_methods",
+            SectionType::Other => "other",
         }
     }
 }
@@ -106,7 +115,7 @@ impl SectionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     pub paper_id: Uuid,
-    pub chunk_id: Uuid,  // Unique ID for this chunk
+    pub chunk_id: Uuid, // Unique ID for this chunk
     pub chunk_index: usize,
     pub section_type: SectionType,
     pub section_heading: Option<String>,
