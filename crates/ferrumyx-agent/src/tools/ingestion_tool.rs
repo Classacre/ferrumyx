@@ -38,6 +38,7 @@ struct IngestionRuntimeDefaults {
     max_runtime_secs: u64,
     source_timeout_secs: Option<u64>,
     full_text_step_timeout_secs: Option<u64>,
+    full_text_total_timeout_secs: Option<u64>,
     full_text_prefetch_workers: Option<usize>,
     paper_process_workers: Option<usize>,
     perf_mode: String,
@@ -50,7 +51,11 @@ struct IngestionRuntimeDefaults {
     source_retries: usize,
     pdf_host_concurrency: usize,
     pdf_parse_cache_enabled: bool,
+    full_text_negative_cache_enabled: bool,
+    full_text_negative_cache_ttl_secs: u64,
     min_ner_chars: usize,
+    max_relation_genes_per_chunk: usize,
+    async_post_ingest_scoring: bool,
     source_profile: String,
     pubmed_api_key: Option<String>,
     semantic_scholar_api_key: Option<String>,
@@ -76,6 +81,13 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<u64>().ok())
             .map(|v| v.clamp(5, 120))
             .or(Some(15)),
+            full_text_total_timeout_secs: std::env::var(
+                "FERRUMYX_INGESTION_FULLTEXT_TOTAL_TIMEOUT_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(|v| v.clamp(8, 180))
+            .or(Some(28)),
             full_text_prefetch_workers: std::env::var(
                 "FERRUMYX_INGESTION_FULLTEXT_PREFETCH_WORKERS",
             )
@@ -130,11 +142,33 @@ impl Default for IngestionRuntimeDefaults {
             pdf_parse_cache_enabled: std::env::var("FERRUMYX_PDF_PARSE_CACHE_ENABLED")
                 .ok()
                 .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            full_text_negative_cache_enabled: std::env::var(
+                "FERRUMYX_FULLTEXT_NEGATIVE_CACHE_ENABLED",
+            )
+            .ok()
+            .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            full_text_negative_cache_ttl_secs: std::env::var(
+                "FERRUMYX_FULLTEXT_NEGATIVE_CACHE_TTL_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(6 * 60 * 60)
+            .clamp(60, 604_800),
             min_ner_chars: std::env::var("FERRUMYX_INGESTION_MIN_NER_CHARS")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(500)
                 .clamp(120, 5000),
+            max_relation_genes_per_chunk: std::env::var(
+                "FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK",
+            )
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(4)
+            .clamp(1, 16),
+            async_post_ingest_scoring: std::env::var("FERRUMYX_INGESTION_ASYNC_POST_SCORE")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
             source_profile: std::env::var("FERRUMYX_INGESTION_SOURCE_PROFILE")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
@@ -250,6 +284,14 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         )
         .clamp(5, 120),
     );
+    defaults.full_text_total_timeout_secs = Some(
+        toml_u64(
+            &root,
+            &["ingestion", "performance", "full_text_total_timeout_secs"],
+            28,
+        )
+        .clamp(8, 180),
+    );
     defaults.full_text_prefetch_workers = Some(
         toml_u64(
             &root,
@@ -322,12 +364,42 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         &["ingestion", "performance", "pdf_parse_cache_enabled"],
         defaults.pdf_parse_cache_enabled,
     );
+    defaults.full_text_negative_cache_enabled = toml_bool(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_negative_cache_enabled",
+        ],
+        defaults.full_text_negative_cache_enabled,
+    );
+    defaults.full_text_negative_cache_ttl_secs = toml_u64(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_negative_cache_ttl_secs",
+        ],
+        defaults.full_text_negative_cache_ttl_secs,
+    )
+    .clamp(60, 604_800);
     defaults.min_ner_chars = toml_u64(
         &root,
         &["ingestion", "performance", "min_ner_chars"],
         defaults.min_ner_chars as u64,
     )
     .clamp(120, 5000) as usize;
+    defaults.max_relation_genes_per_chunk = toml_u64(
+        &root,
+        &["ingestion", "performance", "max_relation_genes_per_chunk"],
+        defaults.max_relation_genes_per_chunk as u64,
+    )
+    .clamp(1, 16) as usize;
+    defaults.async_post_ingest_scoring = toml_bool(
+        &root,
+        &["ingestion", "performance", "async_post_ingest_scoring"],
+        defaults.async_post_ingest_scoring,
+    );
     defaults.source_profile = toml_string(&root, &["ingestion", "performance", "source_profile"])
         .unwrap_or_else(|| "fast".to_string())
         .to_lowercase();
@@ -549,8 +621,38 @@ impl Tool for IngestionTool {
             },
         );
         std::env::set_var(
+            "FERRUMYX_FULLTEXT_NEGATIVE_CACHE_ENABLED",
+            if defaults.full_text_negative_cache_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_FULLTEXT_NEGATIVE_CACHE_TTL_SECS",
+            defaults.full_text_negative_cache_ttl_secs.to_string(),
+        );
+        std::env::set_var(
             "FERRUMYX_INGESTION_MIN_NER_CHARS",
             defaults.min_ner_chars.to_string(),
+        );
+        if let Some(v) = defaults.full_text_total_timeout_secs {
+            std::env::set_var(
+                "FERRUMYX_INGESTION_FULLTEXT_TOTAL_TIMEOUT_SECS",
+                v.to_string(),
+            );
+        }
+        std::env::set_var(
+            "FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK",
+            defaults.max_relation_genes_per_chunk.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_ASYNC_POST_SCORE",
+            if defaults.async_post_ingest_scoring {
+                "1"
+            } else {
+                "0"
+            },
         );
 
         let gene = require_str(&params, "gene")?.to_string();
@@ -732,30 +834,72 @@ impl Tool for IngestionTool {
                 }
             }
         };
-        let recomputed = ferrumyx_kg::compute_target_scores(self.db.clone())
-            .await
-            .unwrap_or(0);
-        let provider_refresh = TargetQueryEngine::new(self.db.clone())
-            .refresh_provider_signals(ProviderRefreshRequest {
-                genes: vec![gene_for_refresh],
-                cancer_code: None,
-                max_genes: 8,
-                batch_size: 4,
-                retries: 1,
-            })
-            .await
-            .ok();
-        let provider_refreshed_genes = provider_refresh
-            .as_ref()
-            .map(|r| r.genes_processed)
-            .unwrap_or(0);
-        let provider_errors = provider_refresh
-            .as_ref()
-            .map(|r| (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64)
-            .unwrap_or(0);
+        let mut recomputed = 0u32;
+        let mut provider_refreshed_genes = 0usize;
+        let mut provider_errors = 0u64;
+        let scoring_mode = if defaults.async_post_ingest_scoring {
+            let db_for_task = self.db.clone();
+            tokio::spawn(async move {
+                let recompute = ferrumyx_kg::compute_target_scores(db_for_task.clone())
+                    .await
+                    .unwrap_or(0);
+                let provider_refresh = TargetQueryEngine::new(db_for_task.clone())
+                    .refresh_provider_signals(ProviderRefreshRequest {
+                        genes: vec![gene_for_refresh],
+                        cancer_code: None,
+                        max_genes: 8,
+                        batch_size: 4,
+                        retries: 1,
+                    })
+                    .await
+                    .ok();
+                let refreshed = provider_refresh
+                    .as_ref()
+                    .map(|r| r.genes_processed)
+                    .unwrap_or(0);
+                let errors = provider_refresh
+                    .as_ref()
+                    .map(|r| {
+                        (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
+                    })
+                    .unwrap_or(0);
+                tracing::info!(
+                    recomputed,
+                    provider_refreshed_genes = refreshed,
+                    provider_errors = errors,
+                    "Async post-ingestion scoring/refresh completed"
+                );
+            });
+            "async_queued"
+        } else {
+            recomputed = ferrumyx_kg::compute_target_scores(self.db.clone())
+                .await
+                .unwrap_or(0);
+            let provider_refresh = TargetQueryEngine::new(self.db.clone())
+                .refresh_provider_signals(ProviderRefreshRequest {
+                    genes: vec![gene_for_refresh],
+                    cancer_code: None,
+                    max_genes: 8,
+                    batch_size: 4,
+                    retries: 1,
+                })
+                .await
+                .ok();
+            provider_refreshed_genes = provider_refresh
+                .as_ref()
+                .map(|r| r.genes_processed)
+                .unwrap_or(0);
+            provider_errors = provider_refresh
+                .as_ref()
+                .map(|r| {
+                    (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
+                })
+                .unwrap_or(0);
+            "sync"
+        };
 
         let output_text = format!(
-            "Ingestion completed in {}ms. Source fetch returned {} papers, {} unique after cross-source dedupe. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} existing duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Watchdog policy: idle={}s, max_runtime={}s. Runtime profile: ram={:.1}GB, cpu_logical={}, nvidia_gpu={}, cuda_toolkit={}, cuda_install_attempted={}, perf_mode={}, tuned_max_results={}, full_text_enabled={}, source_timeout_secs={}, prefetch_workers={:?}, paper_workers={:?}, source_cache_enabled={}, source_cache_ttl_secs={}, entity_batch_size={}, fact_batch_size={}. Source telemetry: {}",
+            "Ingestion completed in {}ms. Source fetch returned {} papers, {} unique after cross-source dedupe. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} existing duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Post-ingestion scoring mode={}. Watchdog policy: idle={}s, max_runtime={}s. Runtime profile: ram={:.1}GB, cpu_logical={}, nvidia_gpu={}, cuda_toolkit={}, cuda_install_attempted={}, perf_mode={}, tuned_max_results={}, full_text_enabled={}, source_timeout_secs={}, prefetch_workers={:?}, paper_workers={:?}, source_cache_enabled={}, source_cache_ttl_secs={}, entity_batch_size={}, fact_batch_size={}. Source telemetry: {}",
             result.duration_ms,
             result.papers_found_raw,
             result.papers_found,
@@ -765,6 +909,7 @@ impl Tool for IngestionTool {
             recomputed,
             provider_refreshed_genes,
             provider_errors,
+            scoring_mode,
             idle_timeout.as_secs(),
             max_runtime.as_secs(),
             profile.ram_gb,

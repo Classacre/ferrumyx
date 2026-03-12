@@ -8,7 +8,7 @@ use crate::handlers::{
     depmap::{api_depmap_celllines, api_depmap_gene, depmap_page},
     ingestion::{ingestion_page, ingestion_run},
     kg::{api_entity_suggest, api_kg_facts, api_kg_stats, kg_page},
-    metrics::metrics_page,
+    metrics::{metrics_page, metrics_perf_api},
     molecules::{api_molecules_run, molecules_page},
     ner::{api_ner_extract, api_ner_stats, ner_extract, ner_page},
     query::{query_page, query_submit},
@@ -67,6 +67,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ranker/score", get(api_ranker_score))
         .route("/api/ranker/top", get(api_ranker_top))
         .route("/api/ranker/stats", get(api_ranker_stats))
+        .route("/api/metrics/perf", get(metrics_perf_api))
         .route("/api/chat", post(chat_submit))
         .route("/api/chat/history", get(chat_history))
         .route("/api/chat/threads", get(chat_threads))

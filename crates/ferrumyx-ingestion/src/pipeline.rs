@@ -16,7 +16,7 @@
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -221,6 +221,27 @@ pub struct IngestionResult {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct IngestionPerfTelemetry {
+    pub search_ms: u64,
+    pub dedup_ms: u64,
+    pub upsert_ms: u64,
+    pub prefetch_ms: u64,
+    pub process_ms: u64,
+    pub pdf_cache_hits: usize,
+    pub pdf_cache_misses: usize,
+    pub quality_gate_skips: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestionPerfSnapshot {
+    pub recorded_at_epoch_secs: u64,
+    pub query: String,
+    pub duration_ms: u64,
+    pub papers_found_raw: usize,
+    pub papers_found: usize,
+    pub papers_inserted: usize,
+    pub papers_duplicate: usize,
+    pub chunks_inserted: usize,
+    pub chunks_embedded: usize,
     pub search_ms: u64,
     pub dedup_ms: u64,
     pub upsert_ms: u64,
@@ -639,6 +660,8 @@ pub async fn run_ingestion(
         "Ingestion pipeline complete"
     );
 
+    persist_perf_snapshot(&result);
+
     emit(
         "complete",
         &format!(
@@ -725,6 +748,36 @@ fn resolve_source_max_inflight() -> usize {
         .clamp(1, 16)
 }
 
+fn resolve_full_text_total_timeout_secs() -> u64 {
+    std::env::var("FERRUMYX_INGESTION_FULLTEXT_TOTAL_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(28)
+        .clamp(8, 180)
+}
+
+fn resolve_full_text_negative_cache_enabled() -> bool {
+    std::env::var("FERRUMYX_FULLTEXT_NEGATIVE_CACHE_ENABLED")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+}
+
+fn resolve_full_text_negative_cache_ttl_secs() -> u64 {
+    std::env::var("FERRUMYX_FULLTEXT_NEGATIVE_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(6 * 60 * 60)
+        .clamp(60, 7 * 24 * 60 * 60)
+}
+
+fn resolve_max_relation_genes_per_chunk() -> usize {
+    std::env::var("FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(4)
+        .clamp(1, 16)
+}
+
 fn paper_process_workers_from_config() -> Option<usize> {
     let path = std::env::var("FERRUMYX_CONFIG").unwrap_or_else(|_| "ferrumyx.toml".to_string());
     let content = std::fs::read_to_string(path).ok()?;
@@ -764,6 +817,12 @@ struct SourceSearchCacheEntry {
     papers: Vec<crate::models::PaperMetadata>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FullTextNegativeCacheEntry {
+    cached_at_epoch_secs: u64,
+    reason: String,
+}
+
 fn source_cache_ttl(source_cache_ttl_secs: Option<u64>) -> std::time::Duration {
     std::time::Duration::from_secs(source_cache_ttl_secs.unwrap_or(30 * 60).clamp(60, 86_400))
 }
@@ -772,6 +831,65 @@ fn source_cache_dir() -> PathBuf {
     std::env::var("FERRUMYX_SOURCE_CACHE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("data/cache/source_search"))
+}
+
+fn full_text_negative_cache_dir() -> PathBuf {
+    std::env::var("FERRUMYX_FULLTEXT_NEGATIVE_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("data/cache/full_text_negative"))
+}
+
+fn full_text_negative_cache_path(key: &str) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    let digest = hasher.finish();
+    full_text_negative_cache_dir().join(format!("{digest:016x}.json"))
+}
+
+fn now_epoch_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|v| v.as_secs())
+        .unwrap_or(0)
+}
+
+fn full_text_negative_cached(key: &str) -> bool {
+    if !resolve_full_text_negative_cache_enabled() {
+        return false;
+    }
+    let ttl = resolve_full_text_negative_cache_ttl_secs();
+    let path = full_text_negative_cache_path(key);
+    let payload = match std::fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let entry: FullTextNegativeCacheEntry = match serde_json::from_str(&payload) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    now_epoch_secs().saturating_sub(entry.cached_at_epoch_secs) <= ttl
+}
+
+fn save_full_text_negative(key: &str, reason: &str) {
+    if !resolve_full_text_negative_cache_enabled() {
+        return;
+    }
+    let dir = full_text_negative_cache_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let entry = FullTextNegativeCacheEntry {
+        cached_at_epoch_secs: now_epoch_secs(),
+        reason: reason.to_string(),
+    };
+    if let Ok(payload) = serde_json::to_string(&entry) {
+        let _ = std::fs::write(full_text_negative_cache_path(key), payload);
+    }
+}
+
+fn clear_full_text_negative(key: &str) {
+    if !resolve_full_text_negative_cache_enabled() {
+        return;
+    }
+    let _ = std::fs::remove_file(full_text_negative_cache_path(key));
 }
 
 fn source_cache_path(source: &IngestionSourceSpec, query: &str, max_results: usize) -> PathBuf {
@@ -880,6 +998,82 @@ async fn search_source_with_cache(
         save_source_cache(&source, source_query, max_results, &papers);
     }
     Ok(papers)
+}
+
+fn perf_log_path() -> PathBuf {
+    std::env::var("FERRUMYX_INGESTION_PERF_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("data/telemetry/ingestion_perf.jsonl"))
+}
+
+fn snapshot_from_result(result: &IngestionResult) -> IngestionPerfSnapshot {
+    IngestionPerfSnapshot {
+        recorded_at_epoch_secs: now_epoch_secs(),
+        query: result.query.clone(),
+        duration_ms: result.duration_ms,
+        papers_found_raw: result.papers_found_raw,
+        papers_found: result.papers_found,
+        papers_inserted: result.papers_inserted,
+        papers_duplicate: result.papers_duplicate,
+        chunks_inserted: result.chunks_inserted,
+        chunks_embedded: result.chunks_embedded,
+        search_ms: result.perf_telemetry.search_ms,
+        dedup_ms: result.perf_telemetry.dedup_ms,
+        upsert_ms: result.perf_telemetry.upsert_ms,
+        prefetch_ms: result.perf_telemetry.prefetch_ms,
+        process_ms: result.perf_telemetry.process_ms,
+        pdf_cache_hits: result.perf_telemetry.pdf_cache_hits,
+        pdf_cache_misses: result.perf_telemetry.pdf_cache_misses,
+        quality_gate_skips: result.perf_telemetry.quality_gate_skips,
+    }
+}
+
+fn persist_perf_snapshot(result: &IngestionResult) {
+    let path = perf_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let snapshot = snapshot_from_result(result);
+    if let Ok(line) = serde_json::to_string(&snapshot) {
+        let mut payload = String::with_capacity(line.len() + 1);
+        payload.push_str(&line);
+        payload.push('\n');
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, payload.as_bytes()));
+    }
+
+    let trim_limit = 400usize;
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        let mut deque: VecDeque<&str> = VecDeque::new();
+        for line in content.lines().filter(|l| !l.trim().is_empty()) {
+            if deque.len() >= trim_limit {
+                let _ = deque.pop_front();
+            }
+            deque.push_back(line);
+        }
+        let trimmed = deque.into_iter().collect::<Vec<_>>().join("\n");
+        if !trimmed.is_empty() {
+            let _ = std::fs::write(path, format!("{trimmed}\n"));
+        }
+    }
+}
+
+pub fn load_recent_perf_snapshots(limit: usize) -> Vec<IngestionPerfSnapshot> {
+    let path = perf_log_path();
+    let content = match std::fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let take = limit.clamp(1, 200);
+    let mut snapshots: Vec<IngestionPerfSnapshot> = content
+        .lines()
+        .filter_map(|line| serde_json::from_str::<IngestionPerfSnapshot>(line).ok())
+        .collect();
+    snapshots.sort_by_key(|s| s.recorded_at_epoch_secs);
+    snapshots.into_iter().rev().take(take).collect()
 }
 
 async fn search_source_once(
@@ -1203,6 +1397,10 @@ async fn process_single_paper(
             }
         }
 
+        let max_relation_genes = resolve_max_relation_genes_per_chunk();
+        let mut genes_for_relations: Vec<(String, f32)> = genes_for_relations.into_iter().collect();
+        genes_for_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+        genes_for_relations.truncate(max_relation_genes);
         for (gene_symbol, gene_confidence) in genes_for_relations {
             for mut fact in build_facts(&gene_symbol, &chunk.content) {
                 if fact.fact_type != "has_mutation" {
@@ -1403,75 +1601,156 @@ async fn fetch_full_text_sections_for_paper(
     enable_scihub_fallback: bool,
     step_timeout: std::time::Duration,
 ) -> anyhow::Result<Vec<DocumentSection>> {
-    // Strategy 1: Explicit open-access URL
-    if let Some(ref pdf_url) = paper.full_text_url {
-        if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(pdf_url)).await {
-            if !sections.is_empty() {
-                return Ok(sections);
-            }
+    let total_timeout = std::time::Duration::from_secs(
+        resolve_full_text_total_timeout_secs().max(step_timeout.as_secs()),
+    );
+    let deadline = tokio::time::Instant::now() + total_timeout;
+    let mut set = tokio::task::JoinSet::new();
+
+    if let Some(pdf_url) = paper.full_text_url.clone() {
+        set.spawn(async move { try_open_pdf_url(&pdf_url, step_timeout).await });
+    }
+    if let Some(pmcid) = paper.pmcid.clone() {
+        set.spawn(async move { try_pmc_paths(&pmcid, step_timeout).await });
+    }
+    if let (Some(doi), Some(email)) = (paper.doi.clone(), unpaywall_email.map(str::to_string)) {
+        if !email.trim().is_empty() {
+            set.spawn(async move { try_unpaywall_path(&doi, &email, step_timeout).await });
         }
     }
-
-    // Strategy 2: PMC XML (preferred when PMCID is known)
-    if let Some(ref pmcid) = paper.pmcid {
-        let clean_pmcid = if pmcid.starts_with("PMC") {
-            pmcid.clone()
-        } else {
-            format!("PMC{}", pmcid)
-        };
-        let epmc = EuropePmcClient::new();
-        if let Ok(Ok(Some(xml))) = timeout(step_timeout, epmc.fetch_full_text(&clean_pmcid)).await {
-            let sections = parse_pmc_xml_sections(&xml);
-            if !sections.is_empty() {
-                return Ok(sections);
-            }
-        }
-
-        // Strategy 3: PMC direct PDF if XML path did not produce sections
-        let epmc_url = format!(
-            "https://europepmc.org/backend/ptpmcrender.fcgi?accid={}&blobtype=pdf",
-            clean_pmcid
-        );
-        if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&epmc_url)).await {
-            if !sections.is_empty() {
-                return Ok(sections);
-            }
-        }
-    }
-
-    // Strategy 4: Unpaywall DOI resolution (if email configured)
-    if let (Some(doi), Some(email)) = (paper.doi.as_deref(), unpaywall_email) {
-        let email = email.trim();
-        if !email.is_empty() {
-            let unpaywall = UnpaywallClient::new(email);
-            if let Ok(Ok(Some(pdf_url))) =
-                timeout(step_timeout, unpaywall.resolve_pdf_url(doi)).await
-            {
-                if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&pdf_url)).await
-                {
-                    if !sections.is_empty() {
-                        return Ok(sections);
-                    }
-                }
-            }
-        }
-    }
-
-    // Strategy 5: Sci-Hub fallback
     if enable_scihub_fallback {
-        let identifier = paper.doi.as_ref().or(paper.pmid.as_ref());
+        let identifier = paper.doi.clone().or(paper.pmid.clone());
         if let Some(id) = identifier {
-            let scihub = crate::sources::scihub::SciHubClient::new();
-            if let Ok(Ok(Some(pdf_bytes))) = timeout(step_timeout, scihub.download_pdf(id)).await {
-                if let Ok(Ok(sections)) = timeout(step_timeout, parse_pdf_bytes(&pdf_bytes)).await {
-                    if !sections.is_empty() {
-                        return Ok(sections);
-                    }
-                }
-            }
+            set.spawn(async move { try_scihub_path(&id, step_timeout).await });
         }
     }
 
+    if set.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            set.abort_all();
+            return Ok(Vec::new());
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        match timeout(remaining, set.join_next()).await {
+            Ok(Some(Ok(Ok(sections)))) => {
+                if !sections.is_empty() {
+                    set.abort_all();
+                    return Ok(sections);
+                }
+            }
+            Ok(Some(Ok(Err(_)))) => {}
+            Ok(Some(Err(_))) => {}
+            Ok(None) => break,
+            Err(_) => {
+                set.abort_all();
+                break;
+            }
+        }
+    }
+    Ok(Vec::new())
+}
+
+async fn try_open_pdf_url(
+    pdf_url: &str,
+    step_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<DocumentSection>> {
+    let cache_key = format!("pdf_url:{}", pdf_url.trim().to_lowercase());
+    if full_text_negative_cached(&cache_key) {
+        return Ok(Vec::new());
+    }
+    match timeout(step_timeout, fetch_and_parse_pdf(pdf_url)).await {
+        Ok(Ok(sections)) if !sections.is_empty() => {
+            clear_full_text_negative(&cache_key);
+            Ok(sections)
+        }
+        _ => {
+            save_full_text_negative(&cache_key, "pdf_url_fetch_or_parse_failed");
+            Ok(Vec::new())
+        }
+    }
+}
+
+async fn try_pmc_paths(
+    pmcid_raw: &str,
+    step_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<DocumentSection>> {
+    let cache_key = format!("pmcid:{}", pmcid_raw.trim().to_lowercase());
+    if full_text_negative_cached(&cache_key) {
+        return Ok(Vec::new());
+    }
+    let clean_pmcid = if pmcid_raw.starts_with("PMC") {
+        pmcid_raw.to_string()
+    } else {
+        format!("PMC{}", pmcid_raw)
+    };
+
+    let epmc = EuropePmcClient::new();
+    if let Ok(Ok(Some(xml))) = timeout(step_timeout, epmc.fetch_full_text(&clean_pmcid)).await {
+        let sections = parse_pmc_xml_sections(&xml);
+        if !sections.is_empty() {
+            clear_full_text_negative(&cache_key);
+            return Ok(sections);
+        }
+    }
+
+    let epmc_url = format!(
+        "https://europepmc.org/backend/ptpmcrender.fcgi?accid={}&blobtype=pdf",
+        clean_pmcid
+    );
+    if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&epmc_url)).await {
+        if !sections.is_empty() {
+            clear_full_text_negative(&cache_key);
+            return Ok(sections);
+        }
+    }
+    save_full_text_negative(&cache_key, "pmc_paths_failed");
+    Ok(Vec::new())
+}
+
+async fn try_unpaywall_path(
+    doi: &str,
+    email: &str,
+    step_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<DocumentSection>> {
+    let cache_key = format!("doi:{}", doi.trim().to_lowercase());
+    if full_text_negative_cached(&cache_key) {
+        return Ok(Vec::new());
+    }
+    let unpaywall = UnpaywallClient::new(email);
+    if let Ok(Ok(Some(pdf_url))) = timeout(step_timeout, unpaywall.resolve_pdf_url(doi)).await {
+        if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&pdf_url)).await {
+            if !sections.is_empty() {
+                clear_full_text_negative(&cache_key);
+                return Ok(sections);
+            }
+        }
+    }
+    save_full_text_negative(&cache_key, "unpaywall_path_failed");
+    Ok(Vec::new())
+}
+
+async fn try_scihub_path(
+    identifier: &str,
+    step_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<DocumentSection>> {
+    let cache_key = format!("scihub:{}", identifier.trim().to_lowercase());
+    if full_text_negative_cached(&cache_key) {
+        return Ok(Vec::new());
+    }
+    let scihub = crate::sources::scihub::SciHubClient::new();
+    if let Ok(Ok(Some(pdf_bytes))) = timeout(step_timeout, scihub.download_pdf(identifier)).await {
+        if let Ok(Ok(sections)) = timeout(step_timeout, parse_pdf_bytes(&pdf_bytes)).await {
+            if !sections.is_empty() {
+                clear_full_text_negative(&cache_key);
+                return Ok(sections);
+            }
+        }
+    }
+    save_full_text_negative(&cache_key, "scihub_path_failed");
     Ok(Vec::new())
 }
 

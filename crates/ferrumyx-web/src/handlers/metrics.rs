@@ -2,11 +2,40 @@
 
 use std::collections::HashSet;
 
-use axum::{extract::State, response::Html};
+use axum::{extract::State, response::Html, Json};
+use serde::Serialize;
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
 use ferrumyx_db::{kg_facts::KgFactRepository, target_scores::TargetScoreRepository};
+use ferrumyx_ingestion::pipeline::load_recent_perf_snapshots;
+
+#[derive(Debug, Serialize)]
+pub struct PerfSummaryView {
+    avg_duration_ms: u64,
+    avg_papers_inserted_per_min: f64,
+    avg_chunks_inserted_per_min: f64,
+    avg_pdf_cache_hit_rate: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PerfSnapshotView {
+    recorded_at_epoch_secs: u64,
+    query: String,
+    duration_ms: u64,
+    papers_found: usize,
+    papers_inserted: usize,
+    chunks_inserted: usize,
+    quality_gate_skips: usize,
+    pdf_cache_hits: usize,
+    pdf_cache_misses: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PerfResponse {
+    summary: PerfSummaryView,
+    recent: Vec<PerfSnapshotView>,
+}
 
 pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     let fact_repo = KgFactRepository::new(state.db.clone());
@@ -217,6 +246,27 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
         </div>
     </div>
 
+    <div class="card mb-4">
+        <div class="card-header d-flex align-center justify-between">
+            <span>Live Ingestion Performance</span>
+            <span class="text-muted small">Auto-refresh 5s</span>
+        </div>
+        <div class="card-body">
+            <div class="grid-2 mb-3">
+                <div class="metric-card"><div class="metric-label">Avg Run Duration</div><div id="perf_avg_duration" class="metric-value">0 ms</div></div>
+                <div class="metric-card"><div class="metric-label">Avg Papers / Min</div><div id="perf_avg_papers" class="metric-value">0.00</div></div>
+                <div class="metric-card"><div class="metric-label">Avg Chunks / Min</div><div id="perf_avg_chunks" class="metric-value">0.00</div></div>
+                <div class="metric-card"><div class="metric-label">PDF Parse Cache Hit Rate</div><div id="perf_cache_hit_rate" class="metric-value">0.0%</div></div>
+            </div>
+            <div class="table-container p-0">
+                <table class="table mb-0">
+                    <thead><tr><th>When</th><th>Query</th><th>Duration</th><th>Papers</th><th>Inserted</th><th>Chunks</th></tr></thead>
+                    <tbody id="perf_recent_rows"><tr><td colspan="6" class="text-muted text-center py-3">No ingestion telemetry yet.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <h5 class="mb-3 mt-4" style="font-family:'Outfit'">Current Metric Values</h5>
     <div class="grid-2 mb-4">{}</div>
 
@@ -251,10 +301,81 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     </div>
 </main>
 <script src="/static/js/main.js"></script>
+<script>
+async function refreshPerfPanel() {{
+  try {{
+    const res = await fetch('/api/metrics/perf');
+    const data = await res.json();
+    const s = data.summary || {{}};
+    const byId = (id) => document.getElementById(id);
+    byId('perf_avg_duration').textContent = `${{Number(s.avg_duration_ms || 0)}} ms`;
+    byId('perf_avg_papers').textContent = Number(s.avg_papers_inserted_per_min || 0).toFixed(2);
+    byId('perf_avg_chunks').textContent = Number(s.avg_chunks_inserted_per_min || 0).toFixed(2);
+    byId('perf_cache_hit_rate').textContent = `${{(Number(s.avg_pdf_cache_hit_rate || 0) * 100).toFixed(1)}}%`;
+
+    const rows = (data.recent || []).map((r) => {{
+      const ts = new Date((Number(r.recorded_at_epoch_secs || 0)) * 1000).toLocaleString();
+      const q = String(r.query || '').slice(0, 90);
+      return `<tr><td class="text-muted small">${{ts}}</td><td>${{q}}</td><td>${{r.duration_ms}} ms</td><td>${{r.papers_found}}</td><td>${{r.papers_inserted}}</td><td>${{r.chunks_inserted}}</td></tr>`;
+    }}).join('');
+    byId('perf_recent_rows').innerHTML = rows || '<tr><td colspan="6" class="text-muted text-center py-3">No ingestion telemetry yet.</td></tr>';
+  }} catch (_) {{}}
+}}
+document.addEventListener('DOMContentLoaded', () => {{
+  refreshPerfPanel();
+  setInterval(refreshPerfPanel, 5000);
+}});
+</script>
 </body>
 </html>"#,
         NAV_HTML, metrics_cards, weight_rows
     ))
+}
+
+pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfResponse> {
+    let recent_raw = load_recent_perf_snapshots(24);
+    let mut duration_total = 0u64;
+    let mut papers_per_min_total = 0.0f64;
+    let mut chunks_per_min_total = 0.0f64;
+    let mut hit_total = 0usize;
+    let mut miss_total = 0usize;
+
+    let recent: Vec<PerfSnapshotView> = recent_raw
+        .iter()
+        .map(|s| {
+            duration_total += s.duration_ms;
+            let minutes = (s.duration_ms as f64 / 1000.0 / 60.0).max(1.0 / 60.0);
+            papers_per_min_total += s.papers_inserted as f64 / minutes;
+            chunks_per_min_total += s.chunks_inserted as f64 / minutes;
+            hit_total += s.pdf_cache_hits;
+            miss_total += s.pdf_cache_misses;
+            PerfSnapshotView {
+                recorded_at_epoch_secs: s.recorded_at_epoch_secs,
+                query: s.query.clone(),
+                duration_ms: s.duration_ms,
+                papers_found: s.papers_found,
+                papers_inserted: s.papers_inserted,
+                chunks_inserted: s.chunks_inserted,
+                quality_gate_skips: s.quality_gate_skips,
+                pdf_cache_hits: s.pdf_cache_hits,
+                pdf_cache_misses: s.pdf_cache_misses,
+            }
+        })
+        .collect();
+
+    let n = recent.len().max(1) as f64;
+    let summary = PerfSummaryView {
+        avg_duration_ms: (duration_total as f64 / n).round() as u64,
+        avg_papers_inserted_per_min: papers_per_min_total / n,
+        avg_chunks_inserted_per_min: chunks_per_min_total / n,
+        avg_pdf_cache_hit_rate: if hit_total + miss_total > 0 {
+            hit_total as f64 / (hit_total + miss_total) as f64
+        } else {
+            0.0
+        },
+    };
+
+    Json(PerfResponse { summary, recent })
 }
 
 fn metric_meta(name: &str) -> (&'static str, &'static str, bool) {
