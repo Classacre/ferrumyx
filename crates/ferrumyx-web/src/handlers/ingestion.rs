@@ -420,30 +420,6 @@ fn resolve_embedding_cfg_for_form(form: &IngestionForm) -> Option<IngestionEmbed
     })
 }
 
-// ── Source parser ─────────────────────────────────────────────────────────────
-
-fn parse_sources(s: &str) -> Vec<IngestionSourceSpec> {
-    let v: Vec<IngestionSourceSpec> = s
-        .split(',')
-        .filter_map(|x| match x.trim() {
-            "pubmed" => Some(IngestionSourceSpec::PubMed),
-            "europepmc" => Some(IngestionSourceSpec::EuropePmc),
-            "biorxiv" => Some(IngestionSourceSpec::BioRxiv),
-            "medrxiv" => Some(IngestionSourceSpec::MedRxiv),
-            "arxiv" => Some(IngestionSourceSpec::Arxiv),
-            "clinicaltrials" => Some(IngestionSourceSpec::ClinicalTrials),
-            "crossref" => Some(IngestionSourceSpec::CrossRef),
-            "semanticscholar" => Some(IngestionSourceSpec::SemanticScholar),
-            _ => None,
-        })
-        .collect();
-    if v.is_empty() {
-        vec![IngestionSourceSpec::PubMed]
-    } else {
-        v
-    }
-}
-
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 fn render_page(stats: PageStats, result_banner: Option<(&str, &Vec<String>)>) -> String {

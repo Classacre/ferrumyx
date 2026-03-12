@@ -926,7 +926,7 @@ impl Tool for IngestionTool {
                     })
                     .unwrap_or(0);
                 tracing::info!(
-                    recomputed,
+                    recomputed = recompute,
                     provider_refreshed_genes = refreshed,
                     provider_errors = errors,
                     "Async post-ingestion scoring/refresh completed"

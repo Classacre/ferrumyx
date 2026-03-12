@@ -431,7 +431,7 @@ async fn async_main() -> anyhow::Result<()> {
     info!("✅ LanceDB connected and initialized.");
 
     // Start Phase 3: Knowledge Graph Event Queue
-    let kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
+    let _kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
     info!("✅ KG event-driven scoring queue initialized.");
 
     // Build LLM client
@@ -497,7 +497,7 @@ async fn async_main() -> anyhow::Result<()> {
     };
 
     let session_manager = Arc::new(SessionManager::new());
-    let mut channels = ironclaw::channels::ChannelManager::new();
+    let channels = ironclaw::channels::ChannelManager::new();
     let disable_repl = std::env::var("FERRUMYX_DISABLE_REPL")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);

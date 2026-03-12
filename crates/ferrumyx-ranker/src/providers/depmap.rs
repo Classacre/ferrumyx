@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::info;
 
 /// Default DepMap data URL for bulk downloads
 pub const DEPMAP_DOWNLOAD_URL: &str = "https://depmap.org/portal/download/all/";

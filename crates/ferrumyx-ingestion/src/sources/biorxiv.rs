@@ -74,7 +74,7 @@ impl BioRxivClient {
             .map(|k| k.trim().trim_end_matches("[tiab]").trim())
             .collect();
 
-        let mut papers: Vec<PaperMetadata> = collection
+        let papers: Vec<PaperMetadata> = collection
             .iter()
             .filter(|item| {
                 let title = item["title"].as_str().unwrap_or("").to_lowercase();

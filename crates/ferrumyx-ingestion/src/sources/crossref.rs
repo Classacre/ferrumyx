@@ -10,7 +10,7 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use reqwest::Client;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 
 use super::LiteratureSource;
 use crate::models::{Author, IngestionSource, PaperMetadata};

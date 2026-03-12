@@ -9,9 +9,8 @@ use candle_transformers::models::bert::{BertModel, Config, HiddenAct, PositionEm
 use hf_hub::api::sync::Api;
 use lru::LruCache;
 use std::num::NonZeroUsize;
-use tokenizers::models::wordpiece::WordPieceBuilder;
 use tokenizers::Tokenizer;
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::embed::pooling::l2_normalize;
 use crate::embed::{EmbedError, EmbeddingConfig, Result};

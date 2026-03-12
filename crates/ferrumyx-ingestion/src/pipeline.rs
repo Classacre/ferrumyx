@@ -1309,52 +1309,6 @@ fn canonical_key(entity_type: DbEntityType, name: &str) -> String {
     format!("{}:{}", entity_type, normalized.trim_matches('_'))
 }
 
-async fn resolve_or_create_entity(
-    repo: &EntityRepository,
-    cache: &mut HashMap<String, Uuid>,
-    entity_type: DbEntityType,
-    display_name: &str,
-) -> anyhow::Result<Uuid> {
-    let key = canonical_key(entity_type, display_name);
-    if let Some(id) = cache.get(&key) {
-        return Ok(*id);
-    }
-
-    let external_id = format!("FERRUMYX:{}", key);
-    if let Some(existing) = repo
-        .find_by_external_id(&external_id)
-        .await?
-        .into_iter()
-        .next()
-    {
-        cache.insert(key, existing.id);
-        return Ok(existing.id);
-    }
-
-    let mut entity = DbEntity::new(
-        entity_type,
-        display_name.trim().to_string(),
-        external_id.clone(),
-        "ferrumyx".to_string(),
-    );
-    entity.canonical_name = Some(display_name.trim().to_string());
-    if let Err(e) = repo.insert(&entity).await {
-        // Another worker may have created this entity concurrently; retry lookup once.
-        if let Some(existing) = repo
-            .find_by_external_id(&external_id)
-            .await?
-            .into_iter()
-            .next()
-        {
-            cache.insert(key, existing.id);
-            return Ok(existing.id);
-        }
-        return Err(e.into());
-    }
-    cache.insert(key, entity.id);
-    Ok(entity.id)
-}
-
 async fn process_single_paper(
     paper: crate::models::PaperMetadata,
     paper_id: Uuid,

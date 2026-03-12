@@ -675,35 +675,8 @@ pub struct SettingsSaveRequest {
 fn default_true() -> bool {
     true
 }
-fn default_source_profile() -> String {
-    "fast".to_string()
-}
-fn default_source_timeout_secs() -> u64 {
-    18
-}
-fn default_full_text_step_timeout_secs() -> u64 {
-    15
-}
 fn default_full_text_total_timeout_secs() -> u64 {
     28
-}
-fn default_full_text_prefetch_workers() -> u64 {
-    4
-}
-fn default_paper_process_workers() -> u64 {
-    4
-}
-fn default_perf_mode() -> String {
-    "auto".to_string()
-}
-fn default_source_cache_ttl_secs() -> u64 {
-    1800
-}
-fn default_entity_batch_size() -> u64 {
-    256
-}
-fn default_fact_batch_size() -> u64 {
-    512
 }
 fn default_source_max_inflight() -> u64 {
     4

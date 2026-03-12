@@ -167,7 +167,7 @@ impl CosmicClient {
             return Ok(None);
         }
 
-        let total_samples: usize = mutations.iter().map(|m| m.sample_count).sum();
+        let _total_samples: usize = mutations.iter().map(|m| m.sample_count).sum();
         // Frequency calculation would need total samples in cancer type
         // This is a placeholder
 
@@ -177,8 +177,8 @@ impl CosmicClient {
     /// Check if a mutation is a known driver mutation.
     pub async fn is_driver_mutation(
         &self,
-        gene_symbol: &str,
-        protein_change: &str,
+        _gene_symbol: &str,
+        _protein_change: &str,
     ) -> anyhow::Result<bool> {
         // COSMIC Cancer Gene Census marks known driver genes
         // Check if mutation is in a known driver position

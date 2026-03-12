@@ -108,6 +108,7 @@ pub struct OpenAiCompatibleConfig {
 }
 
 /// Legacy alias kept for backwards compat.
+#[allow(dead_code)]
 pub type LlmBackendConfig = ApiBackendConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
