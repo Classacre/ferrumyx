@@ -127,6 +127,12 @@ impl Database {
         if !self.table_exists(schema::TABLE_ENT_TCGA_SURVIVAL).await? {
             self.create_ent_tcga_survival_table().await?;
         }
+        if !self
+            .table_exists(schema::TABLE_ENT_CBIO_MUTATION_FREQUENCY)
+            .await?
+        {
+            self.create_ent_cbio_mutation_frequency_table().await?;
+        }
         if !self.table_exists(schema::TABLE_ENT_GTEX_EXPRESSION).await? {
             self.create_ent_gtex_expression_table().await?;
         }
@@ -743,6 +749,30 @@ impl Database {
         let empty_iter = RecordBatchIterator::new(vec![], schema);
         self.conn
             .create_table(schema::TABLE_ENT_TCGA_SURVIVAL, empty_iter)
+            .execute()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn create_ent_cbio_mutation_frequency_table(&self) -> Result<()> {
+        let fields: Fields = vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("gene_symbol", DataType::Utf8, false),
+            Field::new("cancer_code", DataType::Utf8, false),
+            Field::new("study_id", DataType::Utf8, false),
+            Field::new("molecular_profile_id", DataType::Utf8, false),
+            Field::new("sample_list_id", DataType::Utf8, false),
+            Field::new("mutated_sample_count", DataType::Int64, false),
+            Field::new("profiled_sample_count", DataType::Int64, false),
+            Field::new("mutation_frequency", DataType::Float64, false),
+            Field::new("source", DataType::Utf8, false),
+            Field::new("fetched_at", DataType::Utf8, false),
+        ]
+        .into();
+        let schema = Arc::new(Schema::new(fields));
+        let empty_iter = RecordBatchIterator::new(vec![], schema);
+        self.conn
+            .create_table(schema::TABLE_ENT_CBIO_MUTATION_FREQUENCY, empty_iter)
             .execute()
             .await?;
         Ok(())

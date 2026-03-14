@@ -2,6 +2,7 @@
 
 pub mod arxiv;
 pub mod biorxiv;
+pub mod cbioportal;
 pub mod chembl;
 pub mod clinicaltrials;
 pub mod cosmic;
@@ -21,6 +22,7 @@ use async_trait::async_trait;
 
 // Re-export types for convenience
 pub use arxiv::ArxivClient;
+pub use cbioportal::{CbioMutationFrequency, CbioPortalClient};
 pub use chembl::{ActivityRecord, ChemblClient, CompoundRecord, TargetRecord};
 pub use cosmic::{CosmicClient, MutationRecord, MutationType};
 pub use depmap::{DepMapClient, GeneDependency};

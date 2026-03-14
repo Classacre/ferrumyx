@@ -16,9 +16,10 @@ use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::target_scores::TargetScoreRepository;
 use ferrumyx_db::Database;
 use ferrumyx_db::{
-    EntChemblTarget, EntGtexExpression, EntReactomeGene, EntStageRepository, EntTcgaSurvival,
-    Phase4SignalRepository,
+    EntCbioMutationFrequency, EntChemblTarget, EntGtexExpression, EntReactomeGene,
+    EntStageRepository, EntTcgaSurvival, Phase4SignalRepository,
 };
+use ferrumyx_ingestion::sources::CbioPortalClient;
 use ferrumyx_ingestion::sources::ChemblClient;
 use ferrumyx_ingestion::sources::DepMapCache;
 use ferrumyx_ingestion::sources::GtexClient;
@@ -62,6 +63,10 @@ impl Default for ProviderRefreshRequest {
 pub struct ProviderRefreshReport {
     pub genes_requested: usize,
     pub genes_processed: usize,
+    pub cbio_attempted: usize,
+    pub cbio_success: usize,
+    pub cbio_failed: usize,
+    pub cbio_skipped: usize,
     pub gtex_attempted: usize,
     pub gtex_success: usize,
     pub gtex_failed: usize,
@@ -346,6 +351,30 @@ impl TargetQueryEngine {
                 .or_else(|| req.cancer_code.clone())
                 .unwrap_or_else(|| "UNK".to_string());
 
+            let provider_cancer = req
+                .cancer_code
+                .as_deref()
+                .and_then(normalize_provider_cancer_code)
+                .or_else(|| normalize_provider_cancer_code(&inferred_cancer));
+
+            if should_fetch_cbio(candidates.len(), &req) {
+                if let Some(cancer_code) = provider_cancer.as_deref() {
+                    if let Some(cbio_mutation) = get_cached_cbio_mutation_frequency(
+                        &signal_repo,
+                        &candidate.gene_symbol,
+                        cancer_code,
+                    )
+                    .await
+                    {
+                        metrics.mutation_freq = cbio_mutation;
+                        component_sources.insert(
+                            "n1_mutation_freq".to_string(),
+                            "cbioportal_table".to_string(),
+                        );
+                    }
+                }
+            }
+
             if let Some(novelty) = candidate.source_backed_literature_novelty(&paper_published_at) {
                 metrics.literature_novelty_velocity = novelty;
                 component_sources.insert(
@@ -590,11 +619,28 @@ impl TargetQueryEngine {
         }
 
         let signal_repo = Phase4SignalRepository::new(self.db.clone());
-        let cancer_code = request.cancer_code.map(|c| c.trim().to_uppercase());
+        let cancer_code = request
+            .cancer_code
+            .and_then(|c| normalize_provider_cancer_code(&c));
 
         for batch in genes.chunks(batch_size) {
             for gene in batch {
                 report.genes_processed += 1;
+
+                if let Some(cc) = cancer_code.as_deref() {
+                    report.cbio_attempted += 1;
+                    if retry_fetch_f64(retries, || {
+                        get_cached_cbio_mutation_frequency(&signal_repo, gene, cc)
+                    })
+                    .await
+                    {
+                        report.cbio_success += 1;
+                    } else {
+                        report.cbio_failed += 1;
+                    }
+                } else {
+                    report.cbio_skipped += 1;
+                }
 
                 report.gtex_attempted += 1;
                 if retry_fetch_f64(retries, || {
@@ -650,6 +696,8 @@ impl TargetQueryEngine {
         info!(
             target: "ferrumyx_provider_refresh",
             genes_processed = report.genes_processed,
+            cbio_success = report.cbio_success,
+            cbio_failed = report.cbio_failed,
             gtex_success = report.gtex_success,
             gtex_failed = report.gtex_failed,
             tcga_success = report.tcga_success,
@@ -673,12 +721,46 @@ fn depmap_cache() -> Option<&'static DepMapCache> {
         .as_ref()
 }
 
+fn normalize_provider_cancer_code(cancer_code: &str) -> Option<String> {
+    let mut code = cancer_code.trim().to_uppercase();
+    if code.is_empty() {
+        return None;
+    }
+    if let Some(stripped) = code.strip_prefix("TCGA-") {
+        code = stripped.to_string();
+    }
+    code = match code.as_str() {
+        "NSCLC" => "LUAD".to_string(),
+        other => other.to_string(),
+    };
+    if code.len() < 3 || code.len() > 12 {
+        return None;
+    }
+    if !code
+        .chars()
+        .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(code)
+}
+
 fn should_fetch_gtex(candidate_count: usize, req: &QueryRequest) -> bool {
     if candidate_count == 0 || candidate_count > 8 {
         return false;
     }
     let _ = req;
     true
+}
+
+fn should_fetch_cbio(candidate_count: usize, req: &QueryRequest) -> bool {
+    if candidate_count == 0 || candidate_count > 8 {
+        return false;
+    }
+    req.cancer_code
+        .as_deref()
+        .and_then(normalize_provider_cancer_code)
+        .is_some()
 }
 
 fn should_fetch_tcga(candidate_count: usize, req: &QueryRequest) -> bool {
@@ -753,6 +835,84 @@ where
         }
     }
     false
+}
+
+async fn get_cached_cbio_mutation_frequency(
+    signal_repo: &Phase4SignalRepository,
+    gene_symbol: &str,
+    cancer_code: &str,
+) -> Option<f64> {
+    static CBIO_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    let gene = gene_symbol.trim().to_uppercase();
+    let cancer = normalize_provider_cancer_code(cancer_code)?;
+    let key = format!("{gene}|{cancer}");
+    let cache = CBIO_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(v) = guard.get(&key) {
+            return *v;
+        }
+    }
+
+    if let Ok(Some(row)) = signal_repo
+        .find_cbio_mutation_frequency_fresh(&gene, &cancer, PROVIDER_SIGNAL_TTL_DAYS)
+        .await
+    {
+        let value = Some(row.mutation_frequency.clamp(0.0, 1.0));
+        if let Ok(mut guard) = cache.lock() {
+            guard.insert(key, value);
+        }
+        return value;
+    }
+
+    let gene_for_fetch = gene.clone();
+    let cancer_for_fetch = cancer.clone();
+    let fetched = tokio::time::timeout(std::time::Duration::from_secs(10), async move {
+        let client = CbioPortalClient::new();
+        let row = client
+            .get_mutation_frequency(&gene_for_fetch, &cancer_for_fetch)
+            .await
+            .ok()
+            .flatten()?;
+        Some(row)
+    })
+    .await
+    .ok()
+    .flatten();
+
+    if let Some(row) = fetched {
+        let value = row.mutation_frequency.clamp(0.0, 1.0);
+        let _ = signal_repo
+            .upsert_cbio_mutation_frequency(&EntCbioMutationFrequency {
+                id: uuid::Uuid::new_v4(),
+                gene_symbol: gene.clone(),
+                cancer_code: cancer.clone(),
+                study_id: row.study_id,
+                molecular_profile_id: row.molecular_profile_id,
+                sample_list_id: row.sample_list_id,
+                mutated_sample_count: row.mutated_sample_count as i64,
+                profiled_sample_count: row.profiled_sample_count as i64,
+                mutation_frequency: value,
+                source: "cbioportal_api".to_string(),
+                fetched_at: chrono::Utc::now(),
+            })
+            .await;
+        if let Ok(mut guard) = cache.lock() {
+            guard.insert(key, Some(value));
+        }
+        return Some(value);
+    }
+
+    let resolved = signal_repo
+        .find_cbio_mutation_frequency(&gene, &cancer)
+        .await
+        .ok()
+        .flatten()
+        .map(|row| row.mutation_frequency.clamp(0.0, 1.0));
+
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(key, resolved);
+    }
+    resolved
 }
 
 async fn get_cached_gtex_expression_score(

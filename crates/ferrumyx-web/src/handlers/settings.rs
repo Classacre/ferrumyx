@@ -96,6 +96,8 @@ async function loadSettings() {
   byId('scihub_adaptive_backoff_secs').value = data.scihub_adaptive_backoff_secs;
   byId('scihub_adaptive_probe_every').value = data.scihub_adaptive_probe_every;
   byId('scihub_adaptive_min_step_timeout_secs').value = data.scihub_adaptive_min_step_timeout_secs;
+  byId('cbioportal_base_url').value = data.cbioportal_base_url;
+  byId('cbioportal_timeout_secs').value = data.cbioportal_timeout_secs;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -103,6 +105,7 @@ async function loadSettings() {
   setProviderState('compat_state', data.has_compat_key);
   setProviderState('pubmed_state', data.has_pubmed_key);
   setProviderState('semanticscholar_state', data.has_semanticscholar_key);
+  setProviderState('cbio_state', data.has_cbioportal_key);
   setProviderState('embedding_state', data.has_embedding_key);
 
   byId('sync_backend').textContent = data.ironclaw_sync.llm_backend;
@@ -178,12 +181,15 @@ async function saveSettings() {
     scihub_adaptive_backoff_secs: Number(byId('scihub_adaptive_backoff_secs').value || 300),
     scihub_adaptive_probe_every: Number(byId('scihub_adaptive_probe_every').value || 10),
     scihub_adaptive_min_step_timeout_secs: Number(byId('scihub_adaptive_min_step_timeout_secs').value || 3),
+    cbioportal_base_url: byId('cbioportal_base_url').value,
+    cbioportal_timeout_secs: Number(byId('cbioportal_timeout_secs').value || 10),
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
     compat_api_key: byId('compat_api_key').value || null,
     pubmed_api_key: byId('pubmed_api_key').value || null,
     semanticscholar_api_key: byId('semanticscholar_api_key').value || null,
+    cbioportal_api_token: byId('cbioportal_api_token').value || null,
     embedding_api_key: byId('embedding_api_key').value || null,
   };
 
@@ -199,7 +205,7 @@ async function saveSettings() {
     btn.innerHTML = 'Saved';
     btn.style.backgroundColor = 'var(--success)';
 
-    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','embedding_api_key']
+    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','cbioportal_api_token','embedding_api_key']
       .forEach((id) => { byId(id).value = ''; });
 
     await loadSettings();
@@ -318,6 +324,21 @@ __NAV__
             <label for="semanticscholar_api_key">Semantic Scholar API Key <span id="semanticscholar_state" class="state-pill">Not Set</span></label>
             <input id="semanticscholar_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
             <div class="help-text">Used by Semantic Scholar Graph API source for higher throughput and quota.</div>
+          </div>
+          <div class="form-group">
+            <label for="cbioportal_base_url">cBioPortal API Base URL</label>
+            <input id="cbioportal_base_url" class="form-control" placeholder="https://www.cbioportal.org/api" />
+            <div class="help-text">Phase 4 n1 source-backed mutation frequency provider endpoint.</div>
+          </div>
+          <div class="form-group">
+            <label for="cbioportal_timeout_secs">cBioPortal Request Timeout (seconds)</label>
+            <input id="cbioportal_timeout_secs" type="number" min="3" max="60" class="form-control" />
+            <div class="help-text">Per-request timeout for cBioPortal mutation frequency fetches.</div>
+          </div>
+          <div class="form-group">
+            <label for="cbioportal_api_token">cBioPortal API Token <span id="cbio_state" class="state-pill">Not Set</span></label>
+            <input id="cbioportal_api_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Optional token for restricted/private cBioPortal instances.</div>
           </div>
           <div class="form-group">
             <label for="unpaywall_email">Unpaywall Contact Email</label>
@@ -677,12 +698,17 @@ pub struct SettingsView {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default = "default_cbioportal_base_url")]
+    cbioportal_base_url: String,
+    #[serde(default = "default_cbioportal_timeout_secs")]
+    cbioportal_timeout_secs: u64,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
     has_compat_key: bool,
     has_pubmed_key: bool,
     has_semanticscholar_key: bool,
+    has_cbioportal_key: bool,
     has_embedding_key: bool,
     ironclaw_sync: IronclawSyncView,
 }
@@ -784,12 +810,17 @@ pub struct SettingsSaveRequest {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default = "default_cbioportal_base_url")]
+    cbioportal_base_url: String,
+    #[serde(default = "default_cbioportal_timeout_secs")]
+    cbioportal_timeout_secs: u64,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
     compat_api_key: Option<String>,
     pubmed_api_key: Option<String>,
     semanticscholar_api_key: Option<String>,
+    cbioportal_api_token: Option<String>,
     embedding_api_key: Option<String>,
 }
 
@@ -849,6 +880,12 @@ fn default_scihub_adaptive_probe_every() -> u64 {
 }
 fn default_scihub_adaptive_min_step_timeout_secs() -> u64 {
     3
+}
+fn default_cbioportal_base_url() -> String {
+    "https://www.cbioportal.org/api".to_string()
+}
+fn default_cbioportal_timeout_secs() -> u64 {
+    10
 }
 fn default_scihub_domains() -> String {
     "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
@@ -1292,6 +1329,37 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             default_scihub_adaptive_min_step_timeout_secs(),
         )
         .clamp(2, 60),
+        cbioportal_base_url: {
+            let toml_value = str_at(
+                &root,
+                &["ranker", "providers", "cbioportal", "base_url"],
+                "",
+            );
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_CBIOPORTAL_BASE_URL")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_cbioportal_base_url)
+            }
+        },
+        cbioportal_timeout_secs: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "providers", "cbioportal", "timeout_secs"],
+                0,
+            );
+            if toml_value >= 3 {
+                toml_value.clamp(3, 60)
+            } else {
+                std::env::var("FERRUMYX_CBIOPORTAL_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_cbioportal_timeout_secs())
+                    .clamp(3, 60)
+            }
+        },
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"])
             || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"])
@@ -1308,6 +1376,14 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             || std::env::var("FERRUMYX_SEMANTIC_SCHOLAR_API_KEY")
                 .is_ok_and(|v| !v.trim().is_empty())
             || std::env::var("SEMANTIC_SCHOLAR_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+        has_cbioportal_key: has_nonempty(
+            &root,
+            &["ranker", "providers", "cbioportal", "api_token"],
+        ) || has_nonempty(
+            &root,
+            &["ranker", "providers", "cbioportal", "api_token_secret"],
+        ) || std::env::var("FERRUMYX_CBIOPORTAL_API_TOKEN")
+            .is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
         ironclaw_sync: IronclawSyncView {
             llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
@@ -1575,6 +1651,29 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
         semanticscholar,
         "api_key_secret",
         &payload.semanticscholar_api_key,
+    );
+
+    let ranker = table_mut(&mut root, "ranker");
+    let providers = nested_table_mut(ranker, "providers");
+    let cbioportal = nested_table_mut(providers, "cbioportal");
+    set_str(
+        cbioportal,
+        "base_url",
+        if payload.cbioportal_base_url.trim().is_empty() {
+            default_cbioportal_base_url()
+        } else {
+            payload.cbioportal_base_url.trim().to_string()
+        },
+    );
+    cbioportal.insert(
+        "timeout_secs".to_string(),
+        toml::Value::Integer(payload.cbioportal_timeout_secs.clamp(3, 60) as i64),
+    );
+    maybe_set_secret(cbioportal, "api_token", &payload.cbioportal_api_token);
+    maybe_set_secret(
+        cbioportal,
+        "api_token_secret",
+        &payload.cbioportal_api_token,
     );
 
     let embedding = table_mut(&mut root, "embedding");
@@ -1973,6 +2072,42 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
     if !pubmed_key.is_empty() {
         std::env::set_var("FERRUMYX_PUBMED_API_KEY", &pubmed_key);
+    }
+    let cbio_base_url = str_at(
+        root,
+        &["ranker", "providers", "cbioportal", "base_url"],
+        &default_cbioportal_base_url(),
+    );
+    if !cbio_base_url.trim().is_empty() {
+        std::env::set_var("FERRUMYX_CBIOPORTAL_BASE_URL", cbio_base_url);
+    }
+    let cbio_timeout_secs = int_at(
+        root,
+        &["ranker", "providers", "cbioportal", "timeout_secs"],
+        default_cbioportal_timeout_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_CBIOPORTAL_TIMEOUT_SECS",
+        cbio_timeout_secs.clamp(3, 60).to_string(),
+    );
+    let cbio_token = {
+        let t = str_at(
+            root,
+            &["ranker", "providers", "cbioportal", "api_token"],
+            "",
+        );
+        if !t.is_empty() {
+            t
+        } else {
+            str_at(
+                root,
+                &["ranker", "providers", "cbioportal", "api_token_secret"],
+                "",
+            )
+        }
+    };
+    if !cbio_token.is_empty() {
+        std::env::set_var("FERRUMYX_CBIOPORTAL_API_TOKEN", cbio_token);
     }
     let unpaywall_email = str_at(root, &["ingestion", "unpaywall", "email"], "");
     if !unpaywall_email.is_empty() {

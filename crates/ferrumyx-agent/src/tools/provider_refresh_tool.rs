@@ -25,7 +25,7 @@ impl Tool for RefreshProviderSignalsTool {
     }
 
     fn description(&self) -> &str {
-        "Refreshes TCGA/GTEx/ChEMBL/Reactome provider signal cache tables in staged batches with retries."
+        "Refreshes cBioPortal/TCGA/GTEx/ChEMBL/Reactome provider signal cache tables in staged batches with retries."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

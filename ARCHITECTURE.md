@@ -1921,7 +1921,7 @@ OUTPUT FIELDS (per candidate):
 
 Remaining Phase 4 hardening work:
 - [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
-- [ ] Fully source-back `n1` mutation frequency from dedicated oncology frequency providers (COSMIC/cBioPortal) for broad cohorts.
+- [~] `n1` mutation frequency now supports source-backed cBioPortal cohort frequency caching (`ent_cbio_mutation_frequency`) with runtime fetch + TTL-backed reuse; remaining gap is broad-cohort parity and secondary-provider (COSMIC) fallback hardening.
 - [ ] Fully source-back `n5`/`n6` structural components from stable structural pipeline outputs (PDB/AlphaFold/fpocket) without proxy fallback for larger cohorts.
 - [x] Add explicit percentile field and richer component breakdown in API output.
 - [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
@@ -1946,9 +1946,9 @@ Reality check against code:
 
 - Scoring core (weights, rank-normalization, penalties, shortlist thresholds, `DISPUTED` and hard-exclusion flags) aligns with architecture design.
 - Versioned score persistence is aligned (`score_version`, `is_current`) with backward compatibility for legacy tables.
-- Source-backed provider integration is materially advanced for `n2`, `n3`, `n4`, `n7`, and `n8` via cached signal tables + bounded runtime fetch.
+- Source-backed provider integration is materially advanced for `n2`, `n3`, `n4`, `n7`, and `n8`, and now includes `n1` via cBioPortal-backed mutation frequency cache rows (`ent_cbio_mutation_frequency`) with bounded runtime fetch + TTL freshness checks.
 - `component_sources` is exposed per result so proxy-vs-source-backed provenance is explicit at query time.
-- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially `n1`, `n5`, and `n6`.
+- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially `n5` and `n6`, plus secondary-provider/large-cohort hardening for `n1`.
 
 ---
 

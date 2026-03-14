@@ -333,6 +333,21 @@ pub struct EntTcgaSurvival {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntCbioMutationFrequency {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub cancer_code: String,
+    pub study_id: String,
+    pub molecular_profile_id: String,
+    pub sample_list_id: String,
+    pub mutated_sample_count: i64,
+    pub profiled_sample_count: i64,
+    pub mutation_frequency: f64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EntGtexExpression {
     pub id: uuid::Uuid,
     pub gene_symbol: String,
@@ -590,6 +605,7 @@ pub const TABLE_ENT_STRUCTURES: &str = "ent_structures";
 pub const TABLE_ENT_DRUGGABILITY: &str = "ent_druggability";
 pub const TABLE_ENT_SYNTHETIC_LETHALITY: &str = "ent_synthetic_lethality";
 pub const TABLE_ENT_TCGA_SURVIVAL: &str = "ent_tcga_survival";
+pub const TABLE_ENT_CBIO_MUTATION_FREQUENCY: &str = "ent_cbio_mutation_frequency";
 pub const TABLE_ENT_GTEX_EXPRESSION: &str = "ent_gtex_expression";
 pub const TABLE_ENT_CHEMBL_TARGETS: &str = "ent_chembl_targets";
 pub const TABLE_ENT_REACTOME_GENES: &str = "ent_reactome_genes";

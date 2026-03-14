@@ -57,5 +57,7 @@ pub use schema::{
     EMBEDDING_DIM, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS,
     TABLE_KG_FACTS, TABLE_PAPERS, TABLE_TARGET_SCORES,
 };
-pub use schema::{EntChemblTarget, EntGtexExpression, EntReactomeGene, EntTcgaSurvival};
+pub use schema::{
+    EntCbioMutationFrequency, EntChemblTarget, EntGtexExpression, EntReactomeGene, EntTcgaSurvival,
+};
 pub use target_scores::TargetScoreRepository;

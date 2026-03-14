@@ -1118,7 +1118,11 @@ impl Tool for IngestionTool {
                 let errors = provider_refresh
                     .as_ref()
                     .map(|r| {
-                        (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
+                        (r.cbio_failed
+                            + r.gtex_failed
+                            + r.tcga_failed
+                            + r.chembl_failed
+                            + r.reactome_failed) as u64
                     })
                     .unwrap_or(0);
                 tracing::info!(
@@ -1153,7 +1157,11 @@ impl Tool for IngestionTool {
             provider_errors = provider_refresh
                 .as_ref()
                 .map(|r| {
-                    (r.gtex_failed + r.tcga_failed + r.chembl_failed + r.reactome_failed) as u64
+                    (r.cbio_failed
+                        + r.gtex_failed
+                        + r.tcga_failed
+                        + r.chembl_failed
+                        + r.reactome_failed) as u64
                 })
                 .unwrap_or(0);
             "sync"
