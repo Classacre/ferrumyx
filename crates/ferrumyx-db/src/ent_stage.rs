@@ -7,8 +7,9 @@ use crate::database::Database;
 use crate::error::Result;
 use crate::schema;
 use crate::schema_arrow::{
-    record_to_ent_compound, record_to_ent_druggability, record_to_ent_gene, record_to_ent_mutation,
-    record_to_ent_pathway, record_to_ent_structure,
+    ent_druggability_to_record, ent_structure_to_record, record_to_ent_compound,
+    record_to_ent_druggability, record_to_ent_gene, record_to_ent_mutation, record_to_ent_pathway,
+    record_to_ent_structure,
 };
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -92,6 +93,65 @@ impl EntStageRepository {
         }
 
         Ok(out)
+    }
+
+    pub async fn find_genes_by_symbol(
+        &self,
+        symbols: &[String],
+    ) -> Result<HashMap<String, crate::schema::EntGene>> {
+        let clean_symbols: Vec<String> = symbols
+            .iter()
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if clean_symbols.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let rows = self.fetch_genes_by_symbol(&clean_symbols).await?;
+        let mut out = HashMap::new();
+        for row in rows {
+            out.insert(row.symbol.to_uppercase(), row);
+        }
+        Ok(out)
+    }
+
+    pub async fn upsert_structure_signal(
+        &self,
+        structure: &crate::schema::EntStructure,
+    ) -> Result<()> {
+        let table = self
+            .db
+            .connection()
+            .open_table(schema::TABLE_ENT_STRUCTURES)
+            .execute()
+            .await?;
+        let record = ent_structure_to_record(structure)?;
+        let schema = record.schema();
+        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
+        let mut builder = table.merge_insert(&["gene_id"]);
+        builder.when_matched_update_all(None);
+        builder.execute(Box::new(iter)).await?;
+        Ok(())
+    }
+
+    pub async fn upsert_druggability_signal(
+        &self,
+        druggability: &crate::schema::EntDruggability,
+    ) -> Result<()> {
+        let table = self
+            .db
+            .connection()
+            .open_table(schema::TABLE_ENT_DRUGGABILITY)
+            .execute()
+            .await?;
+        let record = ent_druggability_to_record(druggability)?;
+        let schema = record.schema();
+        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
+        let mut builder = table.merge_insert(&["structure_id"]);
+        builder.when_matched_update_all(None);
+        builder.execute(Box::new(iter)).await?;
+        Ok(())
     }
 
     async fn fetch_genes_by_symbol(

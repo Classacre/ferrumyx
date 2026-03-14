@@ -13,6 +13,7 @@ use ferrumyx_common::query::{QueryRequest, QueryResult, TargetMetrics};
 use ferrumyx_db::kg_conflicts::KgConflictRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
 use ferrumyx_db::papers::PaperRepository;
+use ferrumyx_db::schema::{EntDruggability, EntStructure};
 use ferrumyx_db::target_scores::TargetScoreRepository;
 use ferrumyx_db::Database;
 use ferrumyx_db::{
@@ -27,10 +28,11 @@ use ferrumyx_ingestion::sources::TcgaClient;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 
 const PROVIDER_SIGNAL_TTL_DAYS: i64 = 14;
 
@@ -296,9 +298,26 @@ impl TargetQueryEngine {
         let mut by_gene_metrics: HashMap<uuid::Uuid, TargetMetrics> = HashMap::new();
         let mut component_sources_by_gene: HashMap<uuid::Uuid, BTreeMap<String, String>> =
             HashMap::new();
+        let disable_structural_proxy = should_disable_structural_proxy(candidates.len());
+        let mut structural_source_missing: HashSet<uuid::Uuid> = HashSet::new();
         for (gene_id, candidate) in &candidates {
             let mut metrics = candidate.to_target_metrics();
             let mut component_sources = default_component_sources();
+            if disable_structural_proxy {
+                // For larger cohorts we avoid KG-derived structural proxies and
+                // only accept source-backed structural signals.
+                metrics.pdb_structure_count = 0;
+                metrics.af_plddt_mean = 0.0;
+                metrics.fpocket_best_score = 0.0;
+                component_sources.insert(
+                    "n5_structural_tractability".to_string(),
+                    "source_missing".to_string(),
+                );
+                component_sources.insert(
+                    "n6_pocket_detectability".to_string(),
+                    "source_missing".to_string(),
+                );
+            }
             if let Some(enrich) = enrichment_by_symbol.get(&candidate.gene_symbol.to_uppercase()) {
                 if enrich.mutation_count > 0 {
                     let source_mutation = (enrich.mutation_count as f64 / 20.0).clamp(0.0, 1.0);
@@ -344,6 +363,17 @@ impl TargetQueryEngine {
                         "ent_stage".to_string(),
                     );
                 }
+            }
+
+            if disable_structural_proxy
+                && component_sources
+                    .get("n5_structural_tractability")
+                    .is_some_and(|v| v == "source_missing")
+                && component_sources
+                    .get("n6_pocket_detectability")
+                    .is_some_and(|v| v == "source_missing")
+            {
+                structural_source_missing.insert(*gene_id);
             }
 
             let inferred_cancer = candidate
@@ -521,6 +551,9 @@ impl TargetQueryEngine {
                 if !enrichment_by_symbol.contains_key(&candidate.gene_symbol.to_uppercase()) {
                     flags.push("COVERAGE_PROXY_ONLY".to_string());
                 }
+                if structural_source_missing.contains(gene_id) {
+                    flags.push("STRUCTURAL_SOURCE_MISSING".to_string());
+                }
 
                 results.push(QueryResult {
                     rank: 0,
@@ -568,7 +601,7 @@ impl TargetQueryEngine {
                 let db = self.db.clone();
                 let cancer_code = req.cancer_code.clone();
                 tokio::spawn(async move {
-                    prewarm_phase4_provider_signals(db, prewarm_genes, cancer_code).await;
+                    prewarm_phase4_large_cohort_signals(db, prewarm_genes, cancer_code).await;
                 });
             }
         }
@@ -753,6 +786,16 @@ fn should_fetch_gtex(candidate_count: usize, req: &QueryRequest) -> bool {
     true
 }
 
+fn should_disable_structural_proxy(candidate_count: usize) -> bool {
+    if std::env::var("FERRUMYX_PHASE4_STRUCTURAL_SOURCE_ONLY")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    {
+        return true;
+    }
+    candidate_count > 8
+}
+
 fn should_fetch_cbio(candidate_count: usize, req: &QueryRequest) -> bool {
     if candidate_count == 0 || candidate_count > 8 {
         return false;
@@ -803,6 +846,288 @@ async fn prewarm_phase4_provider_signals(
             retries: 1,
         })
         .await;
+}
+
+async fn prewarm_phase4_large_cohort_signals(
+    db: Arc<Database>,
+    genes: Vec<String>,
+    cancer_code: Option<String>,
+) {
+    prewarm_phase4_provider_signals(db.clone(), genes.clone(), cancer_code).await;
+    prewarm_structural_signals(db, genes).await;
+}
+
+fn structural_prewarm_enabled() -> bool {
+    !std::env::var("FERRUMYX_PHASE4_STRUCTURAL_PREWARM_ENABLED")
+        .ok()
+        .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+fn structural_prewarm_max_genes() -> usize {
+    std::env::var("FERRUMYX_PHASE4_STRUCTURAL_PREWARM_MAX_GENES")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .map(|v| v.clamp(1, 32))
+        .unwrap_or(8)
+}
+
+fn structural_cache_dir() -> PathBuf {
+    std::env::var("FERRUMYX_STRUCTURAL_CACHE_DIR")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("data/structural_cache"))
+}
+
+async fn prewarm_structural_signals(db: Arc<Database>, genes: Vec<String>) {
+    if !structural_prewarm_enabled() {
+        return;
+    }
+
+    let mut seen = HashSet::new();
+    let clean: Vec<String> = genes
+        .into_iter()
+        .map(|g| g.trim().to_uppercase())
+        .filter(|g| !g.is_empty() && seen.insert(g.clone()))
+        .take(structural_prewarm_max_genes())
+        .collect();
+    if clean.is_empty() {
+        return;
+    }
+
+    let ent_repo = EntStageRepository::new(db);
+    let gene_rows = match ent_repo.find_genes_by_symbol(&clean).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            warn!(
+                target: "ferrumyx_ranker_structural",
+                error = %e,
+                "structural prewarm skipped: failed to read gene metadata"
+            );
+            return;
+        }
+    };
+    if gene_rows.is_empty() {
+        return;
+    }
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => reqwest::Client::new(),
+    };
+
+    let cache_dir = structural_cache_dir();
+
+    for symbol in clean {
+        let Some(gene) = gene_rows.get(&symbol) else {
+            continue;
+        };
+        let Some(uniprot_id) = gene
+            .uniprot_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+
+        let pdb_path = match fetch_alphafold_pdb_cached(&client, &cache_dir, uniprot_id).await {
+            Ok(path) => path,
+            Err(e) => {
+                warn!(
+                    target: "ferrumyx_ranker_structural",
+                    gene = %symbol,
+                    uniprot = %uniprot_id,
+                    error = %e,
+                    "structural prewarm: alphafold fetch failed"
+                );
+                continue;
+            }
+        };
+
+        let plddt_mean = parse_plddt_mean_from_pdb(&pdb_path).map(|v| v as f32);
+        let structure_id = uuid::Uuid::new_v4();
+        let structure = EntStructure {
+            id: structure_id,
+            gene_id: gene.id,
+            pdb_ids: None,
+            best_resolution: None,
+            exp_method: Some("alphafold_model".to_string()),
+            af_accession: Some(uniprot_id.to_string()),
+            af_plddt_mean: plddt_mean,
+            af_plddt_active: plddt_mean,
+            has_pdb: false,
+            has_alphafold: true,
+            updated_at: chrono::Utc::now(),
+        };
+        if let Err(e) = ent_repo.upsert_structure_signal(&structure).await {
+            warn!(
+                target: "ferrumyx_ranker_structural",
+                gene = %symbol,
+                error = %e,
+                "structural prewarm: failed to upsert ent_structure"
+            );
+            continue;
+        }
+
+        if let Some(fpocket_score) = run_fpocket_best_score(&pdb_path).await {
+            let drug = EntDruggability {
+                id: uuid::Uuid::new_v4(),
+                structure_id,
+                fpocket_score: Some(fpocket_score as f32),
+                fpocket_volume: None,
+                fpocket_pocket_count: None,
+                dogsitescorer: None,
+                overall_assessment: Some("fpocket_cli".to_string()),
+                assessed_at: chrono::Utc::now(),
+            };
+            if let Err(e) = ent_repo.upsert_druggability_signal(&drug).await {
+                warn!(
+                    target: "ferrumyx_ranker_structural",
+                    gene = %symbol,
+                    error = %e,
+                    "structural prewarm: failed to upsert ent_druggability"
+                );
+            }
+        }
+    }
+}
+
+async fn fetch_alphafold_pdb_cached(
+    client: &reqwest::Client,
+    cache_dir: &Path,
+    uniprot_id: &str,
+) -> anyhow::Result<PathBuf> {
+    let uniprot = uniprot_id.trim().to_uppercase();
+    if uniprot.is_empty() {
+        anyhow::bail!("empty uniprot id");
+    }
+
+    tokio::fs::create_dir_all(cache_dir).await?;
+    let file_name = format!("AF-{}-F1-model_v4.pdb", uniprot);
+    let file_path = cache_dir.join(&file_name);
+    if file_path.exists() {
+        return Ok(file_path);
+    }
+
+    let url = format!("https://alphafold.ebi.ac.uk/files/{}", file_name);
+    let resp = client.get(&url).send().await?.error_for_status()?;
+    let bytes = resp.bytes().await?;
+    tokio::fs::write(&file_path, bytes).await?;
+    Ok(file_path)
+}
+
+fn parse_plddt_mean_from_pdb(path: &Path) -> Option<f64> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut sum = 0.0f64;
+    let mut count = 0usize;
+    for line in text.lines() {
+        if !(line.starts_with("ATOM") || line.starts_with("HETATM")) {
+            continue;
+        }
+        let Some(raw) = line.get(60..66) else {
+            continue;
+        };
+        let Ok(v) = raw.trim().parse::<f64>() else {
+            continue;
+        };
+        sum += v;
+        count += 1;
+    }
+    if count == 0 {
+        None
+    } else {
+        Some((sum / count as f64).clamp(0.0, 100.0))
+    }
+}
+
+fn fpocket_enabled() -> bool {
+    !std::env::var("FERRUMYX_STRUCTURAL_FPOCKET_ENABLED")
+        .ok()
+        .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+async fn run_fpocket_best_score(pdb_path: &Path) -> Option<f64> {
+    if !fpocket_enabled() {
+        return None;
+    }
+
+    let bin = std::env::var("FERRUMYX_FPOCKET_BIN").unwrap_or_else(|_| "fpocket".to_string());
+    let output = tokio::process::Command::new(&bin)
+        .arg("-f")
+        .arg(pdb_path)
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stem = pdb_path.file_stem()?.to_string_lossy();
+    let out_dir = pdb_path.with_file_name(format!("{}_out", stem));
+    parse_fpocket_best_score(&out_dir)
+}
+
+fn parse_fpocket_best_score(out_dir: &Path) -> Option<f64> {
+    let mut candidates = Vec::new();
+    let info_file = out_dir.join(format!(
+        "{}_info.txt",
+        out_dir
+            .file_name()?
+            .to_string_lossy()
+            .trim_end_matches("_out")
+    ));
+    if info_file.exists() {
+        candidates.push(info_file);
+    }
+    if let Ok(entries) = std::fs::read_dir(out_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) == Some("txt") {
+                candidates.push(p);
+            }
+        }
+    }
+
+    let mut best: Option<f64> = None;
+    for file in candidates {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        for line in text.lines() {
+            let line_lc = line.to_ascii_lowercase();
+            if !line_lc.contains("score") || line_lc.contains("volume") {
+                continue;
+            }
+            if let Some(v) = extract_first_float(line) {
+                if (0.0..=1.5).contains(&v) {
+                    best = Some(best.map_or(v, |cur| cur.max(v)));
+                }
+            }
+        }
+    }
+    best.map(|v| v.clamp(0.0, 1.0))
+}
+
+fn extract_first_float(input: &str) -> Option<f64> {
+    let mut buf = String::new();
+    for ch in input.chars() {
+        if ch.is_ascii_digit() || matches!(ch, '.' | '-' | '+') {
+            buf.push(ch);
+        } else if !buf.is_empty() {
+            if let Ok(v) = buf.parse::<f64>() {
+                return Some(v);
+            }
+            buf.clear();
+        }
+    }
+    if buf.is_empty() {
+        None
+    } else {
+        buf.parse::<f64>().ok()
+    }
 }
 
 async fn retry_fetch_f64<F, Fut>(retries: u8, mut op: F) -> bool
@@ -1459,4 +1784,53 @@ fn is_cancer_like(name: &str) -> bool {
         || lc.contains("lymphoma")
         || lc.contains("leukemia")
         || lc.contains("tumor")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn mk_temp_dir(name: &str) -> PathBuf {
+        let p =
+            std::env::temp_dir().join(format!("ferrumyx_ranker_{}_{}", name, uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn extract_first_float_parses_numeric_token() {
+        let v = extract_first_float("Score : 0.572").unwrap();
+        assert!((v - 0.572).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_plddt_mean_from_pdb_reads_bfactor_column() {
+        let dir = mk_temp_dir("plddt");
+        let path = dir.join("AF-P01116-F1-model_v4.pdb");
+        std::fs::write(
+            &path,
+            "ATOM      1  N   MET A   1      11.104  13.207   6.204  1.00 75.00           N\n\
+             ATOM      2  CA  MET A   1      12.400  13.800   6.700  1.00 85.00           C\n",
+        )
+        .unwrap();
+        let mean = parse_plddt_mean_from_pdb(&path).unwrap();
+        assert!((mean - 80.0).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_fpocket_best_score_from_info_file() {
+        let dir = mk_temp_dir("fpocket");
+        let out_dir = dir.join("AF-P01116-F1-model_v4_out");
+        std::fs::create_dir_all(&out_dir).unwrap();
+        std::fs::write(
+            out_dir.join("AF-P01116-F1-model_v4_info.txt"),
+            "Pocket 1\nScore : 0.41\nPocket 2\nScore : 0.63\n",
+        )
+        .unwrap();
+        let best = parse_fpocket_best_score(&out_dir).unwrap();
+        assert!((best - 0.63).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -96,6 +96,7 @@ async function loadSettings() {
   byId('scihub_adaptive_backoff_secs').value = data.scihub_adaptive_backoff_secs;
   byId('scihub_adaptive_probe_every').value = data.scihub_adaptive_probe_every;
   byId('scihub_adaptive_min_step_timeout_secs').value = data.scihub_adaptive_min_step_timeout_secs;
+  byId('phase4_structural_source_only').checked = data.phase4_structural_source_only;
   byId('cbioportal_base_url').value = data.cbioportal_base_url;
   byId('cbioportal_timeout_secs').value = data.cbioportal_timeout_secs;
 
@@ -181,6 +182,7 @@ async function saveSettings() {
     scihub_adaptive_backoff_secs: Number(byId('scihub_adaptive_backoff_secs').value || 300),
     scihub_adaptive_probe_every: Number(byId('scihub_adaptive_probe_every').value || 10),
     scihub_adaptive_min_step_timeout_secs: Number(byId('scihub_adaptive_min_step_timeout_secs').value || 3),
+    phase4_structural_source_only: byId('phase4_structural_source_only').checked,
     cbioportal_base_url: byId('cbioportal_base_url').value,
     cbioportal_timeout_secs: Number(byId('cbioportal_timeout_secs').value || 10),
     openai_api_key: byId('openai_api_key').value || null,
@@ -579,6 +581,13 @@ __NAV__
 
       <section id="tab-runtime" class="tab-panel card p-4">
         <h3 class="settings-section-title">Runtime Notes</h3>
+        <div class="form-grid" style="margin-bottom:0.85rem;">
+          <div class="form-group">
+            <label for="phase4_structural_source_only">Phase 4 Structural Source-Only Mode</label>
+            <input id="phase4_structural_source_only" type="checkbox" />
+            <div class="help-text">When enabled, n5/n6 ignore KG structural proxies and require source-backed structural signals.</div>
+          </div>
+        </div>
         <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
         <div class="security-note" style="margin-top:0.8rem;">
           <strong style="color:var(--text-main);">IronClaw Sync Status</strong>
@@ -698,6 +707,8 @@ pub struct SettingsView {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default)]
+    phase4_structural_source_only: bool,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -810,6 +821,8 @@ pub struct SettingsSaveRequest {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default)]
+    phase4_structural_source_only: bool,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -1329,6 +1342,11 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             default_scihub_adaptive_min_step_timeout_secs(),
         )
         .clamp(2, 60),
+        phase4_structural_source_only: bool_at(
+            &root,
+            &["ranker", "phase4", "structural_source_only"],
+            false,
+        ),
         cbioportal_base_url: {
             let toml_value = str_at(
                 &root,
@@ -1654,6 +1672,11 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     );
 
     let ranker = table_mut(&mut root, "ranker");
+    let phase4 = nested_table_mut(ranker, "phase4");
+    phase4.insert(
+        "structural_source_only".to_string(),
+        toml::Value::Boolean(payload.phase4_structural_source_only),
+    );
     let providers = nested_table_mut(ranker, "providers");
     let cbioportal = nested_table_mut(providers, "cbioportal");
     set_str(
@@ -2063,6 +2086,16 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     std::env::set_var(
         "FERRUMYX_INGESTION_ASYNC_POST_SCORE",
         if ingestion_async_post_ingest_scoring {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let phase4_structural_source_only =
+        bool_at(root, &["ranker", "phase4", "structural_source_only"], false);
+    std::env::set_var(
+        "FERRUMYX_PHASE4_STRUCTURAL_SOURCE_ONLY",
+        if phase4_structural_source_only {
             "1"
         } else {
             "0"
