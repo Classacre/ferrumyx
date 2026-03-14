@@ -5,7 +5,7 @@
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
 **Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening and performance optimization in progress)  
-**Date:** 2026-03-12
+**Date:** 2026-03-14
 
 ---
 
@@ -28,12 +28,13 @@
 
 ---
 
-## Current Implementation Snapshot (2026-03-12)
+## Current Implementation Snapshot (2026-03-14)
 
 - Phase 1-3 functionality is operational end-to-end with IronClaw as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
 - Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
 - Settings are tab-organized and now drive secure API configuration for active providers (Ollama, OpenAI, Anthropic, Gemini, OpenAI-compatible), including cached-chat toggle support for compatible providers.
-- Ingestion performance hardening is active: source caching, negative full-text cache, chunk fingerprint cache, DOI/PMID batch prefetch dedupe, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
+- Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, DOI/PMID batch prefetch dedupe, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
+- Sci-Hub fallback now includes settings-driven mirror parallelism/cooldown and adaptive fallback controls (deferred launch, failure-streak backoff, probe cadence, and adaptive step budgets) to keep full-text retrieval fast under mirror instability.
 - Metrics include live ingestion performance telemetry (`/api/metrics/perf`) and persisted snapshots for run-to-run benchmarking.
 - KG/query surfaces now use bounded/aggregated paths to avoid large table scans and keep UI/API latency stable under larger corpora.
 - Sci-Hub support is multi-domain and settings-driven (domain list + timeout), aligned to currently active mirrors.
@@ -576,7 +577,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 **Extension mechanisms used:**
 
 1.  **Custom tool registration:** Ferrumyx registers its specialized domain tools (`IngestPubmedTool`, `KgQueryTool`, `DockMoleculeTool`, etc.) via IronClaw's tool registry.
-2.  **Autonomous Tool Creation:** IronClaw agents can autonomously define and register temporary new tools or routines to solve specific scientific bottlenecks identified during the self-optimization cycle.
+2.  **Autonomous Tool Creation (framework capability):** IronClaw exposes primitives for dynamic routines/tooling, but current Ferrumyx runtime primarily uses a fixed registered tool surface plus guarded host-command execution (`run_system_command`) for autonomous remediation.
 3.  **Core Agent Loop Orchestration:** Ferrumyx embeds the `Agent` runtime within `ferrumyx-agent`. The agent is the primary decision-maker, autonomously interpreting results, adjusting parameters, and executing complex multi-step workflows without human intervention.
 4.  **Custom routines:** Ferrumyx leverages the IronClaw routines engine for continuous background optimization, with agents deciding when to re-score or re-prioritize based on incoming data streams.
 5.  **LLM execution:** IronClaw's native LLM abstraction handles routing to local (Ollama) or remote (OpenAI/Anthropic) backends based on data classification and agent needs.
@@ -586,7 +587,7 @@ Rationale: Forking IronClaw means carrying the maintenance burden of diverging f
 
 ---
 
-## 1.9 Phase 1 Implementation Audit (2026-03-12)
+## 1.9 Phase 1 Implementation Audit (2026-03-14)
 
 Reality check against current codebase (`crates/ferrumyx-*` + vendored `ironclaw`):
 
@@ -704,7 +705,7 @@ Added capabilities now present in code:
 
 ## 2.2 Paper Discovery Tool
 
-The paper discovery tool is an IronClaw WASM tool that translates a structured `DiscoveryRequest` (gene symbol, mutation, cancer type, date range, optional keyword modifiers) into source-specific query strings and fans out to all enabled sources in parallel.
+The paper discovery path is implemented as native Rust Ferrumyx/IronClaw tooling that translates a structured `DiscoveryRequest` (gene symbol, mutation, cancer type, date range, optional keyword modifiers) into source-specific query strings and fans out to all enabled sources in parallel.
 
 ### Query Construction Logic
 
@@ -1370,7 +1371,7 @@ Cross-reference: handled by `ingestion_audit` table (Phase 1, §1.4) with `actio
 
 ---
 
-## 2.12 Phase 2 Implementation Audit (2026-03-12)
+## 2.12 Phase 2 Implementation Audit (2026-03-14)
 
 Implemented in production code:
 
@@ -1384,9 +1385,11 @@ Implemented in production code:
 - [x] Ingestion API key settings include PubMed + Semantic Scholar and are wired to agent + web ingestion paths.
 - [x] Source-search cache + TTL controls and persistence are active.
 - [x] Full-text negative cache + TTL controls are active to avoid repeated dead-end fetch attempts.
+- [x] Full-text success cache + TTL controls are active to skip repeated successful fetch/parse work.
 - [x] Chunk-fingerprint cache + TTL controls are active to skip redundant heavy NER/relation passes.
 - [x] Batch DOI/PMID prefetch dedup is implemented to reduce per-paper DB round-trips.
 - [x] Adaptive worker tuning and fast-lane/heavy-lane async enrichment are implemented for higher sustained throughput.
+- [x] Sci-Hub fallback is now adaptive and settings-driven (mirror parallelism/cooldown + defer/backoff/probe/budget controls) for better degraded-mode throughput.
 - [x] Ingestion performance snapshots are persisted and exposed via `/api/metrics/perf`.
 
 Partially implemented / pending:
@@ -1722,7 +1725,7 @@ Rationale: For the MVP cancer domain (KRAS G12D PDAC), the knowledge graph will 
 
 **Trigger for dedicated graph adoption:** If at Month 12, path traversal queries on >5M facts exceed 500ms P95 latency for common patterns. If adopted, the graph DB is a read-only analytical mirror updated via CDC; LanceDB remains the write-primary source of truth.
 
-## 3.9 Completion Status (2026-03-12)
+## 3.9 Completion Status (2026-03-14)
 
 Phase 3 is now treated as complete for the current codebase baseline.
 
@@ -1907,7 +1910,7 @@ OUTPUT FIELDS (per candidate):
   component_score_breakdown[9], shortlist_tier, flags[], warnings[]
 ```
 
-## 4.6 Phase 4 Kickoff Status (2026-03-12)
+## 4.6 Phase 4 Kickoff Status (2026-03-14)
 
 - [x] Cohort scoring now runs at **gene-level** rather than per-fact row expansion.
 - [x] Random/hash fallback metrics removed from target query path.
@@ -1918,6 +1921,8 @@ OUTPUT FIELDS (per candidate):
 
 Remaining Phase 4 hardening work:
 - [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
+- [ ] Fully source-back `n1` mutation frequency from dedicated oncology frequency providers (COSMIC/cBioPortal) for broad cohorts.
+- [ ] Fully source-back `n5`/`n6` structural components from stable structural pipeline outputs (PDB/AlphaFold/fpocket) without proxy fallback for larger cohorts.
 - [x] Add explicit percentile field and richer component breakdown in API output.
 - [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
   - Note: legacy databases without these columns are handled via backward-compatible runtime dedupe; new/updated tables use native `score_version` + `is_current`.
@@ -1934,6 +1939,16 @@ Remaining Phase 4 hardening work:
 - [x] Autonomous cycle now runs provider refresh before ranking so iterative runs progressively replace proxy/semantic fallbacks with source-backed cache signals.
 - [~] `n9` (literature novelty) now derives from paper publication metadata (`papers.published_at`) when available (`papers_metadata`), with fallback to evidence-density proxy.
 - [~] Remaining: evolve staged refresh into background scheduled jobs with persistence of run history, alerting, and adaptive refresh cadence by provider staleness/error rate.
+
+### 4.7 Phase 4 Review (2026-03-14)
+
+Reality check against code:
+
+- Scoring core (weights, rank-normalization, penalties, shortlist thresholds, `DISPUTED` and hard-exclusion flags) aligns with architecture design.
+- Versioned score persistence is aligned (`score_version`, `is_current`) with backward compatibility for legacy tables.
+- Source-backed provider integration is materially advanced for `n2`, `n3`, `n4`, `n7`, and `n8` via cached signal tables + bounded runtime fetch.
+- `component_sources` is exposed per result so proxy-vs-source-backed provenance is explicit at query time.
+- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially `n1`, `n5`, and `n6`.
 
 ---
 

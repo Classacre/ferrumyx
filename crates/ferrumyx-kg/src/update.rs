@@ -54,8 +54,12 @@ pub fn start_scoring_event_queue(db: Arc<Database>) -> mpsc::UnboundedSender<KgU
                             "Confidence delta > 0.05 for target {:?}. Queuing re-score...",
                             subject_id
                         );
-                        // Trigger async recompute
-                        if let Err(e) = crate::scoring::compute_target_scores(db.clone()).await {
+                        if let Err(e) = crate::scoring::compute_target_scores_for_gene_ids(
+                            db.clone(),
+                            &[subject_id],
+                        )
+                        .await
+                        {
                             warn!("Failed to re-score targets: {}", e);
                         }
                     }
@@ -70,7 +74,12 @@ pub fn start_scoring_event_queue(db: Arc<Database>) -> mpsc::UnboundedSender<KgU
                             "New strong fact added for target {:?}. Queuing re-score...",
                             subject_id
                         );
-                        if let Err(e) = crate::scoring::compute_target_scores(db.clone()).await {
+                        if let Err(e) = crate::scoring::compute_target_scores_for_gene_ids(
+                            db.clone(),
+                            &[subject_id],
+                        )
+                        .await
+                        {
                             warn!("Failed to re-score targets: {}", e);
                         }
                     }

@@ -20,7 +20,9 @@ use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::time::Instant as StdInstant;
 use tempfile::NamedTempFile;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
@@ -48,7 +50,7 @@ use crate::sources::LiteratureSource;
 use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType, KgFact};
-use ferrumyx_kg::extraction::build_facts;
+use ferrumyx_kg::extraction::build_facts_batch;
 use ferrumyx_kg::ner::{EntityType as NerEntityType, TrieNer};
 use sha2::{Digest, Sha256};
 
@@ -56,6 +58,17 @@ static SHARED_NER: OnceCell<Arc<TrieNer>> = OnceCell::const_new();
 static PDF_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static PDF_HOST_LIMITS: OnceLock<std::sync::Mutex<HashMap<String, Arc<Semaphore>>>> =
     OnceLock::new();
+static HEAVY_LANE_LIMITER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+static SCIHUB_ADAPTIVE_STATE: OnceLock<Mutex<ScihubAdaptiveState>> = OnceLock::new();
+
+#[derive(Debug, Default)]
+struct ScihubAdaptiveState {
+    attempts: u64,
+    successes: u64,
+    consecutive_failures: u64,
+    cooldown_until: Option<StdInstant>,
+    cooldown_skips: u64,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ParsedPdfCacheEntry {
@@ -302,7 +315,9 @@ pub async fn run_ingestion(
     let ner = match get_or_init_ner().await {
         Ok(ner) => ner,
         Err(e) => {
-            let msg = format!("Failed to initialize NER with complete databases: {e}. Ingestion aborted to ensure quality.");
+            let msg = format!(
+                "Failed to initialize NER with complete databases: {e}. Ingestion aborted to ensure quality."
+            );
             warn!("{}", &msg);
             return IngestionResult {
                 job_id,
@@ -810,12 +825,26 @@ fn resolve_full_text_negative_cache_enabled() -> bool {
         .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
 }
 
+fn resolve_full_text_success_cache_enabled() -> bool {
+    std::env::var("FERRUMYX_FULLTEXT_SUCCESS_CACHE_ENABLED")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+}
+
 fn resolve_full_text_negative_cache_ttl_secs() -> u64 {
     std::env::var("FERRUMYX_FULLTEXT_NEGATIVE_CACHE_TTL_SECS")
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .unwrap_or(6 * 60 * 60)
         .clamp(60, 7 * 24 * 60 * 60)
+}
+
+fn resolve_full_text_success_cache_ttl_secs() -> u64 {
+    std::env::var("FERRUMYX_FULLTEXT_SUCCESS_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(7 * 24 * 60 * 60)
+        .clamp(300, 30 * 24 * 60 * 60)
 }
 
 fn resolve_chunk_fingerprint_cache_enabled() -> bool {
@@ -838,12 +867,70 @@ fn resolve_heavy_lane_async_enabled() -> bool {
         .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 }
 
+fn resolve_heavy_lane_max_inflight() -> usize {
+    std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| (n.get() * 2).clamp(2, 24))
+                .unwrap_or(8)
+        })
+        .clamp(1, 64)
+}
+
 fn resolve_max_relation_genes_per_chunk() -> usize {
     std::env::var("FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
         .unwrap_or(4)
         .clamp(1, 16)
+}
+
+fn resolve_scihub_defer_ms() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_DEFER_MS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(700)
+        .clamp(0, 10_000)
+}
+
+fn resolve_scihub_adaptive_enabled() -> bool {
+    std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_ENABLED")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+}
+
+fn resolve_scihub_adaptive_fail_streak() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_FAIL_STREAK")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(8)
+        .clamp(3, 200)
+}
+
+fn resolve_scihub_adaptive_backoff_secs() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_BACKOFF_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(300)
+        .clamp(15, 3600)
+}
+
+fn resolve_scihub_adaptive_probe_every() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_PROBE_EVERY")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(10)
+        .clamp(1, 256)
+}
+
+fn resolve_scihub_adaptive_min_step_timeout_secs() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_MIN_STEP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(3)
+        .clamp(2, 60)
 }
 
 fn paper_process_workers_from_config() -> Option<usize> {
@@ -912,11 +999,24 @@ fn full_text_negative_cache_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("data/cache/full_text_negative"))
 }
 
+fn full_text_success_cache_dir() -> PathBuf {
+    std::env::var("FERRUMYX_FULLTEXT_SUCCESS_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("data/cache/full_text_success"))
+}
+
 fn full_text_negative_cache_path(key: &str) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     key.hash(&mut hasher);
     let digest = hasher.finish();
     full_text_negative_cache_dir().join(format!("{digest:016x}.json"))
+}
+
+fn full_text_success_cache_path(key: &str) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    let digest = hasher.finish();
+    full_text_success_cache_dir().join(format!("{digest:016x}.json"))
 }
 
 fn chunk_fingerprint_cache_dir() -> PathBuf {
@@ -973,6 +1073,39 @@ fn clear_full_text_negative(key: &str) {
         return;
     }
     let _ = std::fs::remove_file(full_text_negative_cache_path(key));
+}
+
+fn load_full_text_success(key: &str) -> Option<Vec<DocumentSection>> {
+    if !resolve_full_text_success_cache_enabled() {
+        return None;
+    }
+    let ttl = resolve_full_text_success_cache_ttl_secs();
+    let path = full_text_success_cache_path(key);
+    let meta = std::fs::metadata(&path).ok()?;
+    let modified = meta.modified().ok()?;
+    let age = modified.elapsed().ok()?.as_secs();
+    if age > ttl {
+        let _ = std::fs::remove_file(path);
+        return None;
+    }
+    let payload = std::fs::read_to_string(path).ok()?;
+    let sections: Vec<DocumentSection> = serde_json::from_str(&payload).ok()?;
+    if sections.is_empty() {
+        None
+    } else {
+        Some(sections)
+    }
+}
+
+fn save_full_text_success(key: &str, sections: &[DocumentSection]) {
+    if !resolve_full_text_success_cache_enabled() || sections.is_empty() {
+        return;
+    }
+    let dir = full_text_success_cache_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(payload) = serde_json::to_string(sections) {
+        let _ = std::fs::write(full_text_success_cache_path(key), payload);
+    }
 }
 
 fn chunk_fingerprint_seen_or_mark(hash: &str) -> bool {
@@ -1396,16 +1529,22 @@ async fn process_single_paper(
         let paper_bg = paper.clone();
         let chunks_bg = chunks.clone();
         let embed_bg = embed_client.clone();
+        let limiter = HEAVY_LANE_LIMITER
+            .get_or_init(|| Arc::new(Semaphore::new(resolve_heavy_lane_max_inflight())))
+            .clone();
         tokio::spawn(async move {
-            let _ =
-                run_heavy_enrichment_for_chunks(paper_bg, paper_id, chunks_bg, repo_bg, ner_bg, embed_bg)
-                    .await;
+            let _permit = limiter.acquire_owned().await.ok();
+            let _ = run_heavy_enrichment_for_chunks(
+                paper_bg, paper_id, chunks_bg, repo_bg, ner_bg, embed_bg,
+            )
+            .await;
         });
         let _ = repo.set_parse_status(paper_id, "parsed_fast").await;
         return out;
     }
 
-    let heavy = run_heavy_enrichment_for_chunks(paper, paper_id, chunks, repo, ner, embed_client).await;
+    let heavy =
+        run_heavy_enrichment_for_chunks(paper, paper_id, chunks, repo, ner, embed_client).await;
     out.chunks_embedded += heavy.chunks_embedded;
     out.errors.extend(heavy.errors);
 
@@ -1507,24 +1646,32 @@ async fn run_heavy_enrichment_for_chunks(
         let mut genes_for_relations: Vec<(String, f32)> = genes_for_relations.into_iter().collect();
         genes_for_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
         genes_for_relations.truncate(max_relation_genes);
-        for (gene_symbol, gene_confidence) in genes_for_relations {
-            for mut fact in build_facts(&gene_symbol, &chunk.content) {
-                if fact.fact_type != "has_mutation" {
-                    if let Some(code) = cancer_normaliser.normalise(&fact.object) {
-                        fact.object = code;
-                    }
+        let gene_confidence_map: HashMap<String, f32> = genes_for_relations
+            .iter()
+            .map(|(g, c)| (g.to_uppercase(), *c))
+            .collect();
+        let relation_genes = genes_for_relations
+            .iter()
+            .map(|(g, _)| g.clone())
+            .collect::<Vec<_>>();
+        for mut fact in build_facts_batch(&relation_genes, &chunk.content) {
+            let gene_symbol = fact.subject.to_uppercase();
+            let gene_confidence = *gene_confidence_map.get(&gene_symbol).unwrap_or(&0.8);
+            if fact.fact_type != "has_mutation" {
+                if let Some(code) = cancer_normaliser.normalise(&fact.object) {
+                    fact.object = code;
                 }
-                let object_type = infer_object_type(&fact.fact_type, &fact.object);
-                unique_candidates
-                    .entry(canonical_key(object_type, &fact.object))
-                    .or_insert((object_type, fact.object.clone()));
-                relation_seeds.push(RelationFactSeed {
-                    gene_symbol: gene_symbol.clone(),
-                    predicate: fact.fact_type.clone(),
-                    object_name: fact.object.clone(),
-                    confidence: gene_confidence,
-                });
             }
+            let object_type = infer_object_type(&fact.fact_type, &fact.object);
+            unique_candidates
+                .entry(canonical_key(object_type, &fact.object))
+                .or_insert((object_type, fact.object.clone()));
+            relation_seeds.push(RelationFactSeed {
+                gene_symbol: gene_symbol.clone(),
+                predicate: fact.fact_type.clone(),
+                object_name: fact.object.clone(),
+                confidence: gene_confidence,
+            });
         }
     }
 
@@ -1701,6 +1848,89 @@ async fn resolve_or_create_entities_bulk(
     Ok(())
 }
 
+fn scihub_adaptive_should_attempt() -> bool {
+    if !resolve_scihub_adaptive_enabled() {
+        return true;
+    }
+    let now = StdInstant::now();
+    let state = SCIHUB_ADAPTIVE_STATE.get_or_init(|| Mutex::new(ScihubAdaptiveState::default()));
+    let Ok(mut guard) = state.lock() else {
+        return true;
+    };
+    if let Some(until) = guard.cooldown_until {
+        if now < until {
+            let probe_every = resolve_scihub_adaptive_probe_every();
+            guard.cooldown_skips = guard.cooldown_skips.saturating_add(1);
+            return guard.cooldown_skips % probe_every == 0;
+        }
+        guard.cooldown_until = None;
+        guard.cooldown_skips = 0;
+    }
+    true
+}
+
+fn scihub_adaptive_step_timeout(base: std::time::Duration) -> std::time::Duration {
+    if !resolve_scihub_adaptive_enabled() {
+        return base;
+    }
+    let min_secs = resolve_scihub_adaptive_min_step_timeout_secs();
+    let state = SCIHUB_ADAPTIVE_STATE.get_or_init(|| Mutex::new(ScihubAdaptiveState::default()));
+    let Ok(guard) = state.lock() else {
+        return base;
+    };
+    if guard.attempts < 3 {
+        return base;
+    }
+    let mut secs = base.as_secs().max(1);
+    let success_rate = if guard.attempts == 0 {
+        1.0
+    } else {
+        guard.successes as f64 / guard.attempts as f64
+    };
+    let fail_streak = resolve_scihub_adaptive_fail_streak();
+    if guard.consecutive_failures >= 3 {
+        secs = secs.min(min_secs.saturating_add(1));
+    }
+    if guard.consecutive_failures >= fail_streak / 2 {
+        secs = secs.min(min_secs.saturating_add(2));
+    }
+    if guard.attempts >= 20 {
+        if success_rate < 0.05 {
+            secs = secs.min(min_secs);
+        } else if success_rate < 0.15 {
+            secs = secs.min(min_secs.saturating_add(1));
+        }
+    }
+    std::time::Duration::from_secs(secs.max(1))
+}
+
+fn scihub_adaptive_record_attempt(success: bool) {
+    if !resolve_scihub_adaptive_enabled() {
+        return;
+    }
+    let state = SCIHUB_ADAPTIVE_STATE.get_or_init(|| Mutex::new(ScihubAdaptiveState::default()));
+    let Ok(mut guard) = state.lock() else {
+        return;
+    };
+    guard.attempts = guard.attempts.saturating_add(1);
+    if success {
+        guard.successes = guard.successes.saturating_add(1);
+        guard.consecutive_failures = 0;
+        guard.cooldown_until = None;
+        guard.cooldown_skips = 0;
+        return;
+    }
+
+    guard.consecutive_failures = guard.consecutive_failures.saturating_add(1);
+    if guard.consecutive_failures >= resolve_scihub_adaptive_fail_streak() {
+        guard.cooldown_until = Some(
+            StdInstant::now()
+                + std::time::Duration::from_secs(resolve_scihub_adaptive_backoff_secs()),
+        );
+        guard.cooldown_skips = 0;
+    }
+}
+
 async fn fetch_full_text_sections_for_paper(
     paper: &crate::models::PaperMetadata,
     unpaywall_email: Option<&str>,
@@ -1710,7 +1940,10 @@ async fn fetch_full_text_sections_for_paper(
     let total_timeout = std::time::Duration::from_secs(
         resolve_full_text_total_timeout_secs().max(step_timeout.as_secs()),
     );
-    let deadline = tokio::time::Instant::now() + total_timeout;
+    let started_at = tokio::time::Instant::now();
+    let deadline = started_at + total_timeout;
+    let scihub_defer_ms = resolve_scihub_defer_ms();
+    let scihub_defer = std::time::Duration::from_millis(scihub_defer_ms);
     let mut set = tokio::task::JoinSet::new();
 
     if let Some(pdf_url) = paper.full_text_url.clone() {
@@ -1724,24 +1957,54 @@ async fn fetch_full_text_sections_for_paper(
             set.spawn(async move { try_unpaywall_path(&doi, &email, step_timeout).await });
         }
     }
-    if enable_scihub_fallback {
-        let identifier = paper.doi.clone().or(paper.pmid.clone());
-        if let Some(id) = identifier {
-            set.spawn(async move { try_scihub_path(&id, step_timeout).await });
-        }
-    }
-
-    if set.is_empty() {
-        return Ok(Vec::new());
-    }
+    let mut scihub_identifier = if enable_scihub_fallback {
+        paper.doi.clone().or(paper.pmid.clone())
+    } else {
+        None
+    };
+    let mut scihub_spawned = false;
 
     loop {
-        if tokio::time::Instant::now() >= deadline {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
             set.abort_all();
             return Ok(Vec::new());
         }
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        match timeout(remaining, set.join_next()).await {
+
+        // Prefer OA routes first, then launch Sci-Hub fallback after a short defer.
+        if !scihub_spawned {
+            let should_spawn_scihub = if set.is_empty() {
+                true
+            } else if scihub_defer_ms == 0 {
+                true
+            } else {
+                now.duration_since(started_at) >= scihub_defer
+            };
+            if should_spawn_scihub {
+                if let Some(id) = scihub_identifier.take() {
+                    scihub_spawned = true;
+                    set.spawn(async move { try_scihub_path(&id, step_timeout).await });
+                }
+            }
+        }
+
+        if set.is_empty() {
+            break;
+        }
+
+        let remaining = deadline.saturating_duration_since(now);
+        let mut wait_for = remaining;
+        if !scihub_spawned && !set.is_empty() && scihub_defer_ms > 0 {
+            let scihub_ready_at = started_at + scihub_defer;
+            if scihub_ready_at > now {
+                wait_for = wait_for.min(scihub_ready_at.saturating_duration_since(now));
+            }
+        }
+        if wait_for.is_zero() {
+            continue;
+        }
+
+        match timeout(wait_for, set.join_next()).await {
             Ok(Some(Ok(Ok(sections)))) => {
                 if !sections.is_empty() {
                     set.abort_all();
@@ -1752,8 +2015,8 @@ async fn fetch_full_text_sections_for_paper(
             Ok(Some(Err(_))) => {}
             Ok(None) => break,
             Err(_) => {
-                set.abort_all();
-                break;
+                // wait_for elapsed (e.g., Sci-Hub defer window reached); continue loop
+                continue;
             }
         }
     }
@@ -1765,12 +2028,16 @@ async fn try_open_pdf_url(
     step_timeout: std::time::Duration,
 ) -> anyhow::Result<Vec<DocumentSection>> {
     let cache_key = format!("pdf_url:{}", pdf_url.trim().to_lowercase());
+    if let Some(sections) = load_full_text_success(&cache_key) {
+        return Ok(sections);
+    }
     if full_text_negative_cached(&cache_key) {
         return Ok(Vec::new());
     }
     match timeout(step_timeout, fetch_and_parse_pdf(pdf_url)).await {
         Ok(Ok(sections)) if !sections.is_empty() => {
             clear_full_text_negative(&cache_key);
+            save_full_text_success(&cache_key, &sections);
             Ok(sections)
         }
         _ => {
@@ -1785,6 +2052,9 @@ async fn try_pmc_paths(
     step_timeout: std::time::Duration,
 ) -> anyhow::Result<Vec<DocumentSection>> {
     let cache_key = format!("pmcid:{}", pmcid_raw.trim().to_lowercase());
+    if let Some(sections) = load_full_text_success(&cache_key) {
+        return Ok(sections);
+    }
     if full_text_negative_cached(&cache_key) {
         return Ok(Vec::new());
     }
@@ -1799,6 +2069,7 @@ async fn try_pmc_paths(
         let sections = parse_pmc_xml_sections(&xml);
         if !sections.is_empty() {
             clear_full_text_negative(&cache_key);
+            save_full_text_success(&cache_key, &sections);
             return Ok(sections);
         }
     }
@@ -1810,6 +2081,7 @@ async fn try_pmc_paths(
     if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&epmc_url)).await {
         if !sections.is_empty() {
             clear_full_text_negative(&cache_key);
+            save_full_text_success(&cache_key, &sections);
             return Ok(sections);
         }
     }
@@ -1823,6 +2095,9 @@ async fn try_unpaywall_path(
     step_timeout: std::time::Duration,
 ) -> anyhow::Result<Vec<DocumentSection>> {
     let cache_key = format!("doi:{}", doi.trim().to_lowercase());
+    if let Some(sections) = load_full_text_success(&cache_key) {
+        return Ok(sections);
+    }
     if full_text_negative_cached(&cache_key) {
         return Ok(Vec::new());
     }
@@ -1831,6 +2106,7 @@ async fn try_unpaywall_path(
         if let Ok(Ok(sections)) = timeout(step_timeout, fetch_and_parse_pdf(&pdf_url)).await {
             if !sections.is_empty() {
                 clear_full_text_negative(&cache_key);
+                save_full_text_success(&cache_key, &sections);
                 return Ok(sections);
             }
         }
@@ -1843,19 +2119,52 @@ async fn try_scihub_path(
     identifier: &str,
     step_timeout: std::time::Duration,
 ) -> anyhow::Result<Vec<DocumentSection>> {
+    if !scihub_adaptive_should_attempt() {
+        debug!(
+            identifier = identifier,
+            "Skipping Sci-Hub attempt due to adaptive global backoff"
+        );
+        return Ok(Vec::new());
+    }
+
     let cache_key = format!("scihub:{}", identifier.trim().to_lowercase());
+    if let Some(sections) = load_full_text_success(&cache_key) {
+        return Ok(sections);
+    }
     if full_text_negative_cached(&cache_key) {
         return Ok(Vec::new());
     }
+
+    let budget = scihub_adaptive_step_timeout(step_timeout);
+    let deadline = tokio::time::Instant::now() + budget;
     let scihub = crate::sources::scihub::SciHubClient::new();
-    if let Ok(Ok(Some(pdf_bytes))) = timeout(step_timeout, scihub.download_pdf(identifier)).await {
-        if let Ok(Ok(sections)) = timeout(step_timeout, parse_pdf_bytes(&pdf_bytes)).await {
+
+    let download_remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+    if download_remaining.is_zero() {
+        scihub_adaptive_record_attempt(false);
+        save_full_text_negative(&cache_key, "scihub_budget_exhausted_before_download");
+        return Ok(Vec::new());
+    }
+
+    if let Ok(Ok(Some(pdf_bytes))) =
+        timeout(download_remaining, scihub.download_pdf(identifier)).await
+    {
+        let parse_remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if parse_remaining.is_zero() {
+            scihub_adaptive_record_attempt(false);
+            save_full_text_negative(&cache_key, "scihub_budget_exhausted_before_parse");
+            return Ok(Vec::new());
+        }
+        if let Ok(Ok(sections)) = timeout(parse_remaining, parse_pdf_bytes(&pdf_bytes)).await {
             if !sections.is_empty() {
+                scihub_adaptive_record_attempt(true);
                 clear_full_text_negative(&cache_key);
+                save_full_text_success(&cache_key, &sections);
                 return Ok(sections);
             }
         }
     }
+    scihub_adaptive_record_attempt(false);
     save_full_text_negative(&cache_key, "scihub_path_failed");
     Ok(Vec::new())
 }

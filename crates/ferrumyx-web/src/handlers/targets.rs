@@ -144,8 +144,10 @@ pub async fn api_target_detail(
         .filter(|f| !f.paper_id.is_nil())
         .map(|f| f.paper_id)
         .collect();
-    let paper_title_cache: HashMap<uuid::Uuid, String> =
-        paper_repo.find_titles_by_ids(&paper_ids).await.unwrap_or_default();
+    let paper_title_cache: HashMap<uuid::Uuid, String> = paper_repo
+        .find_titles_by_ids(&paper_ids)
+        .await
+        .unwrap_or_default();
     let mut kg_facts = Vec::new();
     let mut literature = Vec::new();
 

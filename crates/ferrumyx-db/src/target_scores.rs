@@ -91,8 +91,85 @@ impl TargetScoreRepository {
         if scores.is_empty() {
             return Ok(0);
         }
-        for score in scores {
-            self.upsert(score).await?;
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_TARGET_SCORES)
+            .execute()
+            .await?;
+        let has_versioning = table_has_versioning(&table).await?;
+
+        if has_versioning {
+            let mut next_versions: HashMap<(uuid::Uuid, uuid::Uuid), i64> = HashMap::new();
+            let chunk = 20usize;
+            let mut dedup_pairs: Vec<(uuid::Uuid, uuid::Uuid)> =
+                scores.iter().map(|s| (s.gene_id, s.cancer_id)).collect();
+            dedup_pairs.sort_unstable();
+            dedup_pairs.dedup();
+
+            for pairs in dedup_pairs.chunks(chunk) {
+                let filter = pairs
+                    .iter()
+                    .map(|(g, c)| format!("(gene_id = '{}' AND cancer_id = '{}')", g, c))
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                if filter.is_empty() {
+                    continue;
+                }
+                let mut stream = table.query().only_if(&filter).execute().await?;
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    for row in 0..batch.num_rows() {
+                        let existing = record_to_target_score(&batch, row)?;
+                        let key = (existing.gene_id, existing.cancer_id);
+                        let cur = next_versions.entry(key).or_insert(0);
+                        *cur = (*cur).max(existing.score_version);
+                    }
+                }
+            }
+
+            for pair in &dedup_pairs {
+                let _ = next_versions.entry(*pair).or_insert(0);
+            }
+
+            for pairs in dedup_pairs.chunks(chunk) {
+                let filter = pairs
+                    .iter()
+                    .map(|(g, c)| format!("(gene_id = '{}' AND cancer_id = '{}')", g, c))
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                if filter.is_empty() {
+                    continue;
+                }
+                table
+                    .update()
+                    .only_if(format!("({filter}) AND is_current = true"))
+                    .column("is_current", "false")
+                    .execute()
+                    .await?;
+            }
+
+            let mut versioned_rows = Vec::with_capacity(scores.len());
+            for score in scores {
+                let key = (score.gene_id, score.cancer_id);
+                let base = next_versions.get(&key).copied().unwrap_or(0);
+                let mut updated = score.clone();
+                updated.score_version = base + 1;
+                updated.is_current = true;
+                next_versions.insert(key, updated.score_version);
+                versioned_rows.push(updated);
+            }
+            let record = target_scores_to_record_batch(&versioned_rows, true)?;
+            let schema = record.schema();
+            let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
+            table.add(iter).execute().await?;
+        } else {
+            let record = target_scores_to_record_batch(scores, false)?;
+            let schema = record.schema();
+            let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
+            let mut builder = table.merge_insert(&["gene_id", "cancer_id"]);
+            builder.when_matched_update_all(None);
+            builder.execute(Box::new(iter)).await?;
         }
         Ok(scores.len())
     }
@@ -210,6 +287,43 @@ impl TargetScoreRepository {
         Ok(out)
     }
 
+    /// Delete all score rows for a bounded set of genes.
+    /// This is used by incremental recompute to prevent stale rows for impacted genes.
+    pub async fn delete_by_gene_ids(
+        &self,
+        gene_ids: &[uuid::Uuid],
+        chunk_size: usize,
+    ) -> Result<u64> {
+        if gene_ids.is_empty() {
+            return Ok(0);
+        }
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_TARGET_SCORES)
+            .execute()
+            .await?;
+
+        let mut uniq = gene_ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+        let chunk = chunk_size.max(1).min(500);
+
+        for ids in uniq.chunks(chunk) {
+            let filter = ids
+                .iter()
+                .map(|id| format!("gene_id = '{}'", id))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            if filter.is_empty() {
+                continue;
+            }
+            let where_clause = format!("({filter})");
+            table.delete(&where_clause).await?;
+        }
+        Ok(0)
+    }
+
     /// Count rows in target_scores table.
     pub async fn count(&self) -> Result<u64> {
         let table = self
@@ -306,6 +420,105 @@ fn target_score_to_record(score: &TargetScore, include_versioning: bool) -> Resu
         Arc::new(StringArray::from(vec![score.components_raw.clone()])),
         Arc::new(StringArray::from(vec![score.components_normed.clone()])),
         Arc::new(StringArray::from(vec![score.created_at.to_rfc3339()])),
+    ]);
+
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
+fn target_scores_to_record_batch(
+    scores: &[TargetScore],
+    include_versioning: bool,
+) -> Result<RecordBatch> {
+    if scores.is_empty() {
+        return Err(DbError::Arrow(
+            "cannot build empty target score batch".to_string(),
+        ));
+    }
+
+    let mut fields = vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("gene_id", DataType::Utf8, false),
+        Field::new("cancer_id", DataType::Utf8, false),
+    ];
+    if include_versioning {
+        fields.push(Field::new("score_version", DataType::Int64, false));
+        fields.push(Field::new("is_current", DataType::Boolean, false));
+    }
+    fields.extend([
+        Field::new("composite_score", DataType::Float64, false),
+        Field::new("confidence_adjusted_score", DataType::Float64, false),
+        Field::new("penalty_score", DataType::Float64, false),
+        Field::new("shortlist_tier", DataType::Utf8, false),
+        Field::new("components_raw", DataType::Utf8, false),
+        Field::new("components_normed", DataType::Utf8, false),
+        Field::new("created_at", DataType::Utf8, false),
+    ]);
+    let schema = Arc::new(Schema::new(fields));
+
+    let mut cols: Vec<Arc<dyn arrow_array::Array>> = vec![
+        Arc::new(StringArray::from(
+            scores.iter().map(|s| s.id.to_string()).collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.gene_id.to_string())
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.cancer_id.to_string())
+                .collect::<Vec<_>>(),
+        )),
+    ];
+
+    if include_versioning {
+        cols.push(Arc::new(Int64Array::from(
+            scores.iter().map(|s| s.score_version).collect::<Vec<_>>(),
+        )));
+        cols.push(Arc::new(BooleanArray::from(
+            scores.iter().map(|s| s.is_current).collect::<Vec<_>>(),
+        )));
+    }
+
+    cols.extend([
+        Arc::new(Float64Array::from(
+            scores.iter().map(|s| s.composite_score).collect::<Vec<_>>(),
+        )) as Arc<dyn arrow_array::Array>,
+        Arc::new(Float64Array::from(
+            scores
+                .iter()
+                .map(|s| s.confidence_adjusted_score)
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(Float64Array::from(
+            scores.iter().map(|s| s.penalty_score).collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.shortlist_tier.clone())
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.components_raw.clone())
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.components_normed.clone())
+                .collect::<Vec<_>>(),
+        )),
+        Arc::new(StringArray::from(
+            scores
+                .iter()
+                .map(|s| s.created_at.to_rfc3339())
+                .collect::<Vec<_>>(),
+        )),
     ]);
 
     Ok(RecordBatch::try_new(schema, cols)?)

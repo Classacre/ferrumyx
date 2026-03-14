@@ -5,6 +5,8 @@
 
 use reqwest::Client;
 use scraper::{Html, Selector};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tracing::{debug, info, instrument, warn};
 use url::Url;
@@ -26,6 +28,9 @@ pub struct SciHubClient {
     client: Client,
     domains: Vec<String>,
 }
+
+static SCIHUB_DOMAIN_COOLDOWN: OnceLock<Mutex<HashMap<String, std::time::Instant>>> =
+    OnceLock::new();
 
 impl Default for SciHubClient {
     fn default() -> Self {
@@ -81,12 +86,56 @@ impl SciHubClient {
     pub async fn download_pdf(&self, identifier: &str) -> anyhow::Result<Option<Vec<u8>>> {
         info!("Attempting to fetch {} from Sci-Hub", identifier);
 
-        for domain in &self.domains {
-            debug!("Trying Sci-Hub domain: {}", domain);
-            match self.try_download_from_domain(domain, identifier).await {
-                Ok(Some(bytes)) => return Ok(Some(bytes)),
-                Ok(None) => debug!("Domain {} did not have the PDF", domain),
-                Err(e) => warn!("Error fetching from domain {}: {}", domain, e),
+        let candidate_domains: Vec<String> = self
+            .domains
+            .iter()
+            .filter(|domain| !domain_on_cooldown(domain))
+            .cloned()
+            .collect();
+
+        if candidate_domains.is_empty() {
+            debug!("Skipping Sci-Hub fetch: all mirrors are on cooldown");
+            return Ok(None);
+        }
+
+        let domain_parallelism = resolve_domain_parallelism()
+            .max(1)
+            .min(candidate_domains.len());
+        let mut set = tokio::task::JoinSet::new();
+        let mut next_idx = 0usize;
+        let identifier = identifier.to_string();
+
+        while next_idx < candidate_domains.len() || !set.is_empty() {
+            while next_idx < candidate_domains.len() && set.len() < domain_parallelism {
+                let domain = candidate_domains[next_idx].clone();
+                let client = self.client.clone();
+                let identifier = identifier.clone();
+                set.spawn(async move {
+                    let out = try_download_from_domain(client, &domain, &identifier).await;
+                    (domain, out)
+                });
+                next_idx += 1;
+            }
+
+            if let Some(joined) = set.join_next().await {
+                match joined {
+                    Ok((domain, Ok(Some(bytes)))) => {
+                        clear_domain_failure(&domain);
+                        set.abort_all();
+                        return Ok(Some(bytes));
+                    }
+                    Ok((domain, Ok(None))) => {
+                        clear_domain_failure(&domain);
+                        debug!("Domain {} did not have the PDF", domain);
+                    }
+                    Ok((domain, Err(e))) => {
+                        mark_domain_failure(&domain);
+                        warn!("Error fetching from domain {}: {}", domain, e);
+                    }
+                    Err(e) => {
+                        warn!("Sci-Hub mirror task failed: {}", e);
+                    }
+                }
             }
         }
 
@@ -96,131 +145,178 @@ impl SciHubClient {
         );
         Ok(None)
     }
+}
 
-    async fn try_download_from_domain(
-        &self,
-        domain: &str,
-        identifier: &str,
-    ) -> anyhow::Result<Option<Vec<u8>>> {
-        let search_url = format!("{}/{}", domain, identifier);
-        let resp = self
-            .client
-            .get(&search_url)
-            .header(
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .send()
-            .await?;
+fn resolve_domain_parallelism() -> usize {
+    std::env::var("FERRUMYX_SCIHUB_DOMAIN_PARALLELISM")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(4)
+        .clamp(1, 16)
+}
 
-        if !resp.status().is_success() {
-            debug!(
-                domain = domain,
-                identifier = identifier,
-                status = %resp.status(),
-                "Sci-Hub domain returned non-success"
+fn resolve_domain_cooldown_secs() -> u64 {
+    std::env::var("FERRUMYX_SCIHUB_DOMAIN_COOLDOWN_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(300)
+        .clamp(15, 3600)
+}
+
+fn domain_on_cooldown(domain: &str) -> bool {
+    let now = std::time::Instant::now();
+    let cache = SCIHUB_DOMAIN_COOLDOWN.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut guard) = cache.lock() else {
+        return false;
+    };
+    guard.retain(|_, until| *until > now);
+    guard.get(domain).is_some_and(|until| *until > now)
+}
+
+fn mark_domain_failure(domain: &str) {
+    let cache = SCIHUB_DOMAIN_COOLDOWN.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut guard) = cache.lock() else {
+        return;
+    };
+    guard.insert(
+        domain.to_string(),
+        std::time::Instant::now() + Duration::from_secs(resolve_domain_cooldown_secs()),
+    );
+}
+
+fn clear_domain_failure(domain: &str) {
+    let cache = SCIHUB_DOMAIN_COOLDOWN.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut guard) = cache.lock() else {
+        return;
+    };
+    guard.remove(domain);
+}
+
+async fn try_download_from_domain(
+    client: Client,
+    domain: &str,
+    identifier: &str,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    let search_url = format!("{}/{}", domain, identifier);
+    let resp = client
+        .get(&search_url)
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        debug!(
+            domain = domain,
+            identifier = identifier,
+            status = %resp.status(),
+            "Sci-Hub domain returned non-success"
+        );
+        if resp.status().is_server_error() || resp.status().as_u16() == 429 {
+            anyhow::bail!("Sci-Hub mirror unavailable: {}", resp.status());
+        }
+        return Ok(None);
+    }
+
+    let html_content = resp.text().await?;
+    let candidates = extract_candidate_urls(&html_content);
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+
+    for raw in candidates {
+        let Some(resolved) = normalize_candidate_url(domain, &raw) else {
+            continue;
+        };
+
+        if let Some(pdf) = try_download_candidate(&client, &resolved).await? {
+            info!(
+                "Downloaded Sci-Hub PDF from {} ({} bytes)",
+                resolved,
+                pdf.len()
             );
-            return Ok(None);
+            return Ok(Some(pdf));
         }
 
-        let html_content = resp.text().await?;
-        let candidates = extract_candidate_urls(&html_content);
-        if candidates.is_empty() {
-            return Ok(None);
-        }
-
-        for raw in candidates {
-            let Some(resolved) = normalize_candidate_url(domain, &raw) else {
-                continue;
-            };
-
-            if let Some(pdf) = self.try_download_candidate(&resolved).await? {
-                info!(
-                    "Downloaded Sci-Hub PDF from {} ({} bytes)",
-                    resolved,
-                    pdf.len()
-                );
-                return Ok(Some(pdf));
-            }
-
-            // Sci-Hub "not in DB" pages often contain OA links (e.g. doi.org).
-            if let Some(pdf) = self.try_pdf_from_landing_page(&resolved).await? {
-                info!(
-                    "Downloaded PDF from Sci-Hub landing fallback {} ({} bytes)",
-                    resolved,
-                    pdf.len()
-                );
-                return Ok(Some(pdf));
-            }
-        }
-
-        Ok(None)
-    }
-
-    async fn try_download_candidate(&self, resolved_url: &str) -> anyhow::Result<Option<Vec<u8>>> {
-        let resp = self
-            .client
-            .get(resolved_url)
-            .header(
-                "Accept",
-                "application/pdf,application/octet-stream,text/html;q=0.8,*/*;q=0.5",
-            )
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            return Ok(None);
-        }
-
-        let content_type = resp
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_lowercase();
-        let bytes = resp.bytes().await?.to_vec();
-
-        if bytes.len() >= 4 && &bytes[0..4] == b"%PDF" {
-            return Ok(Some(bytes));
-        }
-
-        if content_type.contains("application/pdf")
-            || content_type.contains("application/octet-stream")
-        {
-            debug!(
-                "Candidate looked like PDF by content-type but failed header check: {}",
-                resolved_url
+        // Sci-Hub "not in DB" pages often contain OA links (e.g. doi.org).
+        if let Some(pdf) = try_pdf_from_landing_page(&client, &resolved).await? {
+            info!(
+                "Downloaded PDF from Sci-Hub landing fallback {} ({} bytes)",
+                resolved,
+                pdf.len()
             );
+            return Ok(Some(pdf));
         }
-
-        Ok(None)
     }
 
-    async fn try_pdf_from_landing_page(&self, url: &str) -> anyhow::Result<Option<Vec<u8>>> {
-        let resp = self
-            .client
-            .get(url)
-            .header(
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .send()
-            .await?;
-        if !resp.status().is_success() {
-            return Ok(None);
-        }
-        let html = resp.text().await?;
-        let candidates = extract_candidate_urls(&html);
-        for raw in candidates {
-            let Some(resolved) = normalize_candidate_url(url, &raw) else {
-                continue;
-            };
-            if let Some(pdf) = self.try_download_candidate(&resolved).await? {
-                return Ok(Some(pdf));
-            }
-        }
-        Ok(None)
+    Ok(None)
+}
+
+async fn try_download_candidate(
+    client: &Client,
+    resolved_url: &str,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    let resp = client
+        .get(resolved_url)
+        .header(
+            "Accept",
+            "application/pdf,application/octet-stream,text/html;q=0.8,*/*;q=0.5",
+        )
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        return Ok(None);
     }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let bytes = resp.bytes().await?.to_vec();
+
+    if bytes.len() >= 4 && &bytes[0..4] == b"%PDF" {
+        return Ok(Some(bytes));
+    }
+
+    if content_type.contains("application/pdf") || content_type.contains("application/octet-stream")
+    {
+        debug!(
+            "Candidate looked like PDF by content-type but failed header check: {}",
+            resolved_url
+        );
+    }
+
+    Ok(None)
+}
+
+async fn try_pdf_from_landing_page(client: &Client, url: &str) -> anyhow::Result<Option<Vec<u8>>> {
+    let resp = client
+        .get(url)
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        return Ok(None);
+    }
+    let html = resp.text().await?;
+    let candidates = extract_candidate_urls(&html);
+    for raw in candidates {
+        let Some(resolved) = normalize_candidate_url(url, &raw) else {
+            continue;
+        };
+        if let Some(pdf) = try_download_candidate(client, &resolved).await? {
+            return Ok(Some(pdf));
+        }
+    }
+    Ok(None)
 }
 
 fn extract_candidate_urls(html: &str) -> Vec<String> {

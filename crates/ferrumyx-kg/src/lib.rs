@@ -10,4 +10,6 @@ pub mod update;
 
 pub use extraction::{build_facts, extract_cancer_type, extract_mutations, ExtractedFact};
 pub use repository::KgRepository;
-pub use scoring::compute_target_scores;
+pub use scoring::{
+    compute_target_scores, compute_target_scores_for_gene_ids, compute_target_scores_for_gene_names,
+};

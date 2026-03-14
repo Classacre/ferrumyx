@@ -53,9 +53,12 @@ struct IngestionRuntimeDefaults {
     pdf_parse_cache_enabled: bool,
     full_text_negative_cache_enabled: bool,
     full_text_negative_cache_ttl_secs: u64,
+    full_text_success_cache_enabled: bool,
+    full_text_success_cache_ttl_secs: u64,
     chunk_fingerprint_cache_enabled: bool,
     chunk_fingerprint_cache_ttl_secs: u64,
     heavy_lane_async_enabled: bool,
+    heavy_lane_max_inflight: usize,
     min_ner_chars: usize,
     max_relation_genes_per_chunk: usize,
     async_post_ingest_scoring: bool,
@@ -63,6 +66,14 @@ struct IngestionRuntimeDefaults {
     pubmed_api_key: Option<String>,
     semantic_scholar_api_key: Option<String>,
     unpaywall_email: Option<String>,
+    scihub_domain_parallelism: usize,
+    scihub_domain_cooldown_secs: u64,
+    scihub_defer_ms: u64,
+    scihub_adaptive_enabled: bool,
+    scihub_adaptive_fail_streak: u64,
+    scihub_adaptive_backoff_secs: u64,
+    scihub_adaptive_probe_every: u64,
+    scihub_adaptive_min_step_timeout_secs: u64,
     enable_embeddings: bool,
     embedding_cfg: Option<IngestionEmbeddingConfig>,
 }
@@ -157,6 +168,18 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(6 * 60 * 60)
             .clamp(60, 604_800),
+            full_text_success_cache_enabled: std::env::var(
+                "FERRUMYX_FULLTEXT_SUCCESS_CACHE_ENABLED",
+            )
+            .ok()
+            .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            full_text_success_cache_ttl_secs: std::env::var(
+                "FERRUMYX_FULLTEXT_SUCCESS_CACHE_TTL_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(7 * 24 * 60 * 60)
+            .clamp(300, 2_592_000),
             chunk_fingerprint_cache_enabled: std::env::var(
                 "FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED",
             )
@@ -172,6 +195,11 @@ impl Default for IngestionRuntimeDefaults {
             heavy_lane_async_enabled: std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_ASYNC")
                 .ok()
                 .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            heavy_lane_max_inflight: std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(8)
+                .clamp(1, 64),
             min_ner_chars: std::env::var("FERRUMYX_INGESTION_MIN_NER_CHARS")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
@@ -202,6 +230,46 @@ impl Default for IngestionRuntimeDefaults {
             unpaywall_email: std::env::var("FERRUMYX_UNPAYWALL_EMAIL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
+            scihub_domain_parallelism: std::env::var("FERRUMYX_SCIHUB_DOMAIN_PARALLELISM")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(4)
+                .clamp(1, 16),
+            scihub_domain_cooldown_secs: std::env::var("FERRUMYX_SCIHUB_DOMAIN_COOLDOWN_SECS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(300)
+                .clamp(15, 3600),
+            scihub_defer_ms: std::env::var("FERRUMYX_SCIHUB_DEFER_MS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(700)
+                .clamp(0, 10_000),
+            scihub_adaptive_enabled: std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_ENABLED")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            scihub_adaptive_fail_streak: std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_FAIL_STREAK")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(8)
+                .clamp(3, 200),
+            scihub_adaptive_backoff_secs: std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_BACKOFF_SECS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(300)
+                .clamp(15, 3600),
+            scihub_adaptive_probe_every: std::env::var("FERRUMYX_SCIHUB_ADAPTIVE_PROBE_EVERY")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(10)
+                .clamp(1, 256),
+            scihub_adaptive_min_step_timeout_secs: std::env::var(
+                "FERRUMYX_SCIHUB_ADAPTIVE_MIN_STEP_TIMEOUT_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(3)
+            .clamp(2, 60),
             enable_embeddings: std::env::var("FERRUMYX_INGESTION_ENABLE_EMBEDDINGS")
                 .ok()
                 .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -401,6 +469,25 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.full_text_negative_cache_ttl_secs,
     )
     .clamp(60, 604_800);
+    defaults.full_text_success_cache_enabled = toml_bool(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_success_cache_enabled",
+        ],
+        defaults.full_text_success_cache_enabled,
+    );
+    defaults.full_text_success_cache_ttl_secs = toml_u64(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_success_cache_ttl_secs",
+        ],
+        defaults.full_text_success_cache_ttl_secs,
+    )
+    .clamp(300, 2_592_000);
     defaults.chunk_fingerprint_cache_enabled = toml_bool(
         &root,
         &[
@@ -425,6 +512,12 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         &["ingestion", "performance", "heavy_lane_async_enabled"],
         defaults.heavy_lane_async_enabled,
     );
+    defaults.heavy_lane_max_inflight = toml_u64(
+        &root,
+        &["ingestion", "performance", "heavy_lane_max_inflight"],
+        defaults.heavy_lane_max_inflight as u64,
+    )
+    .clamp(1, 64) as usize;
     defaults.min_ner_chars = toml_u64(
         &root,
         &["ingestion", "performance", "min_ner_chars"],
@@ -467,6 +560,53 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.unpaywall_email =
             first_nonempty_toml_string(&root, &[&["ingestion", "unpaywall", "email"]]);
     }
+    defaults.scihub_domain_parallelism = toml_u64(
+        &root,
+        &["ingestion", "scihub", "domain_parallelism"],
+        defaults.scihub_domain_parallelism as u64,
+    )
+    .clamp(1, 16) as usize;
+    defaults.scihub_domain_cooldown_secs = toml_u64(
+        &root,
+        &["ingestion", "scihub", "domain_cooldown_secs"],
+        defaults.scihub_domain_cooldown_secs,
+    )
+    .clamp(15, 3600);
+    defaults.scihub_defer_ms = toml_u64(
+        &root,
+        &["ingestion", "scihub", "defer_ms"],
+        defaults.scihub_defer_ms,
+    )
+    .clamp(0, 10_000);
+    defaults.scihub_adaptive_enabled = toml_bool(
+        &root,
+        &["ingestion", "scihub", "adaptive_enabled"],
+        defaults.scihub_adaptive_enabled,
+    );
+    defaults.scihub_adaptive_fail_streak = toml_u64(
+        &root,
+        &["ingestion", "scihub", "adaptive_fail_streak"],
+        defaults.scihub_adaptive_fail_streak,
+    )
+    .clamp(3, 200);
+    defaults.scihub_adaptive_backoff_secs = toml_u64(
+        &root,
+        &["ingestion", "scihub", "adaptive_backoff_secs"],
+        defaults.scihub_adaptive_backoff_secs,
+    )
+    .clamp(15, 3600);
+    defaults.scihub_adaptive_probe_every = toml_u64(
+        &root,
+        &["ingestion", "scihub", "adaptive_probe_every"],
+        defaults.scihub_adaptive_probe_every,
+    )
+    .clamp(1, 256);
+    defaults.scihub_adaptive_min_step_timeout_secs = toml_u64(
+        &root,
+        &["ingestion", "scihub", "adaptive_min_step_timeout_secs"],
+        defaults.scihub_adaptive_min_step_timeout_secs,
+    )
+    .clamp(2, 60);
     defaults.enable_embeddings = toml_bool(
         &root,
         &["ingestion", "enable_embeddings"],
@@ -675,6 +815,18 @@ impl Tool for IngestionTool {
             defaults.full_text_negative_cache_ttl_secs.to_string(),
         );
         std::env::set_var(
+            "FERRUMYX_FULLTEXT_SUCCESS_CACHE_ENABLED",
+            if defaults.full_text_success_cache_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_FULLTEXT_SUCCESS_CACHE_TTL_SECS",
+            defaults.full_text_success_cache_ttl_secs.to_string(),
+        );
+        std::env::set_var(
             "FERRUMYX_CHUNK_FINGERPRINT_CACHE_ENABLED",
             if defaults.chunk_fingerprint_cache_enabled {
                 "1"
@@ -693,6 +845,10 @@ impl Tool for IngestionTool {
             } else {
                 "0"
             },
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT",
+            defaults.heavy_lane_max_inflight.to_string(),
         );
         std::env::set_var(
             "FERRUMYX_INGESTION_MIN_NER_CHARS",
@@ -715,6 +871,42 @@ impl Tool for IngestionTool {
             } else {
                 "0"
             },
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_DOMAIN_PARALLELISM",
+            defaults.scihub_domain_parallelism.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_DOMAIN_COOLDOWN_SECS",
+            defaults.scihub_domain_cooldown_secs.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_DEFER_MS",
+            defaults.scihub_defer_ms.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_ADAPTIVE_ENABLED",
+            if defaults.scihub_adaptive_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_ADAPTIVE_FAIL_STREAK",
+            defaults.scihub_adaptive_fail_streak.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_ADAPTIVE_BACKOFF_SECS",
+            defaults.scihub_adaptive_backoff_secs.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_ADAPTIVE_PROBE_EVERY",
+            defaults.scihub_adaptive_probe_every.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_SCIHUB_ADAPTIVE_MIN_STEP_TIMEOUT_SECS",
+            defaults.scihub_adaptive_min_step_timeout_secs.to_string(),
         );
 
         let gene = require_str(&params, "gene")?.to_string();
@@ -901,10 +1093,14 @@ impl Tool for IngestionTool {
         let mut provider_errors = 0u64;
         let scoring_mode = if defaults.async_post_ingest_scoring {
             let db_for_task = self.db.clone();
+            let scoring_gene = gene_for_refresh.clone();
             tokio::spawn(async move {
-                let recompute = ferrumyx_kg::compute_target_scores(db_for_task.clone())
-                    .await
-                    .unwrap_or(0);
+                let recompute = ferrumyx_kg::compute_target_scores_for_gene_names(
+                    db_for_task.clone(),
+                    &[scoring_gene],
+                )
+                .await
+                .unwrap_or(0);
                 let provider_refresh = TargetQueryEngine::new(db_for_task.clone())
                     .refresh_provider_signals(ProviderRefreshRequest {
                         genes: vec![gene_for_refresh],
@@ -934,9 +1130,12 @@ impl Tool for IngestionTool {
             });
             "async_queued"
         } else {
-            recomputed = ferrumyx_kg::compute_target_scores(self.db.clone())
-                .await
-                .unwrap_or(0);
+            recomputed = ferrumyx_kg::compute_target_scores_for_gene_names(
+                self.db.clone(),
+                &[gene_for_refresh.clone()],
+            )
+            .await
+            .unwrap_or(0);
             let provider_refresh = TargetQueryEngine::new(self.db.clone())
                 .refresh_provider_signals(ProviderRefreshRequest {
                     genes: vec![gene_for_refresh],
@@ -992,7 +1191,12 @@ impl Tool for IngestionTool {
             result
                 .source_telemetry
                 .iter()
-                .map(|s| format!("{}:fetched={},err={}", s.source, s.fetched, s.error.clone().unwrap_or_else(|| "none".to_string())))
+                .map(|s| format!(
+                    "{}:fetched={},err={}",
+                    s.source,
+                    s.fetched,
+                    s.error.clone().unwrap_or_else(|| "none".to_string())
+                ))
                 .collect::<Vec<_>>()
                 .join("; "),
         );

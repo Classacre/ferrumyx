@@ -160,31 +160,31 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     let entity_html = result.as_ref().map(|r| {
         let mut highlighted = r.text.clone();
         let mut offset = 0i32;
-        
+
         // Sort entities by start position
         let mut sorted_entities = r.entities.clone();
         sorted_entities.sort_by_key(|e| e.start);
-        
+
         for entity in sorted_entities {
             let start = (entity.start as i32 + offset) as usize;
             let end = (entity.end as i32 + offset) as usize;
-            
+
             let color_class = match entity.entity_type.as_str() {
                 "Gene" => "entity-gene",
                 "Disease" => "entity-disease",
                 "Chemical" => "entity-chemical",
                 _ => "entity-other",
             };
-            
+
             let replacement = format!(
                 r#"<span class="{}" title="{} (confidence: {:.2})">{}</span>"#,
                 color_class, entity.entity_type, entity.confidence, &highlighted[start..end]
             );
-            
+
             highlighted.replace_range(start..end, &replacement);
             offset += replacement.len() as i32 - (entity.end - entity.start) as i32;
         }
-        
+
         let entity_list = r.entities.iter().map(|e| {
             format!(
                 r#"<tr><td><span class="badge {}">{}</span></td><td>{}</td><td>{:.2}</td></tr>"#,
@@ -197,7 +197,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                 e.entity_type, e.text, e.confidence
             )
         }).collect::<String>();
-        
+
         format!(
             r#"
             <div class="result-section card mt-4">
@@ -205,7 +205,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                 <div class="card-body">
                     <div class="highlighted-text">{}</div>
                 </div>
-                
+
                 <div class="card-header mt-4 text-muted border-top border-glass" style="font-size:0.9rem;">Entity Extraction Catalog ({} items):</div>
                 <div class="table-container p-0">
                     <table class="table">
@@ -228,10 +228,10 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
     <title>NER Engine — Ferrumyx</title>
     <link rel="stylesheet" href="/static/css/main.css">
     <style>
-        .highlighted-text {{ 
-            background: var(--bg-surface); 
-            padding: 1.5rem; 
-            border-radius: 8px; 
+        .highlighted-text {{
+            background: var(--bg-surface);
+            padding: 1.5rem;
+            border-radius: 8px;
             line-height: 2.2;
             font-size: 1.05rem;
             color: var(--text-main);
@@ -259,7 +259,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                 <p class="text-muted">High-performance extraction of gene, disease, and chemical entities from unstructured scientific literature</p>
             </div>
         </div>
-        
+
         <div class="grid-2 align-start" style="grid-template-columns: 300px 1fr; gap: 2rem;">
             <div class="d-flex flex-column gap-3">
                 <div class="card">
@@ -271,7 +271,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                         <div class="d-flex justify-between mt-2 pt-2 border-top border-glass"><span>Total Pre-computed Patterns:</span> <strong class="text-gradient">{}</strong></div>
                     </div>
                 </div>
-                
+
                 <div class="card">
                     <div class="card-header text-muted">Example Corpi</div>
                     <div class="card-body d-flex flex-column gap-2 p-3">
@@ -281,7 +281,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                     </div>
                 </div>
             </div>
-            
+
             <div class="d-flex flex-column">
                 <div class="card input-section">
                     <form method="POST" action="/ner/extract" class="d-flex flex-column gap-3 p-3">
@@ -294,14 +294,14 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
                         </div>
                     </form>
                 </div>
-                
+
                 {}
-                
+
                 {}
             </div>
         </div>
     </main>
-    
+
     <script src="/static/js/main.js"></script>
     <script>
         const examples = [
@@ -309,7 +309,7 @@ fn render_ner_page(result: Option<NerResult>, error: Option<String>) -> String {
             "KRAS G12D mutations drive pancreatic adenocarcinoma progression. Combination therapy with MEK inhibitors and chemotherapy shows promise in preclinical models.",
             "BRCA1 and BRCA2 mutations increase risk of ovarian cancer. PARP inhibitors like olaparib are effective in BRCA-mutant tumors."
         ];
-        
+
         function setExample(index) {{
             document.getElementById('textInput').value = examples[index];
         }}

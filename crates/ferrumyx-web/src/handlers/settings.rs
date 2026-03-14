@@ -76,15 +76,26 @@ async function loadSettings() {
   byId('ingestion_pdf_parse_cache_enabled').checked = data.ingestion_pdf_parse_cache_enabled;
   byId('ingestion_full_text_negative_cache_enabled').checked = data.ingestion_full_text_negative_cache_enabled;
   byId('ingestion_full_text_negative_cache_ttl_secs').value = data.ingestion_full_text_negative_cache_ttl_secs;
+  byId('ingestion_full_text_success_cache_enabled').checked = data.ingestion_full_text_success_cache_enabled;
+  byId('ingestion_full_text_success_cache_ttl_secs').value = data.ingestion_full_text_success_cache_ttl_secs;
   byId('ingestion_chunk_fingerprint_cache_enabled').checked = data.ingestion_chunk_fingerprint_cache_enabled;
   byId('ingestion_chunk_fingerprint_cache_ttl_secs').value = data.ingestion_chunk_fingerprint_cache_ttl_secs;
   byId('ingestion_heavy_lane_async_enabled').checked = data.ingestion_heavy_lane_async_enabled;
+  byId('ingestion_heavy_lane_max_inflight').value = data.ingestion_heavy_lane_max_inflight;
   byId('ingestion_min_ner_chars').value = data.ingestion_min_ner_chars;
   byId('ingestion_max_relation_genes_per_chunk').value = data.ingestion_max_relation_genes_per_chunk;
   byId('ingestion_async_post_ingest_scoring').checked = data.ingestion_async_post_ingest_scoring;
   byId('unpaywall_email').value = data.unpaywall_email;
   byId('scihub_domains').value = data.scihub_domains;
   byId('scihub_request_timeout_secs').value = data.scihub_request_timeout_secs;
+  byId('scihub_domain_parallelism').value = data.scihub_domain_parallelism;
+  byId('scihub_domain_cooldown_secs').value = data.scihub_domain_cooldown_secs;
+  byId('scihub_defer_ms').value = data.scihub_defer_ms;
+  byId('scihub_adaptive_enabled').checked = data.scihub_adaptive_enabled;
+  byId('scihub_adaptive_fail_streak').value = data.scihub_adaptive_fail_streak;
+  byId('scihub_adaptive_backoff_secs').value = data.scihub_adaptive_backoff_secs;
+  byId('scihub_adaptive_probe_every').value = data.scihub_adaptive_probe_every;
+  byId('scihub_adaptive_min_step_timeout_secs').value = data.scihub_adaptive_min_step_timeout_secs;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -147,15 +158,26 @@ async function saveSettings() {
     ingestion_pdf_parse_cache_enabled: byId('ingestion_pdf_parse_cache_enabled').checked,
     ingestion_full_text_negative_cache_enabled: byId('ingestion_full_text_negative_cache_enabled').checked,
     ingestion_full_text_negative_cache_ttl_secs: Number(byId('ingestion_full_text_negative_cache_ttl_secs').value || 21600),
+    ingestion_full_text_success_cache_enabled: byId('ingestion_full_text_success_cache_enabled').checked,
+    ingestion_full_text_success_cache_ttl_secs: Number(byId('ingestion_full_text_success_cache_ttl_secs').value || 604800),
     ingestion_chunk_fingerprint_cache_enabled: byId('ingestion_chunk_fingerprint_cache_enabled').checked,
     ingestion_chunk_fingerprint_cache_ttl_secs: Number(byId('ingestion_chunk_fingerprint_cache_ttl_secs').value || 172800),
     ingestion_heavy_lane_async_enabled: byId('ingestion_heavy_lane_async_enabled').checked,
+    ingestion_heavy_lane_max_inflight: Number(byId('ingestion_heavy_lane_max_inflight').value || 8),
     ingestion_min_ner_chars: Number(byId('ingestion_min_ner_chars').value || 500),
     ingestion_max_relation_genes_per_chunk: Number(byId('ingestion_max_relation_genes_per_chunk').value || 4),
     ingestion_async_post_ingest_scoring: byId('ingestion_async_post_ingest_scoring').checked,
     unpaywall_email: byId('unpaywall_email').value,
     scihub_domains: byId('scihub_domains').value,
     scihub_request_timeout_secs: Number(byId('scihub_request_timeout_secs').value || 10),
+    scihub_domain_parallelism: Number(byId('scihub_domain_parallelism').value || 4),
+    scihub_domain_cooldown_secs: Number(byId('scihub_domain_cooldown_secs').value || 300),
+    scihub_defer_ms: Number(byId('scihub_defer_ms').value || 700),
+    scihub_adaptive_enabled: byId('scihub_adaptive_enabled').checked,
+    scihub_adaptive_fail_streak: Number(byId('scihub_adaptive_fail_streak').value || 8),
+    scihub_adaptive_backoff_secs: Number(byId('scihub_adaptive_backoff_secs').value || 300),
+    scihub_adaptive_probe_every: Number(byId('scihub_adaptive_probe_every').value || 10),
+    scihub_adaptive_min_step_timeout_secs: Number(byId('scihub_adaptive_min_step_timeout_secs').value || 3),
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
@@ -315,6 +337,46 @@ __NAV__
             <input id="scihub_request_timeout_secs" type="number" min="4" max="45" class="form-control" />
             <div class="help-text">Per-request timeout for mirror and PDF fetches. Lower is faster failover, higher tolerates slow mirrors.</div>
           </div>
+          <div class="form-group">
+            <label for="scihub_domain_parallelism">Sci-Hub Mirror Parallelism</label>
+            <input id="scihub_domain_parallelism" type="number" min="1" max="16" class="form-control" />
+            <div class="help-text">How many mirrors are probed concurrently per paper. Higher improves failover speed.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_domain_cooldown_secs">Sci-Hub Mirror Cooldown (seconds)</label>
+            <input id="scihub_domain_cooldown_secs" type="number" min="15" max="3600" class="form-control" />
+            <div class="help-text">Temporarily suppresses mirrors after server errors/timeouts to avoid repeated stalls.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_defer_ms">Sci-Hub Fallback Defer (ms)</label>
+            <input id="scihub_defer_ms" type="number" min="0" max="10000" class="form-control" />
+            <div class="help-text">Delay before launching Sci-Hub so OA routes get first chance and avoid unnecessary fallback calls.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_adaptive_enabled">Adaptive Sci-Hub Backoff Enabled</label>
+            <input id="scihub_adaptive_enabled" type="checkbox" />
+            <div class="help-text">Automatically throttles Sci-Hub fallback when repeated failures indicate a mirror outage period.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_adaptive_fail_streak">Adaptive Fail Streak Threshold</label>
+            <input id="scihub_adaptive_fail_streak" type="number" min="3" max="200" class="form-control" />
+            <div class="help-text">Consecutive failed Sci-Hub attempts before entering adaptive backoff mode.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_adaptive_backoff_secs">Adaptive Backoff Duration (seconds)</label>
+            <input id="scihub_adaptive_backoff_secs" type="number" min="15" max="3600" class="form-control" />
+            <div class="help-text">How long fallback is mostly paused after repeated failures, with periodic probe attempts.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_adaptive_probe_every">Adaptive Probe Every N Skips</label>
+            <input id="scihub_adaptive_probe_every" type="number" min="1" max="256" class="form-control" />
+            <div class="help-text">During backoff, one probe is attempted after every N skipped Sci-Hub candidates.</div>
+          </div>
+          <div class="form-group">
+            <label for="scihub_adaptive_min_step_timeout_secs">Adaptive Minimum Sci-Hub Step Timeout (seconds)</label>
+            <input id="scihub_adaptive_min_step_timeout_secs" type="number" min="2" max="60" class="form-control" />
+            <div class="help-text">Lower bound for reduced Sci-Hub per-paper budget under adaptive mode.</div>
+          </div>
         </div>
         <h4 class="settings-section-title" style="margin-top:1rem;">Ingestion Runtime Policy</h4>
         <div class="form-grid">
@@ -437,6 +499,16 @@ __NAV__
             <div class="help-text">How long failed full-text attempts stay suppressed before retrying.</div>
           </div>
           <div class="form-group">
+            <label for="ingestion_full_text_success_cache_enabled">Full-Text Success Cache Enabled</label>
+            <input id="ingestion_full_text_success_cache_enabled" type="checkbox" />
+            <div class="help-text">Caches successful full-text sections by DOI/PMCID/PDF URL to skip repeated downloads and parsing.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_full_text_success_cache_ttl_secs">Full-Text Success Cache TTL (seconds)</label>
+            <input id="ingestion_full_text_success_cache_ttl_secs" type="number" min="300" max="2592000" class="form-control" />
+            <div class="help-text">Retention for successful full-text cache entries (longer is faster for repeated runs).</div>
+          </div>
+          <div class="form-group">
             <label for="ingestion_chunk_fingerprint_cache_enabled">Chunk Fingerprint Cache Enabled</label>
             <input id="ingestion_chunk_fingerprint_cache_enabled" type="checkbox" />
             <div class="help-text">Skips repeated NER/KG extraction for duplicate chunk text across papers.</div>
@@ -450,6 +522,11 @@ __NAV__
             <label for="ingestion_heavy_lane_async_enabled">Heavy Lane Async Enrichment</label>
             <input id="ingestion_heavy_lane_async_enabled" type="checkbox" />
             <div class="help-text">Runs expensive NER/KG enrichment in background after fast chunk insertion.</div>
+          </div>
+          <div class="form-group">
+            <label for="ingestion_heavy_lane_max_inflight">Heavy Lane Max Inflight</label>
+            <input id="ingestion_heavy_lane_max_inflight" type="number" min="1" max="64" class="form-control" />
+            <div class="help-text">Max concurrent heavy background enrichment tasks before backpressure is applied.</div>
           </div>
           <div class="form-group">
             <label for="ingestion_min_ner_chars">Quality Gate Minimum Chars</label>
@@ -562,11 +639,17 @@ pub struct SettingsView {
     #[serde(default = "default_full_text_negative_cache_ttl_secs")]
     ingestion_full_text_negative_cache_ttl_secs: u64,
     #[serde(default = "default_true")]
+    ingestion_full_text_success_cache_enabled: bool,
+    #[serde(default = "default_full_text_success_cache_ttl_secs")]
+    ingestion_full_text_success_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
     ingestion_chunk_fingerprint_cache_enabled: bool,
     #[serde(default = "default_chunk_fingerprint_cache_ttl_secs")]
     ingestion_chunk_fingerprint_cache_ttl_secs: u64,
     #[serde(default = "default_true")]
     ingestion_heavy_lane_async_enabled: bool,
+    #[serde(default = "default_heavy_lane_max_inflight")]
+    ingestion_heavy_lane_max_inflight: u64,
     #[serde(default = "default_min_ner_chars")]
     ingestion_min_ner_chars: u64,
     #[serde(default = "default_max_relation_genes_per_chunk")]
@@ -578,6 +661,22 @@ pub struct SettingsView {
     scihub_domains: String,
     #[serde(default = "default_scihub_request_timeout_secs")]
     scihub_request_timeout_secs: u64,
+    #[serde(default = "default_scihub_domain_parallelism")]
+    scihub_domain_parallelism: u64,
+    #[serde(default = "default_scihub_domain_cooldown_secs")]
+    scihub_domain_cooldown_secs: u64,
+    #[serde(default = "default_scihub_defer_ms")]
+    scihub_defer_ms: u64,
+    #[serde(default = "default_true")]
+    scihub_adaptive_enabled: bool,
+    #[serde(default = "default_scihub_adaptive_fail_streak")]
+    scihub_adaptive_fail_streak: u64,
+    #[serde(default = "default_scihub_adaptive_backoff_secs")]
+    scihub_adaptive_backoff_secs: u64,
+    #[serde(default = "default_scihub_adaptive_probe_every")]
+    scihub_adaptive_probe_every: u64,
+    #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
+    scihub_adaptive_min_step_timeout_secs: u64,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
@@ -647,11 +746,17 @@ pub struct SettingsSaveRequest {
     #[serde(default = "default_full_text_negative_cache_ttl_secs")]
     ingestion_full_text_negative_cache_ttl_secs: u64,
     #[serde(default = "default_true")]
+    ingestion_full_text_success_cache_enabled: bool,
+    #[serde(default = "default_full_text_success_cache_ttl_secs")]
+    ingestion_full_text_success_cache_ttl_secs: u64,
+    #[serde(default = "default_true")]
     ingestion_chunk_fingerprint_cache_enabled: bool,
     #[serde(default = "default_chunk_fingerprint_cache_ttl_secs")]
     ingestion_chunk_fingerprint_cache_ttl_secs: u64,
     #[serde(default = "default_true")]
     ingestion_heavy_lane_async_enabled: bool,
+    #[serde(default = "default_heavy_lane_max_inflight")]
+    ingestion_heavy_lane_max_inflight: u64,
     #[serde(default = "default_min_ner_chars")]
     ingestion_min_ner_chars: u64,
     #[serde(default = "default_max_relation_genes_per_chunk")]
@@ -663,6 +768,22 @@ pub struct SettingsSaveRequest {
     scihub_domains: String,
     #[serde(default = "default_scihub_request_timeout_secs")]
     scihub_request_timeout_secs: u64,
+    #[serde(default = "default_scihub_domain_parallelism")]
+    scihub_domain_parallelism: u64,
+    #[serde(default = "default_scihub_domain_cooldown_secs")]
+    scihub_domain_cooldown_secs: u64,
+    #[serde(default = "default_scihub_defer_ms")]
+    scihub_defer_ms: u64,
+    #[serde(default = "default_true")]
+    scihub_adaptive_enabled: bool,
+    #[serde(default = "default_scihub_adaptive_fail_streak")]
+    scihub_adaptive_fail_streak: u64,
+    #[serde(default = "default_scihub_adaptive_backoff_secs")]
+    scihub_adaptive_backoff_secs: u64,
+    #[serde(default = "default_scihub_adaptive_probe_every")]
+    scihub_adaptive_probe_every: u64,
+    #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
+    scihub_adaptive_min_step_timeout_secs: u64,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
@@ -690,8 +811,14 @@ fn default_pdf_host_concurrency() -> u64 {
 fn default_full_text_negative_cache_ttl_secs() -> u64 {
     6 * 60 * 60
 }
+fn default_full_text_success_cache_ttl_secs() -> u64 {
+    7 * 24 * 60 * 60
+}
 fn default_chunk_fingerprint_cache_ttl_secs() -> u64 {
     2 * 24 * 60 * 60
+}
+fn default_heavy_lane_max_inflight() -> u64 {
+    8
 }
 fn default_min_ner_chars() -> u64 {
     500
@@ -701,6 +828,27 @@ fn default_max_relation_genes_per_chunk() -> u64 {
 }
 fn default_scihub_request_timeout_secs() -> u64 {
     10
+}
+fn default_scihub_domain_parallelism() -> u64 {
+    4
+}
+fn default_scihub_domain_cooldown_secs() -> u64 {
+    300
+}
+fn default_scihub_defer_ms() -> u64 {
+    700
+}
+fn default_scihub_adaptive_fail_streak() -> u64 {
+    8
+}
+fn default_scihub_adaptive_backoff_secs() -> u64 {
+    300
+}
+fn default_scihub_adaptive_probe_every() -> u64 {
+    10
+}
+fn default_scihub_adaptive_min_step_timeout_secs() -> u64 {
+    3
 }
 fn default_scihub_domains() -> String {
     "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
@@ -997,6 +1145,24 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             ],
             default_full_text_negative_cache_ttl_secs(),
         ),
+        ingestion_full_text_success_cache_enabled: bool_at(
+            &root,
+            &[
+                "ingestion",
+                "performance",
+                "full_text_success_cache_enabled",
+            ],
+            true,
+        ),
+        ingestion_full_text_success_cache_ttl_secs: int_at(
+            &root,
+            &[
+                "ingestion",
+                "performance",
+                "full_text_success_cache_ttl_secs",
+            ],
+            default_full_text_success_cache_ttl_secs(),
+        ),
         ingestion_chunk_fingerprint_cache_enabled: bool_at(
             &root,
             &[
@@ -1019,6 +1185,11 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             &root,
             &["ingestion", "performance", "heavy_lane_async_enabled"],
             true,
+        ),
+        ingestion_heavy_lane_max_inflight: int_at(
+            &root,
+            &["ingestion", "performance", "heavy_lane_max_inflight"],
+            default_heavy_lane_max_inflight(),
         ),
         ingestion_min_ner_chars: int_at(
             &root,
@@ -1066,6 +1237,61 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                     .clamp(4, 45)
             }
         },
+        scihub_domain_parallelism: {
+            let toml_value = int_at(&root, &["ingestion", "scihub", "domain_parallelism"], 0);
+            if toml_value >= 1 {
+                toml_value.clamp(1, 16)
+            } else {
+                std::env::var("FERRUMYX_SCIHUB_DOMAIN_PARALLELISM")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_scihub_domain_parallelism())
+                    .clamp(1, 16)
+            }
+        },
+        scihub_domain_cooldown_secs: {
+            let toml_value = int_at(&root, &["ingestion", "scihub", "domain_cooldown_secs"], 0);
+            if toml_value >= 15 {
+                toml_value.clamp(15, 3600)
+            } else {
+                std::env::var("FERRUMYX_SCIHUB_DOMAIN_COOLDOWN_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_scihub_domain_cooldown_secs())
+                    .clamp(15, 3600)
+            }
+        },
+        scihub_defer_ms: int_at(
+            &root,
+            &["ingestion", "scihub", "defer_ms"],
+            default_scihub_defer_ms(),
+        )
+        .clamp(0, 10_000),
+        scihub_adaptive_enabled: bool_at(&root, &["ingestion", "scihub", "adaptive_enabled"], true),
+        scihub_adaptive_fail_streak: int_at(
+            &root,
+            &["ingestion", "scihub", "adaptive_fail_streak"],
+            default_scihub_adaptive_fail_streak(),
+        )
+        .clamp(3, 200),
+        scihub_adaptive_backoff_secs: int_at(
+            &root,
+            &["ingestion", "scihub", "adaptive_backoff_secs"],
+            default_scihub_adaptive_backoff_secs(),
+        )
+        .clamp(15, 3600),
+        scihub_adaptive_probe_every: int_at(
+            &root,
+            &["ingestion", "scihub", "adaptive_probe_every"],
+            default_scihub_adaptive_probe_every(),
+        )
+        .clamp(1, 256),
+        scihub_adaptive_min_step_timeout_secs: int_at(
+            &root,
+            &["ingestion", "scihub", "adaptive_min_step_timeout_secs"],
+            default_scihub_adaptive_min_step_timeout_secs(),
+        )
+        .clamp(2, 60),
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"])
             || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"])
@@ -1238,6 +1464,18 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
         ),
     );
     performance.insert(
+        "full_text_success_cache_enabled".to_string(),
+        toml::Value::Boolean(payload.ingestion_full_text_success_cache_enabled),
+    );
+    performance.insert(
+        "full_text_success_cache_ttl_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .ingestion_full_text_success_cache_ttl_secs
+                .clamp(300, 2_592_000) as i64,
+        ),
+    );
+    performance.insert(
         "chunk_fingerprint_cache_enabled".to_string(),
         toml::Value::Boolean(payload.ingestion_chunk_fingerprint_cache_enabled),
     );
@@ -1252,6 +1490,10 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     performance.insert(
         "heavy_lane_async_enabled".to_string(),
         toml::Value::Boolean(payload.ingestion_heavy_lane_async_enabled),
+    );
+    performance.insert(
+        "heavy_lane_max_inflight".to_string(),
+        toml::Value::Integer(payload.ingestion_heavy_lane_max_inflight.clamp(1, 64) as i64),
     );
     performance.insert(
         "min_ner_chars".to_string(),
@@ -1294,6 +1536,38 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     scihub.insert(
         "request_timeout_secs".to_string(),
         toml::Value::Integer(payload.scihub_request_timeout_secs.clamp(4, 45) as i64),
+    );
+    scihub.insert(
+        "domain_parallelism".to_string(),
+        toml::Value::Integer(payload.scihub_domain_parallelism.clamp(1, 16) as i64),
+    );
+    scihub.insert(
+        "domain_cooldown_secs".to_string(),
+        toml::Value::Integer(payload.scihub_domain_cooldown_secs.clamp(15, 3600) as i64),
+    );
+    scihub.insert(
+        "defer_ms".to_string(),
+        toml::Value::Integer(payload.scihub_defer_ms.clamp(0, 10_000) as i64),
+    );
+    scihub.insert(
+        "adaptive_enabled".to_string(),
+        toml::Value::Boolean(payload.scihub_adaptive_enabled),
+    );
+    scihub.insert(
+        "adaptive_fail_streak".to_string(),
+        toml::Value::Integer(payload.scihub_adaptive_fail_streak.clamp(3, 200) as i64),
+    );
+    scihub.insert(
+        "adaptive_backoff_secs".to_string(),
+        toml::Value::Integer(payload.scihub_adaptive_backoff_secs.clamp(15, 3600) as i64),
+    );
+    scihub.insert(
+        "adaptive_probe_every".to_string(),
+        toml::Value::Integer(payload.scihub_adaptive_probe_every.clamp(1, 256) as i64),
+    );
+    scihub.insert(
+        "adaptive_min_step_timeout_secs".to_string(),
+        toml::Value::Integer(payload.scihub_adaptive_min_step_timeout_secs.clamp(2, 60) as i64),
     );
     let semanticscholar = nested_table_mut(ingestion, "semanticscholar");
     maybe_set_secret(semanticscholar, "api_key", &payload.semanticscholar_api_key);
@@ -1576,9 +1850,45 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             .clamp(60, 604_800)
             .to_string(),
     );
+    let ingestion_full_text_success_cache_enabled = bool_at(
+        root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_success_cache_enabled",
+        ],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_FULLTEXT_SUCCESS_CACHE_ENABLED",
+        if ingestion_full_text_success_cache_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_full_text_success_cache_ttl_secs = int_at(
+        root,
+        &[
+            "ingestion",
+            "performance",
+            "full_text_success_cache_ttl_secs",
+        ],
+        default_full_text_success_cache_ttl_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_FULLTEXT_SUCCESS_CACHE_TTL_SECS",
+        ingestion_full_text_success_cache_ttl_secs
+            .clamp(300, 2_592_000)
+            .to_string(),
+    );
     let ingestion_chunk_fingerprint_cache_enabled = bool_at(
         root,
-        &["ingestion", "performance", "chunk_fingerprint_cache_enabled"],
+        &[
+            "ingestion",
+            "performance",
+            "chunk_fingerprint_cache_enabled",
+        ],
         true,
     );
     std::env::set_var(
@@ -1591,7 +1901,11 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     );
     let ingestion_chunk_fingerprint_cache_ttl_secs = int_at(
         root,
-        &["ingestion", "performance", "chunk_fingerprint_cache_ttl_secs"],
+        &[
+            "ingestion",
+            "performance",
+            "chunk_fingerprint_cache_ttl_secs",
+        ],
         default_chunk_fingerprint_cache_ttl_secs(),
     );
     std::env::set_var(
@@ -1612,6 +1926,15 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         } else {
             "0"
         },
+    );
+    let ingestion_heavy_lane_max_inflight = int_at(
+        root,
+        &["ingestion", "performance", "heavy_lane_max_inflight"],
+        default_heavy_lane_max_inflight(),
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT",
+        ingestion_heavy_lane_max_inflight.clamp(1, 64).to_string(),
     );
     let ingestion_min_ner_chars = int_at(
         root,
@@ -1669,6 +1992,76 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     std::env::set_var(
         "FERRUMYX_SCIHUB_REQUEST_TIMEOUT_SECS",
         scihub_timeout_secs.clamp(4, 45).to_string(),
+    );
+    let scihub_domain_parallelism = int_at(
+        root,
+        &["ingestion", "scihub", "domain_parallelism"],
+        default_scihub_domain_parallelism(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_DOMAIN_PARALLELISM",
+        scihub_domain_parallelism.clamp(1, 16).to_string(),
+    );
+    let scihub_domain_cooldown_secs = int_at(
+        root,
+        &["ingestion", "scihub", "domain_cooldown_secs"],
+        default_scihub_domain_cooldown_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_DOMAIN_COOLDOWN_SECS",
+        scihub_domain_cooldown_secs.clamp(15, 3600).to_string(),
+    );
+    let scihub_defer_ms = int_at(
+        root,
+        &["ingestion", "scihub", "defer_ms"],
+        default_scihub_defer_ms(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_DEFER_MS",
+        scihub_defer_ms.clamp(0, 10_000).to_string(),
+    );
+    let scihub_adaptive_enabled = bool_at(root, &["ingestion", "scihub", "adaptive_enabled"], true);
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_ADAPTIVE_ENABLED",
+        if scihub_adaptive_enabled { "1" } else { "0" },
+    );
+    let scihub_adaptive_fail_streak = int_at(
+        root,
+        &["ingestion", "scihub", "adaptive_fail_streak"],
+        default_scihub_adaptive_fail_streak(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_ADAPTIVE_FAIL_STREAK",
+        scihub_adaptive_fail_streak.clamp(3, 200).to_string(),
+    );
+    let scihub_adaptive_backoff_secs = int_at(
+        root,
+        &["ingestion", "scihub", "adaptive_backoff_secs"],
+        default_scihub_adaptive_backoff_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_ADAPTIVE_BACKOFF_SECS",
+        scihub_adaptive_backoff_secs.clamp(15, 3600).to_string(),
+    );
+    let scihub_adaptive_probe_every = int_at(
+        root,
+        &["ingestion", "scihub", "adaptive_probe_every"],
+        default_scihub_adaptive_probe_every(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_ADAPTIVE_PROBE_EVERY",
+        scihub_adaptive_probe_every.clamp(1, 256).to_string(),
+    );
+    let scihub_adaptive_min_step_timeout_secs = int_at(
+        root,
+        &["ingestion", "scihub", "adaptive_min_step_timeout_secs"],
+        default_scihub_adaptive_min_step_timeout_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_SCIHUB_ADAPTIVE_MIN_STEP_TIMEOUT_SECS",
+        scihub_adaptive_min_step_timeout_secs
+            .clamp(2, 60)
+            .to_string(),
     );
 
     let semanticscholar_key = {

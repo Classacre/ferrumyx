@@ -380,7 +380,7 @@ impl Tool for AutonomousCycleTool {
 
             let recomputed = timeout(
                 cycle_timeout,
-                ferrumyx_kg::compute_target_scores(self.db.clone()),
+                ferrumyx_kg::compute_target_scores_for_gene_names(self.db.clone(), &[gene.clone()]),
             )
             .await
             .map_err(|_| {

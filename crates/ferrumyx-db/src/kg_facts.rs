@@ -142,6 +142,52 @@ impl KgFactRepository {
         Ok(facts)
     }
 
+    /// Find all facts where subject_id is within a bounded set.
+    pub async fn find_by_subject_ids(
+        &self,
+        subject_ids: &[uuid::Uuid],
+        chunk_size: usize,
+    ) -> Result<Vec<KgFact>> {
+        if subject_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_KG_FACTS)
+            .execute()
+            .await?;
+
+        let mut uniq = subject_ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+        let chunk = chunk_size.max(1).min(200);
+
+        let mut facts = Vec::new();
+        for group in uniq.chunks(chunk) {
+            let filter = group
+                .iter()
+                .map(|id| format!("subject_id = '{}'", id))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            if filter.is_empty() {
+                continue;
+            }
+            let mut stream = table
+                .query()
+                .only_if(&format!("({filter})"))
+                .execute()
+                .await?;
+            while let Some(batch) = stream.next().await {
+                let batch = batch?;
+                for i in 0..batch.num_rows() {
+                    facts.push(record_to_kg_fact(&batch, i)?);
+                }
+            }
+        }
+        Ok(facts)
+    }
+
     /// Find all facts where the entity is the object.
     pub async fn find_by_object(&self, object_id: uuid::Uuid) -> Result<Vec<KgFact>> {
         let table = self

@@ -342,7 +342,8 @@ impl PaperRepository {
         dois: &[String],
         chunk_size: usize,
     ) -> Result<HashMap<String, uuid::Uuid>> {
-        self.find_ids_by_identity_values("doi", dois, chunk_size).await
+        self.find_ids_by_identity_values("doi", dois, chunk_size)
+            .await
     }
 
     /// Resolve existing paper IDs for PMID values in bounded query chunks.
@@ -351,7 +352,8 @@ impl PaperRepository {
         pmids: &[String],
         chunk_size: usize,
     ) -> Result<HashMap<String, uuid::Uuid>> {
-        self.find_ids_by_identity_values("pmid", pmids, chunk_size).await
+        self.find_ids_by_identity_values("pmid", pmids, chunk_size)
+            .await
     }
 
     async fn find_ids_by_identity_values(

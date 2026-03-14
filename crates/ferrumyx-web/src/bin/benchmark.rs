@@ -1,6 +1,8 @@
-use ferrumyx_ingestion::pipeline::{run_ingestion, IngestionJob, IngestionSourceSpec};
+use ferrumyx_ingestion::pipeline::{
+    load_recent_perf_snapshots, run_ingestion, IngestionJob, IngestionSourceSpec,
+};
 use ferrumyx_ingestion::repository::IngestionRepository;
-use ferrumyx_kg::scoring::compute_target_scores;
+use ferrumyx_kg::scoring::compute_target_scores_for_gene_names;
 use ferrumyx_molecules::pipeline::MoleculesPipeline;
 
 use ferrumyx_web::state::AppState;
@@ -8,6 +10,23 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
 use tokio::time::{timeout, Duration};
+
+fn percentile_ms(samples: &[u64], p: f64) -> Option<u64> {
+    if samples.is_empty() {
+        return None;
+    }
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let rank = ((sorted.len() - 1) as f64 * p).round() as usize;
+    sorted.get(rank).copied()
+}
+
+fn pct_delta(new_ms: u64, baseline_ms: u64) -> f64 {
+    if baseline_ms == 0 {
+        return 0.0;
+    }
+    ((new_ms as f64 - baseline_ms as f64) / baseline_ms as f64) * 100.0
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -49,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
     job.full_text_enabled = std::env::var("FERRUMYX_BENCH_FULL_TEXT")
         .ok()
         .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let benchmark_gene = job.gene.clone();
 
     let repo = Arc::new(IngestionRepository::new(db.clone()));
 
@@ -104,10 +124,16 @@ async fn main() -> anyhow::Result<()> {
     let chunk_repo = ferrumyx_db::chunks::ChunkRepository::new(db.clone());
     let kg_repo = ferrumyx_db::kg_facts::KgFactRepository::new(db.clone());
 
-    let chunks = chunk_repo.list(0, 1000).await.unwrap_or_default();
+    let kg_chunk_limit = std::env::var("FERRUMYX_BENCH_KG_CHUNK_LIMIT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1000)
+        .clamp(50, 20_000);
+    let chunks = chunk_repo.list(0, kg_chunk_limit).await.unwrap_or_default();
     let mut db_facts = Vec::new();
     let dummy_uuid = uuid::Uuid::new_v4();
 
+    let start_extract = Instant::now();
     for chunk in chunks {
         let extracted = ferrumyx_kg::extraction::build_facts("BRCA1", &chunk.content);
         for fact in extracted {
@@ -121,15 +147,25 @@ async fn main() -> anyhow::Result<()> {
             ));
         }
     }
+    let extract_elapsed = start_extract.elapsed();
 
+    let start_insert = Instant::now();
     if !db_facts.is_empty() {
         let _ = kg_repo.insert_batch(&db_facts).await;
     }
+    let insert_elapsed = start_insert.elapsed();
 
-    let scored_targets = compute_target_scores(db.clone()).await.unwrap_or(0);
+    let start_score = Instant::now();
+    let scored_targets = compute_target_scores_for_gene_names(db.clone(), &[benchmark_gene])
+        .await
+        .unwrap_or(0);
+    let score_elapsed = start_score.elapsed();
     println!(
-        "KG Fact Extraction & Scoring took: {:.2?} (Scored {} targets, extracted {} facts)",
+        "KG Fact Extraction & Scoring took: {:.2?} (extract={:.2?}, insert={:.2?}, score={:.2?}; scored {} targets, extracted {} facts)",
         start_kg.elapsed(),
+        extract_elapsed,
+        insert_elapsed,
+        score_elapsed,
         scored_targets,
         db_facts.len()
     );
@@ -145,7 +181,11 @@ async fn main() -> anyhow::Result<()> {
         let pipeline = MoleculesPipeline::new(".kilocode/cache");
         match pipeline.run(top_gene).await {
             Ok(res) => {
-                println!("Molecules Pipeline (Fetch PDB, Pocket, Ligand, Vina, Scoring) took: {:.2?} (Generated {} molecules)", start_mol.elapsed(), res.len());
+                println!(
+                    "Molecules Pipeline (Fetch PDB, Pocket, Ligand, Vina, Scoring) took: {:.2?} (Generated {} molecules)",
+                    start_mol.elapsed(),
+                    res.len()
+                );
                 for (i, m) in res.iter().enumerate() {
                     println!(
                         "  Molecule {}: SMILES={}, Score={:.4}",
@@ -162,6 +202,52 @@ async fn main() -> anyhow::Result<()> {
     }
 
     println!("Total workflow took: {:.2?}", start_total.elapsed());
+
+    let window = std::env::var("FERRUMYX_BENCH_HISTORY_WINDOW")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(40)
+        .clamp(5, 200);
+    let warn_threshold_pct = std::env::var("FERRUMYX_BENCH_REGRESSION_WARN_PCT")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(25.0)
+        .clamp(5.0, 300.0);
+    let snapshots = load_recent_perf_snapshots(window);
+    if snapshots.len() >= 3 {
+        let durations: Vec<u64> = snapshots.iter().map(|s| s.duration_ms).collect();
+        let found: Vec<u64> = snapshots.iter().map(|s| s.papers_found as u64).collect();
+        let inserted: Vec<u64> = snapshots.iter().map(|s| s.papers_inserted as u64).collect();
+        let p50 = percentile_ms(&durations, 0.50).unwrap_or(0);
+        let p95 = percentile_ms(&durations, 0.95).unwrap_or(0);
+        let f50 = percentile_ms(&found, 0.50).unwrap_or(0);
+        let i50 = percentile_ms(&inserted, 0.50).unwrap_or(0);
+        println!(
+            "Ingestion history (n={}): p50={}ms p95={}ms | p50 found={} inserted={}",
+            snapshots.len(),
+            p50,
+            p95,
+            f50,
+            i50
+        );
+        let current = result.duration_ms;
+        let delta_vs_p50 = pct_delta(current, p50);
+        println!(
+            "Current ingestion duration={}ms ({:+.1}% vs p50 baseline)",
+            current, delta_vs_p50
+        );
+        if delta_vs_p50 > warn_threshold_pct {
+            println!(
+                "WARNING: regression signal exceeded threshold (+{:.1}% > +{:.1}%).",
+                delta_vs_p50, warn_threshold_pct
+            );
+        }
+    } else {
+        println!(
+            "Ingestion history not sufficient for p50/p95 yet (need >=3, got {}).",
+            snapshots.len()
+        );
+    }
 
     Ok(())
 }

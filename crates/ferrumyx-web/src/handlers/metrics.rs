@@ -45,7 +45,10 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     let entity_repo = EntityRepository::new(state.db.clone());
     let fact_count = fact_repo.count().await.unwrap_or(0) as f64;
     let scored_count = score_repo.count().await.unwrap_or(0) as f64;
-    let gene_subject_count = entity_repo.count_by_type(EntityType::Gene).await.unwrap_or(0) as f64;
+    let gene_subject_count = entity_repo
+        .count_by_type(EntityType::Gene)
+        .await
+        .unwrap_or(0) as f64;
     let scores = score_repo.list(0, 5_000).await.unwrap_or_default();
 
     let primary_count = scores

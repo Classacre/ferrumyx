@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
 use ferrumyx_db::target_scores::TargetScoreRepository;
 use ferrumyx_db::Database;
@@ -17,6 +18,58 @@ pub struct GeneEvidence {
     pub confidence_sum: f64,
     pub cancer_id: Option<uuid::Uuid>,
     pub cancer_code: Option<String>,
+}
+
+fn score_row_from_evidence(
+    gene_id: uuid::Uuid,
+    gene_name: String,
+    evidence: GeneEvidence,
+) -> Option<ferrumyx_db::schema::TargetScore> {
+    if evidence.total_evidence == 0 {
+        return None;
+    }
+
+    let literature_score = normalise_count(evidence.total_evidence, 30.0);
+    let mutation_score = normalise_count(evidence.mutation_evidence, 12.0);
+    let cancer_score = normalise_count(evidence.cancer_evidence, 16.0);
+    let confidence_mean =
+        (evidence.confidence_sum / evidence.total_evidence as f64).clamp(0.0, 1.0);
+
+    let composite_score =
+        (0.50 * literature_score + 0.30 * mutation_score + 0.20 * cancer_score).clamp(0.0, 1.0);
+    let adjusted_score = (composite_score * confidence_mean).clamp(0.0, 1.0);
+    let shortlist_tier = if adjusted_score >= 0.60 {
+        "primary"
+    } else if adjusted_score >= 0.45 {
+        "secondary"
+    } else {
+        "excluded"
+    };
+
+    let mut row = ferrumyx_db::schema::TargetScore::new(
+        gene_id,
+        evidence.cancer_id.unwrap_or(uuid::Uuid::nil()),
+        composite_score,
+        adjusted_score,
+        0.0,
+        shortlist_tier.to_string(),
+    );
+    row.components_raw = serde_json::json!({
+        "gene": gene_name,
+        "cancer_code": evidence.cancer_code,
+        "total_evidence": evidence.total_evidence,
+        "mutation_evidence": evidence.mutation_evidence,
+        "cancer_evidence": evidence.cancer_evidence,
+        "confidence_mean": confidence_mean
+    })
+    .to_string();
+    row.components_normed = serde_json::json!({
+        "literature_score": literature_score,
+        "mutation_score": mutation_score,
+        "cancer_score": cancer_score
+    })
+    .to_string();
+    Some(row)
 }
 
 /// Compute target scores for all genes.
@@ -53,56 +106,106 @@ pub async fn compute_target_scores(db: Arc<Database>) -> anyhow::Result<u32> {
 
     let mut rows = Vec::new();
     for ((gene_id, gene_name), evidence) in by_gene {
-        if evidence.total_evidence == 0 {
-            continue;
+        if let Some(row) = score_row_from_evidence(gene_id, gene_name, evidence) {
+            rows.push(row);
         }
-
-        let literature_score = normalise_count(evidence.total_evidence, 30.0);
-        let mutation_score = normalise_count(evidence.mutation_evidence, 12.0);
-        let cancer_score = normalise_count(evidence.cancer_evidence, 16.0);
-        let confidence_mean =
-            (evidence.confidence_sum / evidence.total_evidence as f64).clamp(0.0, 1.0);
-
-        let composite_score =
-            (0.50 * literature_score + 0.30 * mutation_score + 0.20 * cancer_score).clamp(0.0, 1.0);
-        let adjusted_score = (composite_score * confidence_mean).clamp(0.0, 1.0);
-        let shortlist_tier = if adjusted_score >= 0.60 {
-            "primary"
-        } else if adjusted_score >= 0.45 {
-            "secondary"
-        } else {
-            "excluded"
-        };
-
-        let mut row = ferrumyx_db::schema::TargetScore::new(
-            gene_id,
-            evidence.cancer_id.unwrap_or(uuid::Uuid::nil()),
-            composite_score,
-            adjusted_score,
-            0.0,
-            shortlist_tier.to_string(),
-        );
-        row.components_raw = serde_json::json!({
-            "gene": gene_name,
-            "cancer_code": evidence.cancer_code,
-            "total_evidence": evidence.total_evidence,
-            "mutation_evidence": evidence.mutation_evidence,
-            "cancer_evidence": evidence.cancer_evidence,
-            "confidence_mean": confidence_mean
-        })
-        .to_string();
-        row.components_normed = serde_json::json!({
-            "literature_score": literature_score,
-            "mutation_score": mutation_score,
-            "cancer_score": cancer_score
-        })
-        .to_string();
-        rows.push(row);
     }
 
     let score_repo = TargetScoreRepository::new(db);
     let upserted = score_repo.upsert_batch(&rows).await?;
     Ok(upserted as u32)
+}
+
+/// Incrementally recompute target scores for a bounded set of genes.
+pub async fn compute_target_scores_for_gene_ids(
+    db: Arc<Database>,
+    gene_ids: &[uuid::Uuid],
+) -> anyhow::Result<u32> {
+    let mut uniq = gene_ids.to_vec();
+    uniq.sort_unstable();
+    uniq.dedup();
+    if uniq.is_empty() {
+        return Ok(0);
+    }
+
+    let fact_repo = KgFactRepository::new(db.clone());
+    let facts = fact_repo.find_by_subject_ids(&uniq, 80).await?;
+
+    let mut by_gene: HashMap<uuid::Uuid, (String, GeneEvidence)> = HashMap::new();
+    for fact in facts {
+        if fact.predicate.eq_ignore_ascii_case("mentions") {
+            continue;
+        }
+        if !is_gene_like(&fact.subject_name) {
+            continue;
+        }
+        let entry = by_gene
+            .entry(fact.subject_id)
+            .or_insert_with(|| (fact.subject_name.clone(), GeneEvidence::default()));
+        if entry.0.trim().is_empty() && !fact.subject_name.trim().is_empty() {
+            entry.0 = fact.subject_name.clone();
+        }
+        let evidence = &mut entry.1;
+        evidence.total_evidence += 1;
+        evidence.confidence_sum += fact.confidence as f64;
+
+        let pred_lc = fact.predicate.to_lowercase();
+        if pred_lc.contains("mutation") || pred_lc == "has_mutation" {
+            evidence.mutation_evidence += 1;
+        }
+        if is_cancer_like(&fact.object_name) {
+            evidence.cancer_evidence += 1;
+            evidence.cancer_id = Some(fact.object_id);
+            evidence.cancer_code = Some(fact.object_name.clone());
+        }
+    }
+
+    let mut rows = Vec::new();
+    for gene_id in &uniq {
+        if let Some((gene_name, evidence)) = by_gene.remove(gene_id) {
+            if let Some(row) = score_row_from_evidence(*gene_id, gene_name, evidence) {
+                rows.push(row);
+            }
+        }
+    }
+
+    let score_repo = TargetScoreRepository::new(db);
+    // Clear impacted genes first so removed/changed evidence does not leave stale rows.
+    let _ = score_repo.delete_by_gene_ids(&uniq, 200).await?;
+    let upserted = score_repo.upsert_batch(&rows).await?;
+    Ok(upserted as u32)
+}
+
+/// Resolve gene names to entity IDs and recompute only those targets.
+pub async fn compute_target_scores_for_gene_names(
+    db: Arc<Database>,
+    gene_names: &[String],
+) -> anyhow::Result<u32> {
+    if gene_names.is_empty() {
+        return Ok(0);
+    }
+    let entity_repo = EntityRepository::new(db.clone());
+    let mut gene_ids = Vec::new();
+    for raw in gene_names {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        // Exact-name lookups avoid broad scans.
+        let mut matches = entity_repo.find_by_name(name).await.unwrap_or_default();
+        if matches.is_empty() {
+            let upper = name.to_ascii_uppercase();
+            if upper != name {
+                matches = entity_repo.find_by_name(&upper).await.unwrap_or_default();
+            }
+        }
+        for ent in matches {
+            if ent.entity_type.eq_ignore_ascii_case("gene") {
+                gene_ids.push(ent.id);
+            }
+        }
+    }
+    compute_target_scores_for_gene_ids(db, &gene_ids).await
 }
 
 /// Get gene evidence statistics.
