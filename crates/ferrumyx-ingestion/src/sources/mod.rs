@@ -24,7 +24,7 @@ use async_trait::async_trait;
 pub use arxiv::ArxivClient;
 pub use cbioportal::{CbioMutationFrequency, CbioPortalClient};
 pub use chembl::{ActivityRecord, ChemblClient, CompoundRecord, TargetRecord};
-pub use cosmic::{CosmicClient, MutationRecord, MutationType};
+pub use cosmic::{CosmicClient, CosmicMutationFrequency, MutationRecord, MutationType};
 pub use depmap::{DepMapClient, GeneDependency};
 pub use depmap_cache::DepMapCache;
 pub use gtex::GtexClient;

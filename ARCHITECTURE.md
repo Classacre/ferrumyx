@@ -1921,24 +1921,24 @@ OUTPUT FIELDS (per candidate):
 
 Remaining Phase 4 hardening work:
 - [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
-- [~] `n1` mutation frequency now supports source-backed cBioPortal cohort frequency caching (`ent_cbio_mutation_frequency`) with runtime fetch + TTL-backed reuse; remaining gap is broad-cohort parity and secondary-provider (COSMIC) fallback hardening.
-- [ ] Fully source-back `n5`/`n6` structural components from stable structural pipeline outputs (PDB/AlphaFold/fpocket) without proxy fallback for larger cohorts.
+- [x] `n1` mutation frequency supports source-backed cBioPortal + COSMIC caching (`ent_cbio_mutation_frequency`, `ent_cosmic_mutation_frequency`) with runtime fetch + TTL-backed reuse, same-cancer fallback, and any-cancer fallback paths for broader cohort coverage.
+- [x] `n5`/`n6` structural components run in source-backed mode for larger cohorts (`STRUCTURAL_SOURCE_MISSING` surfaced when absent), with optional strict mode for all cohorts via `ranker.phase4.structural_source_only`.
 - [x] Add explicit percentile field and richer component breakdown in API output.
 - [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
   - Note: legacy databases without these columns are handled via backward-compatible runtime dedupe; new/updated tables use native `score_version` + `is_current`.
 - [x] CRISPR dependency (`n2`) now uses local DepMap cache when present (`data/depmap`) with deterministic proxy fallback.
 - [x] Query API output now includes per-component source provenance (`component_sources`) so source-backed vs proxy values are explicit.
-- [~] `n3` (survival) and `n4` (expression) now derive from KG semantic predicates when available (`kg_fact_semantic`), with bounded proxy fallback for sparse contexts.
-- [x] `n4` additionally supports GTEx-backed enrichment with persistent cache table (`ent_gtex_expression`) and bounded runtime fallback (`gtex_api`) for small cohorts.
-- [x] `n3` additionally supports TCGA-backed enrichment with persistent cache table (`ent_tcga_survival`) and bounded runtime fallback (`tcga_api`) for small cohorts with cancer context.
-- [x] `n7` now supports ChEMBL-backed inhibitor counts with persistent cache table (`ent_chembl_targets`) and bounded runtime fallback (`chembl_api`) for small cohorts.
-- [x] `n8` now supports Reactome-backed pathway counts with persistent cache table (`ent_reactome_genes`) and bounded runtime fallback (`reactome_api`) for small cohorts.
+- [~] `n3` (survival) and `n4` (expression) derive from KG semantic predicates when available (`kg_fact_semantic`) with source-cache overrides from TCGA/GTEx when present.
+- [x] `n4` supports GTEx-backed enrichment with persistent cache table (`ent_gtex_expression`) and bounded runtime fallback (`gtex_api`) for small cohorts; large cohorts remain cache-only for latency control.
+- [x] `n3` supports TCGA-backed enrichment with persistent cache table (`ent_tcga_survival`) and bounded runtime fallback (`tcga_api`) for small cohorts with cancer context; large cohorts remain cache-only.
+- [x] `n7` supports ChEMBL-backed inhibitor counts with persistent cache table (`ent_chembl_targets`) and bounded runtime fallback (`chembl_api`) for small cohorts; large cohorts remain cache-only.
+- [x] `n8` supports Reactome-backed pathway counts with persistent cache table (`ent_reactome_genes`) and bounded runtime fallback (`reactome_api`) for small cohorts; large cohorts remain cache-only.
 - [x] Provider cache freshness controls added (TTL-based reads from persisted signal tables) to avoid stale long-lived values.
 - [x] Large-cohort mode now keeps query latency bounded while asynchronously prewarming top candidates into provider cache tables for subsequent source-backed runs.
-- [x] Explicit staged refresh path added (`refresh_provider_signals`) with bounded batch size, per-provider retries, and refresh telemetry for TCGA/GTEx/ChEMBL/Reactome.
+- [x] Explicit staged refresh path added (`refresh_provider_signals`) with bounded batch size, per-provider retries, and refresh telemetry for cBioPortal/COSMIC/TCGA/GTEx/ChEMBL/Reactome.
 - [x] Autonomous cycle now runs provider refresh before ranking so iterative runs progressively replace proxy/semantic fallbacks with source-backed cache signals.
-- [~] `n9` (literature novelty) now derives from paper publication metadata (`papers.published_at`) when available (`papers_metadata`), with fallback to evidence-density proxy.
-- [~] Remaining: evolve staged refresh into background scheduled jobs with persistence of run history, alerting, and adaptive refresh cadence by provider staleness/error rate.
+- [x] `n9` (literature novelty) now derives from paper publication + citation metadata (`papers.raw_json`/`published_at`) when available (`papers_metadata_citations`), with fallback to evidence-density proxy.
+- [~] Staged refresh now persists per-provider run history (`ent_provider_refresh_runs`) and applies adaptive cadence (error-rate + staleness aware); remaining gap is externalized background scheduling/alerting orchestration.
 
 ### 4.7 Phase 4 Review (2026-03-14)
 
@@ -1946,9 +1946,11 @@ Reality check against code:
 
 - Scoring core (weights, rank-normalization, penalties, shortlist thresholds, `DISPUTED` and hard-exclusion flags) aligns with architecture design.
 - Versioned score persistence is aligned (`score_version`, `is_current`) with backward compatibility for legacy tables.
-- Source-backed provider integration is materially advanced for `n2`, `n3`, `n4`, `n7`, and `n8`, and now includes `n1` via cBioPortal-backed mutation frequency cache rows (`ent_cbio_mutation_frequency`) with bounded runtime fetch + TTL freshness checks.
+- Source-backed provider integration is materially advanced for `n1` through `n4` and `n7`/`n8`; `n1` now uses cBioPortal + COSMIC mutation-frequency cache rows (`ent_cbio_mutation_frequency`, `ent_cosmic_mutation_frequency`) with bounded runtime fetch + TTL freshness checks.
+- Adaptive refresh persistence now records provider refresh outcomes in `ent_provider_refresh_runs` and uses recent error-rate/staleness policy to modulate refresh cadence.
+- Literature novelty (`n9`) now uses publication + citation metadata when available, reducing dependency on pure evidence-density proxy behavior.
 - `component_sources` is exposed per result so proxy-vs-source-backed provenance is explicit at query time.
-- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially `n5` and `n6`, plus secondary-provider/large-cohort hardening for `n1`.
+- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially strict structural completeness (`n5`/`n6`) and background orchestration around provider refresh.
 
 ---
 

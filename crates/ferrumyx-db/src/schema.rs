@@ -348,6 +348,18 @@ pub struct EntCbioMutationFrequency {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntCosmicMutationFrequency {
+    pub id: uuid::Uuid,
+    pub gene_symbol: String,
+    pub cancer_code: String,
+    pub mutated_sample_count: i64,
+    pub profiled_sample_count: i64,
+    pub mutation_frequency: f64,
+    pub source: String,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EntGtexExpression {
     pub id: uuid::Uuid,
     pub gene_symbol: String,
@@ -372,6 +384,24 @@ pub struct EntReactomeGene {
     pub pathway_count: i64,
     pub source: String,
     pub fetched_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntProviderRefreshRun {
+    pub id: uuid::Uuid,
+    pub provider: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub finished_at: chrono::DateTime<chrono::Utc>,
+    pub genes_requested: i64,
+    pub genes_processed: i64,
+    pub attempted: i64,
+    pub success: i64,
+    pub failed: i64,
+    pub skipped: i64,
+    pub duration_ms: i64,
+    pub error_rate: f64,
+    pub cadence_interval_secs: i64,
+    pub trigger_reason: String,
 }
 
 // =============================================================================
@@ -606,6 +636,8 @@ pub const TABLE_ENT_DRUGGABILITY: &str = "ent_druggability";
 pub const TABLE_ENT_SYNTHETIC_LETHALITY: &str = "ent_synthetic_lethality";
 pub const TABLE_ENT_TCGA_SURVIVAL: &str = "ent_tcga_survival";
 pub const TABLE_ENT_CBIO_MUTATION_FREQUENCY: &str = "ent_cbio_mutation_frequency";
+pub const TABLE_ENT_COSMIC_MUTATION_FREQUENCY: &str = "ent_cosmic_mutation_frequency";
 pub const TABLE_ENT_GTEX_EXPRESSION: &str = "ent_gtex_expression";
 pub const TABLE_ENT_CHEMBL_TARGETS: &str = "ent_chembl_targets";
 pub const TABLE_ENT_REACTOME_GENES: &str = "ent_reactome_genes";
+pub const TABLE_ENT_PROVIDER_REFRESH_RUNS: &str = "ent_provider_refresh_runs";

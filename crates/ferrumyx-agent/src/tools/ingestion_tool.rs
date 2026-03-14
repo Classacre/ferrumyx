@@ -1119,6 +1119,7 @@ impl Tool for IngestionTool {
                     .as_ref()
                     .map(|r| {
                         (r.cbio_failed
+                            + r.cosmic_failed
                             + r.gtex_failed
                             + r.tcga_failed
                             + r.chembl_failed
@@ -1158,6 +1159,7 @@ impl Tool for IngestionTool {
                 .as_ref()
                 .map(|r| {
                     (r.cbio_failed
+                        + r.cosmic_failed
                         + r.gtex_failed
                         + r.tcga_failed
                         + r.chembl_failed

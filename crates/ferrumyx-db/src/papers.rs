@@ -18,6 +18,12 @@ pub struct PaperRepository {
     db: Arc<Database>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct PaperNoveltySignal {
+    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub citation_count: Option<u32>,
+}
+
 impl PaperRepository {
     pub fn new(db: Arc<Database>) -> Self {
         Self { db }
@@ -523,6 +529,112 @@ impl PaperRepository {
         Ok(out)
     }
 
+    /// Resolve publication + citation metadata for novelty scoring.
+    pub async fn find_novelty_signals_by_ids(
+        &self,
+        ids: &[uuid::Uuid],
+    ) -> Result<HashMap<uuid::Uuid, PaperNoveltySignal>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq: Vec<uuid::Uuid> = ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+
+        let in_clause = uniq
+            .iter()
+            .map(|id| format!("'{}'", id))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut stream = table
+            .query()
+            .only_if(&format!("id IN ({})", in_clause))
+            .select(lancedb::query::Select::columns(&[
+                "id",
+                "published_at",
+                "raw_json",
+            ]))
+            .execute()
+            .await?;
+
+        let mut out = HashMap::new();
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            let schema = batch.schema();
+            let id_idx = match schema.index_of("id") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let published_idx = match schema.index_of("published_at") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let raw_idx = match schema.index_of("raw_json") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+
+            let ids_arr = match batch.column(id_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let published_arr = match batch
+                .column(published_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let raw_arr = match batch.column(raw_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+
+            for row in 0..batch.num_rows() {
+                if ids_arr.is_null(row) {
+                    continue;
+                }
+                let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(row)) else {
+                    continue;
+                };
+
+                let published_at = if !published_arr.is_null(row) {
+                    chrono::DateTime::parse_from_rfc3339(published_arr.value(row))
+                        .ok()
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                } else {
+                    None
+                };
+
+                let citation_count = if !raw_arr.is_null(row) {
+                    extract_citation_count(raw_arr.value(row))
+                } else {
+                    None
+                };
+
+                out.insert(
+                    id,
+                    PaperNoveltySignal {
+                        published_at,
+                        citation_count,
+                    },
+                );
+            }
+        }
+
+        Ok(out)
+    }
+
     /// Count papers by source.
     pub async fn count_by_source(&self, source: &str) -> Result<u64> {
         let table = self
@@ -573,5 +685,51 @@ impl PaperRepository {
         }
 
         Ok(papers)
+    }
+}
+
+fn extract_citation_count(raw_json: &str) -> Option<u32> {
+    let parsed: serde_json::Value = serde_json::from_str(raw_json).ok()?;
+
+    fn as_u32(v: &serde_json::Value) -> Option<u32> {
+        if let Some(n) = v.as_u64() {
+            return Some(n.min(u32::MAX as u64) as u32);
+        }
+        if let Some(s) = v.as_str() {
+            return s.trim().parse::<u32>().ok();
+        }
+        None
+    }
+
+    as_u32(&parsed["citation_count"])
+        .or_else(|| as_u32(&parsed["citationCount"]))
+        .or_else(|| as_u32(&parsed["cited_by_count"]))
+        .or_else(|| as_u32(&parsed["citation_count_total"]))
+        .or_else(|| as_u32(&parsed["metrics"]["citation_count"]))
+        .or_else(|| as_u32(&parsed["metrics"]["citationCount"]))
+        .or_else(|| as_u32(&parsed["external"]["semantic_scholar"]["citationCount"]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_citation_count;
+
+    #[test]
+    fn citation_extract_supports_common_keys() {
+        assert_eq!(extract_citation_count(r#"{"citationCount": 42}"#), Some(42));
+        assert_eq!(
+            extract_citation_count(r#"{"metrics": {"citation_count": 17}}"#),
+            Some(17)
+        );
+        assert_eq!(
+            extract_citation_count(r#"{"external": {"semantic_scholar": {"citationCount": 89}}}"#),
+            Some(89)
+        );
+    }
+
+    #[test]
+    fn citation_extract_handles_missing_or_invalid_payload() {
+        assert_eq!(extract_citation_count("{}"), None);
+        assert_eq!(extract_citation_count("{not-json"), None);
     }
 }

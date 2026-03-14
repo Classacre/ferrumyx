@@ -149,6 +149,41 @@ alphafold_cache_dir = "./data/alphafold"
 pdb_cache_dir       = "./data/pdb"
 fpocket_binary      = "fpocket"   # must be on PATH
 
+# ── Ranker Phase 4 ───────────────────────────────────────────────────────────
+[ranker.phase4]
+# For cohorts above this size, ranker reads provider cache rows only and avoids
+# live provider API fanout during interactive ranking.
+provider_live_fetch_max_candidates = 8
+structural_source_only = false
+
+[ranker.phase4.structural]
+prewarm_enabled = true
+prewarm_max_genes = 8
+cache_dir = "data/structural_cache"
+fpocket_enabled = true
+fpocket_bin = "fpocket"
+
+[ranker.phase4.provider_refresh]
+adaptive_enabled = true
+base_interval_secs = 900
+min_interval_secs = 180
+max_interval_secs = 21600
+stale_force_after_secs = 86400
+backoff_factor = 2
+success_accel_div = 2
+recent_runs = 8
+
+[ranker.providers.cbioportal]
+base_url = "https://www.cbioportal.org/api"
+timeout_secs = 10
+# api_token = ""
+
+[ranker.providers.cosmic]
+base_url = "https://cancer.sanger.ac.uk/cosmic/api"
+timeout_secs = 10
+mutation_data_path = ""
+# api_key = ""
+
 # ── Audit ─────────────────────────────────────────────────────────────────────
 [audit]
 log_llm_calls    = true

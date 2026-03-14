@@ -102,8 +102,20 @@ async function loadSettings() {
   byId('phase4_structural_cache_dir').value = data.phase4_structural_cache_dir;
   byId('phase4_structural_fpocket_enabled').checked = data.phase4_structural_fpocket_enabled;
   byId('phase4_structural_fpocket_bin').value = data.phase4_structural_fpocket_bin;
+  byId('phase4_provider_live_fetch_max_candidates').value = data.phase4_provider_live_fetch_max_candidates;
+  byId('phase4_provider_refresh_adaptive_enabled').checked = data.phase4_provider_refresh_adaptive_enabled;
+  byId('phase4_provider_refresh_base_interval_secs').value = data.phase4_provider_refresh_base_interval_secs;
+  byId('phase4_provider_refresh_min_interval_secs').value = data.phase4_provider_refresh_min_interval_secs;
+  byId('phase4_provider_refresh_max_interval_secs').value = data.phase4_provider_refresh_max_interval_secs;
+  byId('phase4_provider_refresh_stale_force_after_secs').value = data.phase4_provider_refresh_stale_force_after_secs;
+  byId('phase4_provider_refresh_backoff_factor').value = data.phase4_provider_refresh_backoff_factor;
+  byId('phase4_provider_refresh_success_accel_div').value = data.phase4_provider_refresh_success_accel_div;
+  byId('phase4_provider_refresh_recent_runs').value = data.phase4_provider_refresh_recent_runs;
   byId('cbioportal_base_url').value = data.cbioportal_base_url;
   byId('cbioportal_timeout_secs').value = data.cbioportal_timeout_secs;
+  byId('cosmic_base_url').value = data.cosmic_base_url;
+  byId('cosmic_timeout_secs').value = data.cosmic_timeout_secs;
+  byId('cosmic_mutation_data_path').value = data.cosmic_mutation_data_path;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -112,6 +124,7 @@ async function loadSettings() {
   setProviderState('pubmed_state', data.has_pubmed_key);
   setProviderState('semanticscholar_state', data.has_semanticscholar_key);
   setProviderState('cbio_state', data.has_cbioportal_key);
+  setProviderState('cosmic_state', data.has_cosmic_key);
   setProviderState('embedding_state', data.has_embedding_key);
 
   byId('sync_backend').textContent = data.ironclaw_sync.llm_backend;
@@ -193,8 +206,20 @@ async function saveSettings() {
     phase4_structural_cache_dir: byId('phase4_structural_cache_dir').value,
     phase4_structural_fpocket_enabled: byId('phase4_structural_fpocket_enabled').checked,
     phase4_structural_fpocket_bin: byId('phase4_structural_fpocket_bin').value,
+    phase4_provider_live_fetch_max_candidates: Number(byId('phase4_provider_live_fetch_max_candidates').value || 8),
+    phase4_provider_refresh_adaptive_enabled: byId('phase4_provider_refresh_adaptive_enabled').checked,
+    phase4_provider_refresh_base_interval_secs: Number(byId('phase4_provider_refresh_base_interval_secs').value || 900),
+    phase4_provider_refresh_min_interval_secs: Number(byId('phase4_provider_refresh_min_interval_secs').value || 180),
+    phase4_provider_refresh_max_interval_secs: Number(byId('phase4_provider_refresh_max_interval_secs').value || 21600),
+    phase4_provider_refresh_stale_force_after_secs: Number(byId('phase4_provider_refresh_stale_force_after_secs').value || 86400),
+    phase4_provider_refresh_backoff_factor: Number(byId('phase4_provider_refresh_backoff_factor').value || 2),
+    phase4_provider_refresh_success_accel_div: Number(byId('phase4_provider_refresh_success_accel_div').value || 2),
+    phase4_provider_refresh_recent_runs: Number(byId('phase4_provider_refresh_recent_runs').value || 8),
     cbioportal_base_url: byId('cbioportal_base_url').value,
     cbioportal_timeout_secs: Number(byId('cbioportal_timeout_secs').value || 10),
+    cosmic_base_url: byId('cosmic_base_url').value,
+    cosmic_timeout_secs: Number(byId('cosmic_timeout_secs').value || 10),
+    cosmic_mutation_data_path: byId('cosmic_mutation_data_path').value,
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
@@ -202,6 +227,7 @@ async function saveSettings() {
     pubmed_api_key: byId('pubmed_api_key').value || null,
     semanticscholar_api_key: byId('semanticscholar_api_key').value || null,
     cbioportal_api_token: byId('cbioportal_api_token').value || null,
+    cosmic_api_key: byId('cosmic_api_key').value || null,
     embedding_api_key: byId('embedding_api_key').value || null,
   };
 
@@ -217,7 +243,7 @@ async function saveSettings() {
     btn.innerHTML = 'Saved';
     btn.style.backgroundColor = 'var(--success)';
 
-    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','cbioportal_api_token','embedding_api_key']
+    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','cbioportal_api_token','cosmic_api_key','embedding_api_key']
       .forEach((id) => { byId(id).value = ''; });
 
     await loadSettings();
@@ -351,6 +377,26 @@ __NAV__
             <label for="cbioportal_api_token">cBioPortal API Token <span id="cbio_state" class="state-pill">Not Set</span></label>
             <input id="cbioportal_api_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
             <div class="help-text">Optional token for restricted/private cBioPortal instances.</div>
+          </div>
+          <div class="form-group">
+            <label for="cosmic_base_url">COSMIC API Base URL</label>
+            <input id="cosmic_base_url" class="form-control" placeholder="https://cancer.sanger.ac.uk/cosmic/api" />
+            <div class="help-text">Secondary n1 mutation-frequency provider endpoint when cBioPortal has no cohort-specific match.</div>
+          </div>
+          <div class="form-group">
+            <label for="cosmic_timeout_secs">COSMIC Request Timeout (seconds)</label>
+            <input id="cosmic_timeout_secs" type="number" min="3" max="60" class="form-control" />
+            <div class="help-text">Per-request timeout for COSMIC mutation-frequency calls.</div>
+          </div>
+          <div class="form-group">
+            <label for="cosmic_mutation_data_path">COSMIC Mutation Dataset Path (optional)</label>
+            <input id="cosmic_mutation_data_path" class="form-control" placeholder="data/providers/cosmic_mutation_frequency.tsv" />
+            <div class="help-text">Local TSV/CSV export path for fast offline lookup; used before remote API calls.</div>
+          </div>
+          <div class="form-group">
+            <label for="cosmic_api_key">COSMIC API Key <span id="cosmic_state" class="state-pill">Not Set</span></label>
+            <input id="cosmic_api_key" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Optional key for authenticated COSMIC API access.</div>
           </div>
           <div class="form-group">
             <label for="unpaywall_email">Unpaywall Contact Email</label>
@@ -622,6 +668,51 @@ __NAV__
             <input id="phase4_structural_fpocket_bin" class="form-control" placeholder="fpocket" />
             <div class="help-text">Command or absolute path used to execute fpocket during structural prewarm.</div>
           </div>
+          <div class="form-group">
+            <label for="phase4_provider_live_fetch_max_candidates">Phase 4 Live Provider Fetch Max Cohort</label>
+            <input id="phase4_provider_live_fetch_max_candidates" type="number" min="1" max="128" class="form-control" />
+            <div class="help-text">For cohorts larger than this, ranking uses provider cache rows only (no live API fanout).</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_adaptive_enabled">Phase 4 Adaptive Provider Refresh</label>
+            <input id="phase4_provider_refresh_adaptive_enabled" type="checkbox" />
+            <div class="help-text">Uses persisted provider health history to adapt refresh cadence by error rate and staleness.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_base_interval_secs">Provider Refresh Base Interval (seconds)</label>
+            <input id="phase4_provider_refresh_base_interval_secs" type="number" min="60" max="86400" class="form-control" />
+            <div class="help-text">Default cadence for provider refresh jobs before adaptive backoff/acceleration.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_min_interval_secs">Provider Refresh Min Interval (seconds)</label>
+            <input id="phase4_provider_refresh_min_interval_secs" type="number" min="30" max="43200" class="form-control" />
+            <div class="help-text">Lower bound for adaptive cadence under healthy provider conditions.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_max_interval_secs">Provider Refresh Max Interval (seconds)</label>
+            <input id="phase4_provider_refresh_max_interval_secs" type="number" min="300" max="604800" class="form-control" />
+            <div class="help-text">Upper bound for adaptive cadence under elevated provider error rates.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_stale_force_after_secs">Provider Refresh Stale Force Window (seconds)</label>
+            <input id="phase4_provider_refresh_stale_force_after_secs" type="number" min="300" max="2592000" class="form-control" />
+            <div class="help-text">Forces refresh when a provider has been idle this long, even if adaptive policy deferred it.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_backoff_factor">Provider Refresh Backoff Factor</label>
+            <input id="phase4_provider_refresh_backoff_factor" type="number" min="1" max="8" class="form-control" />
+            <div class="help-text">Multiplier applied to cadence when recent provider error rates are high.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_success_accel_div">Provider Refresh Success Acceleration Divisor</label>
+            <input id="phase4_provider_refresh_success_accel_div" type="number" min="1" max="8" class="form-control" />
+            <div class="help-text">Divisor applied to cadence when providers are healthy to converge source-backed signals faster.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_recent_runs">Provider Refresh Recent Run Window</label>
+            <input id="phase4_provider_refresh_recent_runs" type="number" min="1" max="128" class="form-control" />
+            <div class="help-text">How many recent runs are used to estimate provider error-rate trends.</div>
+          </div>
         </div>
         <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
         <div class="security-note" style="margin-top:0.8rem;">
@@ -754,10 +845,34 @@ pub struct SettingsView {
     phase4_structural_fpocket_enabled: bool,
     #[serde(default = "default_phase4_structural_fpocket_bin")]
     phase4_structural_fpocket_bin: String,
+    #[serde(default = "default_phase4_provider_live_fetch_max_candidates")]
+    phase4_provider_live_fetch_max_candidates: u64,
+    #[serde(default = "default_true")]
+    phase4_provider_refresh_adaptive_enabled: bool,
+    #[serde(default = "default_phase4_provider_refresh_base_interval_secs")]
+    phase4_provider_refresh_base_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_min_interval_secs")]
+    phase4_provider_refresh_min_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_max_interval_secs")]
+    phase4_provider_refresh_max_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_stale_force_after_secs")]
+    phase4_provider_refresh_stale_force_after_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_backoff_factor")]
+    phase4_provider_refresh_backoff_factor: u64,
+    #[serde(default = "default_phase4_provider_refresh_success_accel_div")]
+    phase4_provider_refresh_success_accel_div: u64,
+    #[serde(default = "default_phase4_provider_refresh_recent_runs")]
+    phase4_provider_refresh_recent_runs: u64,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
     cbioportal_timeout_secs: u64,
+    #[serde(default = "default_cosmic_base_url")]
+    cosmic_base_url: String,
+    #[serde(default = "default_cosmic_timeout_secs")]
+    cosmic_timeout_secs: u64,
+    #[serde(default)]
+    cosmic_mutation_data_path: String,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
@@ -765,6 +880,7 @@ pub struct SettingsView {
     has_pubmed_key: bool,
     has_semanticscholar_key: bool,
     has_cbioportal_key: bool,
+    has_cosmic_key: bool,
     has_embedding_key: bool,
     ironclaw_sync: IronclawSyncView,
 }
@@ -878,10 +994,34 @@ pub struct SettingsSaveRequest {
     phase4_structural_fpocket_enabled: bool,
     #[serde(default = "default_phase4_structural_fpocket_bin")]
     phase4_structural_fpocket_bin: String,
+    #[serde(default = "default_phase4_provider_live_fetch_max_candidates")]
+    phase4_provider_live_fetch_max_candidates: u64,
+    #[serde(default = "default_true")]
+    phase4_provider_refresh_adaptive_enabled: bool,
+    #[serde(default = "default_phase4_provider_refresh_base_interval_secs")]
+    phase4_provider_refresh_base_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_min_interval_secs")]
+    phase4_provider_refresh_min_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_max_interval_secs")]
+    phase4_provider_refresh_max_interval_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_stale_force_after_secs")]
+    phase4_provider_refresh_stale_force_after_secs: u64,
+    #[serde(default = "default_phase4_provider_refresh_backoff_factor")]
+    phase4_provider_refresh_backoff_factor: u64,
+    #[serde(default = "default_phase4_provider_refresh_success_accel_div")]
+    phase4_provider_refresh_success_accel_div: u64,
+    #[serde(default = "default_phase4_provider_refresh_recent_runs")]
+    phase4_provider_refresh_recent_runs: u64,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
     cbioportal_timeout_secs: u64,
+    #[serde(default = "default_cosmic_base_url")]
+    cosmic_base_url: String,
+    #[serde(default = "default_cosmic_timeout_secs")]
+    cosmic_timeout_secs: u64,
+    #[serde(default)]
+    cosmic_mutation_data_path: String,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
@@ -889,6 +1029,7 @@ pub struct SettingsSaveRequest {
     pubmed_api_key: Option<String>,
     semanticscholar_api_key: Option<String>,
     cbioportal_api_token: Option<String>,
+    cosmic_api_key: Option<String>,
     embedding_api_key: Option<String>,
 }
 
@@ -955,6 +1096,12 @@ fn default_cbioportal_base_url() -> String {
 fn default_cbioportal_timeout_secs() -> u64 {
     10
 }
+fn default_cosmic_base_url() -> String {
+    "https://cancer.sanger.ac.uk/cosmic/api".to_string()
+}
+fn default_cosmic_timeout_secs() -> u64 {
+    10
+}
 fn default_phase4_structural_prewarm_max_genes() -> u64 {
     8
 }
@@ -963,6 +1110,30 @@ fn default_phase4_structural_cache_dir() -> String {
 }
 fn default_phase4_structural_fpocket_bin() -> String {
     "fpocket".to_string()
+}
+fn default_phase4_provider_live_fetch_max_candidates() -> u64 {
+    8
+}
+fn default_phase4_provider_refresh_base_interval_secs() -> u64 {
+    900
+}
+fn default_phase4_provider_refresh_min_interval_secs() -> u64 {
+    180
+}
+fn default_phase4_provider_refresh_max_interval_secs() -> u64 {
+    21_600
+}
+fn default_phase4_provider_refresh_stale_force_after_secs() -> u64 {
+    86_400
+}
+fn default_phase4_provider_refresh_backoff_factor() -> u64 {
+    2
+}
+fn default_phase4_provider_refresh_success_accel_div() -> u64 {
+    2
+}
+fn default_phase4_provider_refresh_recent_runs() -> u64 {
+    8
 }
 fn default_scihub_domains() -> String {
     "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
@@ -1475,6 +1646,120 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                     .unwrap_or_else(default_phase4_structural_fpocket_bin)
             }
         },
+        phase4_provider_live_fetch_max_candidates: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "provider_live_fetch_max_candidates"],
+                0,
+            );
+            if toml_value >= 1 {
+                toml_value.clamp(1, 128)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_PROVIDER_LIVE_FETCH_MAX_CANDIDATES")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_provider_live_fetch_max_candidates())
+                    .clamp(1, 128)
+            }
+        },
+        phase4_provider_refresh_adaptive_enabled: {
+            let toml_value = bool_at(
+                &root,
+                &["ranker", "phase4", "provider_refresh", "adaptive_enabled"],
+                true,
+            );
+            let env_override = std::env::var("FERRUMYX_PHASE4_PROVIDER_REFRESH_ADAPTIVE_ENABLED")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
+        phase4_provider_refresh_base_interval_secs: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "provider_refresh", "base_interval_secs"],
+                0,
+            );
+            if toml_value >= 60 {
+                toml_value.clamp(60, 86_400)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_PROVIDER_REFRESH_BASE_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_provider_refresh_base_interval_secs())
+                    .clamp(60, 86_400)
+            }
+        },
+        phase4_provider_refresh_min_interval_secs: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "provider_refresh", "min_interval_secs"],
+                0,
+            );
+            if toml_value >= 30 {
+                toml_value.clamp(30, 43_200)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_PROVIDER_REFRESH_MIN_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_provider_refresh_min_interval_secs())
+                    .clamp(30, 43_200)
+            }
+        },
+        phase4_provider_refresh_max_interval_secs: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "provider_refresh", "max_interval_secs"],
+                0,
+            );
+            if toml_value >= 300 {
+                toml_value.clamp(300, 604_800)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_PROVIDER_REFRESH_MAX_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_provider_refresh_max_interval_secs())
+                    .clamp(300, 604_800)
+            }
+        },
+        phase4_provider_refresh_stale_force_after_secs: {
+            let toml_value = int_at(
+                &root,
+                &[
+                    "ranker",
+                    "phase4",
+                    "provider_refresh",
+                    "stale_force_after_secs",
+                ],
+                0,
+            );
+            if toml_value >= 300 {
+                toml_value.clamp(300, 2_592_000)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_PROVIDER_REFRESH_STALE_FORCE_AFTER_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_provider_refresh_stale_force_after_secs())
+                    .clamp(300, 2_592_000)
+            }
+        },
+        phase4_provider_refresh_backoff_factor: int_at(
+            &root,
+            &["ranker", "phase4", "provider_refresh", "backoff_factor"],
+            default_phase4_provider_refresh_backoff_factor(),
+        )
+        .clamp(1, 8),
+        phase4_provider_refresh_success_accel_div: int_at(
+            &root,
+            &["ranker", "phase4", "provider_refresh", "success_accel_div"],
+            default_phase4_provider_refresh_success_accel_div(),
+        )
+        .clamp(1, 8),
+        phase4_provider_refresh_recent_runs: int_at(
+            &root,
+            &["ranker", "phase4", "provider_refresh", "recent_runs"],
+            default_phase4_provider_refresh_recent_runs(),
+        )
+        .clamp(1, 128),
         cbioportal_base_url: {
             let toml_value = str_at(
                 &root,
@@ -1506,6 +1791,41 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                     .clamp(3, 60)
             }
         },
+        cosmic_base_url: {
+            let toml_value = str_at(&root, &["ranker", "providers", "cosmic", "base_url"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_COSMIC_BASE_URL")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_cosmic_base_url)
+            }
+        },
+        cosmic_timeout_secs: {
+            let toml_value = int_at(&root, &["ranker", "providers", "cosmic", "timeout_secs"], 0);
+            if toml_value >= 3 {
+                toml_value.clamp(3, 60)
+            } else {
+                std::env::var("FERRUMYX_COSMIC_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_cosmic_timeout_secs())
+                    .clamp(3, 60)
+            }
+        },
+        cosmic_mutation_data_path: {
+            let toml_value = str_at(
+                &root,
+                &["ranker", "providers", "cosmic", "mutation_data_path"],
+                "",
+            );
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_COSMIC_MUTATION_DATA_PATH").unwrap_or_default()
+            }
+        },
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"])
             || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"])
@@ -1530,6 +1850,9 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             &["ranker", "providers", "cbioportal", "api_token_secret"],
         ) || std::env::var("FERRUMYX_CBIOPORTAL_API_TOKEN")
             .is_ok_and(|v| !v.trim().is_empty()),
+        has_cosmic_key: has_nonempty(&root, &["ranker", "providers", "cosmic", "api_key"])
+            || has_nonempty(&root, &["ranker", "providers", "cosmic", "api_key_secret"])
+            || std::env::var("FERRUMYX_COSMIC_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
         ironclaw_sync: IronclawSyncView {
             llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
@@ -1836,6 +2159,67 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
             payload.phase4_structural_fpocket_bin.trim().to_string()
         },
     );
+    phase4.insert(
+        "provider_live_fetch_max_candidates".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_live_fetch_max_candidates
+                .clamp(1, 128) as i64,
+        ),
+    );
+    let provider_refresh = nested_table_mut(phase4, "provider_refresh");
+    provider_refresh.insert(
+        "adaptive_enabled".to_string(),
+        toml::Value::Boolean(payload.phase4_provider_refresh_adaptive_enabled),
+    );
+    provider_refresh.insert(
+        "base_interval_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_refresh_base_interval_secs
+                .clamp(60, 86_400) as i64,
+        ),
+    );
+    provider_refresh.insert(
+        "min_interval_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_refresh_min_interval_secs
+                .clamp(30, 43_200) as i64,
+        ),
+    );
+    provider_refresh.insert(
+        "max_interval_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_refresh_max_interval_secs
+                .clamp(300, 604_800) as i64,
+        ),
+    );
+    provider_refresh.insert(
+        "stale_force_after_secs".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_refresh_stale_force_after_secs
+                .clamp(300, 2_592_000) as i64,
+        ),
+    );
+    provider_refresh.insert(
+        "backoff_factor".to_string(),
+        toml::Value::Integer(payload.phase4_provider_refresh_backoff_factor.clamp(1, 8) as i64),
+    );
+    provider_refresh.insert(
+        "success_accel_div".to_string(),
+        toml::Value::Integer(
+            payload
+                .phase4_provider_refresh_success_accel_div
+                .clamp(1, 8) as i64,
+        ),
+    );
+    provider_refresh.insert(
+        "recent_runs".to_string(),
+        toml::Value::Integer(payload.phase4_provider_refresh_recent_runs.clamp(1, 128) as i64),
+    );
     let providers = nested_table_mut(ranker, "providers");
     let cbioportal = nested_table_mut(providers, "cbioportal");
     set_str(
@@ -1857,6 +2241,27 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
         "api_token_secret",
         &payload.cbioportal_api_token,
     );
+    let cosmic = nested_table_mut(providers, "cosmic");
+    set_str(
+        cosmic,
+        "base_url",
+        if payload.cosmic_base_url.trim().is_empty() {
+            default_cosmic_base_url()
+        } else {
+            payload.cosmic_base_url.trim().to_string()
+        },
+    );
+    cosmic.insert(
+        "timeout_secs".to_string(),
+        toml::Value::Integer(payload.cosmic_timeout_secs.clamp(3, 60) as i64),
+    );
+    set_str(
+        cosmic,
+        "mutation_data_path",
+        payload.cosmic_mutation_data_path.trim().to_string(),
+    );
+    maybe_set_secret(cosmic, "api_key", &payload.cosmic_api_key);
+    maybe_set_secret(cosmic, "api_key_secret", &payload.cosmic_api_key);
 
     let embedding = table_mut(&mut root, "embedding");
     set_str(embedding, "backend", payload.embedding_backend);
@@ -2309,6 +2714,112 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     if !phase4_structural_fpocket_bin.trim().is_empty() {
         std::env::set_var("FERRUMYX_FPOCKET_BIN", phase4_structural_fpocket_bin);
     }
+    let phase4_provider_live_fetch_max_candidates = int_at(
+        root,
+        &["ranker", "phase4", "provider_live_fetch_max_candidates"],
+        default_phase4_provider_live_fetch_max_candidates(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_LIVE_FETCH_MAX_CANDIDATES",
+        phase4_provider_live_fetch_max_candidates
+            .clamp(1, 128)
+            .to_string(),
+    );
+    let phase4_provider_refresh_adaptive_enabled = bool_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "adaptive_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_ADAPTIVE_ENABLED",
+        if phase4_provider_refresh_adaptive_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let phase4_provider_refresh_base_interval_secs = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "base_interval_secs"],
+        default_phase4_provider_refresh_base_interval_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_BASE_INTERVAL_SECS",
+        phase4_provider_refresh_base_interval_secs
+            .clamp(60, 86_400)
+            .to_string(),
+    );
+    let phase4_provider_refresh_min_interval_secs = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "min_interval_secs"],
+        default_phase4_provider_refresh_min_interval_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_MIN_INTERVAL_SECS",
+        phase4_provider_refresh_min_interval_secs
+            .clamp(30, 43_200)
+            .to_string(),
+    );
+    let phase4_provider_refresh_max_interval_secs = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "max_interval_secs"],
+        default_phase4_provider_refresh_max_interval_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_MAX_INTERVAL_SECS",
+        phase4_provider_refresh_max_interval_secs
+            .clamp(300, 604_800)
+            .to_string(),
+    );
+    let phase4_provider_refresh_stale_force_after_secs = int_at(
+        root,
+        &[
+            "ranker",
+            "phase4",
+            "provider_refresh",
+            "stale_force_after_secs",
+        ],
+        default_phase4_provider_refresh_stale_force_after_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_STALE_FORCE_AFTER_SECS",
+        phase4_provider_refresh_stale_force_after_secs
+            .clamp(300, 2_592_000)
+            .to_string(),
+    );
+    let phase4_provider_refresh_backoff_factor = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "backoff_factor"],
+        default_phase4_provider_refresh_backoff_factor(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_BACKOFF_FACTOR",
+        phase4_provider_refresh_backoff_factor
+            .clamp(1, 8)
+            .to_string(),
+    );
+    let phase4_provider_refresh_success_accel_div = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "success_accel_div"],
+        default_phase4_provider_refresh_success_accel_div(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_SUCCESS_ACCEL_DIV",
+        phase4_provider_refresh_success_accel_div
+            .clamp(1, 8)
+            .to_string(),
+    );
+    let phase4_provider_refresh_recent_runs = int_at(
+        root,
+        &["ranker", "phase4", "provider_refresh", "recent_runs"],
+        default_phase4_provider_refresh_recent_runs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_PROVIDER_REFRESH_RECENT_RUNS",
+        phase4_provider_refresh_recent_runs
+            .clamp(1, 128)
+            .to_string(),
+    );
 
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
     if !pubmed_key.is_empty() {
@@ -2349,6 +2860,49 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     };
     if !cbio_token.is_empty() {
         std::env::set_var("FERRUMYX_CBIOPORTAL_API_TOKEN", cbio_token);
+    }
+    let cosmic_base_url = str_at(
+        root,
+        &["ranker", "providers", "cosmic", "base_url"],
+        &default_cosmic_base_url(),
+    );
+    if !cosmic_base_url.trim().is_empty() {
+        std::env::set_var("FERRUMYX_COSMIC_BASE_URL", cosmic_base_url);
+    }
+    let cosmic_timeout_secs = int_at(
+        root,
+        &["ranker", "providers", "cosmic", "timeout_secs"],
+        default_cosmic_timeout_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_COSMIC_TIMEOUT_SECS",
+        cosmic_timeout_secs.clamp(3, 60).to_string(),
+    );
+    let cosmic_mutation_data_path = str_at(
+        root,
+        &["ranker", "providers", "cosmic", "mutation_data_path"],
+        "",
+    );
+    if !cosmic_mutation_data_path.trim().is_empty() {
+        std::env::set_var(
+            "FERRUMYX_COSMIC_MUTATION_DATA_PATH",
+            cosmic_mutation_data_path,
+        );
+    }
+    let cosmic_api_key = {
+        let k = str_at(root, &["ranker", "providers", "cosmic", "api_key"], "");
+        if !k.is_empty() {
+            k
+        } else {
+            str_at(
+                root,
+                &["ranker", "providers", "cosmic", "api_key_secret"],
+                "",
+            )
+        }
+    };
+    if !cosmic_api_key.is_empty() {
+        std::env::set_var("FERRUMYX_COSMIC_API_KEY", cosmic_api_key);
     }
     let unpaywall_email = str_at(root, &["ingestion", "unpaywall", "email"], "");
     if !unpaywall_email.is_empty() {

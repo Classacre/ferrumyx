@@ -52,12 +52,14 @@ pub use kg_conflicts::KgConflictRepository;
 pub use kg_facts::KgFactRepository;
 pub use papers::PaperRepository;
 pub use phase4_signals::Phase4SignalRepository;
+pub use schema::EntProviderRefreshRun;
 pub use schema::{
     Chunk, Entity, EntityMention, EntityType, KgConflict, KgFact, Paper, TargetScore,
     EMBEDDING_DIM, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS,
     TABLE_KG_FACTS, TABLE_PAPERS, TABLE_TARGET_SCORES,
 };
 pub use schema::{
-    EntCbioMutationFrequency, EntChemblTarget, EntGtexExpression, EntReactomeGene, EntTcgaSurvival,
+    EntCbioMutationFrequency, EntChemblTarget, EntCosmicMutationFrequency, EntGtexExpression,
+    EntReactomeGene, EntTcgaSurvival,
 };
 pub use target_scores::TargetScoreRepository;
