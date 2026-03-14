@@ -97,6 +97,11 @@ async function loadSettings() {
   byId('scihub_adaptive_probe_every').value = data.scihub_adaptive_probe_every;
   byId('scihub_adaptive_min_step_timeout_secs').value = data.scihub_adaptive_min_step_timeout_secs;
   byId('phase4_structural_source_only').checked = data.phase4_structural_source_only;
+  byId('phase4_structural_prewarm_enabled').checked = data.phase4_structural_prewarm_enabled;
+  byId('phase4_structural_prewarm_max_genes').value = data.phase4_structural_prewarm_max_genes;
+  byId('phase4_structural_cache_dir').value = data.phase4_structural_cache_dir;
+  byId('phase4_structural_fpocket_enabled').checked = data.phase4_structural_fpocket_enabled;
+  byId('phase4_structural_fpocket_bin').value = data.phase4_structural_fpocket_bin;
   byId('cbioportal_base_url').value = data.cbioportal_base_url;
   byId('cbioportal_timeout_secs').value = data.cbioportal_timeout_secs;
 
@@ -183,6 +188,11 @@ async function saveSettings() {
     scihub_adaptive_probe_every: Number(byId('scihub_adaptive_probe_every').value || 10),
     scihub_adaptive_min_step_timeout_secs: Number(byId('scihub_adaptive_min_step_timeout_secs').value || 3),
     phase4_structural_source_only: byId('phase4_structural_source_only').checked,
+    phase4_structural_prewarm_enabled: byId('phase4_structural_prewarm_enabled').checked,
+    phase4_structural_prewarm_max_genes: Number(byId('phase4_structural_prewarm_max_genes').value || 8),
+    phase4_structural_cache_dir: byId('phase4_structural_cache_dir').value,
+    phase4_structural_fpocket_enabled: byId('phase4_structural_fpocket_enabled').checked,
+    phase4_structural_fpocket_bin: byId('phase4_structural_fpocket_bin').value,
     cbioportal_base_url: byId('cbioportal_base_url').value,
     cbioportal_timeout_secs: Number(byId('cbioportal_timeout_secs').value || 10),
     openai_api_key: byId('openai_api_key').value || null,
@@ -587,6 +597,31 @@ __NAV__
             <input id="phase4_structural_source_only" type="checkbox" />
             <div class="help-text">When enabled, n5/n6 ignore KG structural proxies and require source-backed structural signals.</div>
           </div>
+          <div class="form-group">
+            <label for="phase4_structural_prewarm_enabled">Phase 4 Structural Prewarm Enabled</label>
+            <input id="phase4_structural_prewarm_enabled" type="checkbox" />
+            <div class="help-text">Runs background structural enrichment on top ranked genes after large-cohort queries.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_structural_prewarm_max_genes">Phase 4 Structural Prewarm Max Genes</label>
+            <input id="phase4_structural_prewarm_max_genes" type="number" min="1" max="32" class="form-control" />
+            <div class="help-text">Upper bound on structural prewarm fanout per large-cohort query.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_structural_cache_dir">Phase 4 Structural Cache Directory</label>
+            <input id="phase4_structural_cache_dir" class="form-control" placeholder="data/structural_cache" />
+            <div class="help-text">Filesystem path used for AlphaFold structure cache files.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_structural_fpocket_enabled">Phase 4 fpocket Enabled</label>
+            <input id="phase4_structural_fpocket_enabled" type="checkbox" />
+            <div class="help-text">If enabled and fpocket is available, pocket scores are persisted into `ent_druggability`.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_structural_fpocket_bin">Phase 4 fpocket Binary</label>
+            <input id="phase4_structural_fpocket_bin" class="form-control" placeholder="fpocket" />
+            <div class="help-text">Command or absolute path used to execute fpocket during structural prewarm.</div>
+          </div>
         </div>
         <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
         <div class="security-note" style="margin-top:0.8rem;">
@@ -709,6 +744,16 @@ pub struct SettingsView {
     scihub_adaptive_min_step_timeout_secs: u64,
     #[serde(default)]
     phase4_structural_source_only: bool,
+    #[serde(default = "default_true")]
+    phase4_structural_prewarm_enabled: bool,
+    #[serde(default = "default_phase4_structural_prewarm_max_genes")]
+    phase4_structural_prewarm_max_genes: u64,
+    #[serde(default = "default_phase4_structural_cache_dir")]
+    phase4_structural_cache_dir: String,
+    #[serde(default = "default_true")]
+    phase4_structural_fpocket_enabled: bool,
+    #[serde(default = "default_phase4_structural_fpocket_bin")]
+    phase4_structural_fpocket_bin: String,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -823,6 +868,16 @@ pub struct SettingsSaveRequest {
     scihub_adaptive_min_step_timeout_secs: u64,
     #[serde(default)]
     phase4_structural_source_only: bool,
+    #[serde(default = "default_true")]
+    phase4_structural_prewarm_enabled: bool,
+    #[serde(default = "default_phase4_structural_prewarm_max_genes")]
+    phase4_structural_prewarm_max_genes: u64,
+    #[serde(default = "default_phase4_structural_cache_dir")]
+    phase4_structural_cache_dir: String,
+    #[serde(default = "default_true")]
+    phase4_structural_fpocket_enabled: bool,
+    #[serde(default = "default_phase4_structural_fpocket_bin")]
+    phase4_structural_fpocket_bin: String,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -899,6 +954,15 @@ fn default_cbioportal_base_url() -> String {
 }
 fn default_cbioportal_timeout_secs() -> u64 {
     10
+}
+fn default_phase4_structural_prewarm_max_genes() -> u64 {
+    8
+}
+fn default_phase4_structural_cache_dir() -> String {
+    "data/structural_cache".to_string()
+}
+fn default_phase4_structural_fpocket_bin() -> String {
+    "fpocket".to_string()
 }
 fn default_scihub_domains() -> String {
     "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
@@ -1347,6 +1411,70 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             &["ranker", "phase4", "structural_source_only"],
             false,
         ),
+        phase4_structural_prewarm_enabled: {
+            let toml_value = bool_at(
+                &root,
+                &["ranker", "phase4", "structural", "prewarm_enabled"],
+                true,
+            );
+            let env_override = std::env::var("FERRUMYX_PHASE4_STRUCTURAL_PREWARM_ENABLED")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
+        phase4_structural_prewarm_max_genes: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "structural", "prewarm_max_genes"],
+                0,
+            );
+            if toml_value >= 1 {
+                toml_value.clamp(1, 32)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_STRUCTURAL_PREWARM_MAX_GENES")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_structural_prewarm_max_genes())
+                    .clamp(1, 32)
+            }
+        },
+        phase4_structural_cache_dir: {
+            let toml_value = str_at(&root, &["ranker", "phase4", "structural", "cache_dir"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_STRUCTURAL_CACHE_DIR")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_phase4_structural_cache_dir)
+            }
+        },
+        phase4_structural_fpocket_enabled: {
+            let toml_value = bool_at(
+                &root,
+                &["ranker", "phase4", "structural", "fpocket_enabled"],
+                true,
+            );
+            let env_override = std::env::var("FERRUMYX_STRUCTURAL_FPOCKET_ENABLED")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
+        phase4_structural_fpocket_bin: {
+            let toml_value = str_at(
+                &root,
+                &["ranker", "phase4", "structural", "fpocket_bin"],
+                "",
+            );
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FPOCKET_BIN")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_phase4_structural_fpocket_bin)
+            }
+        },
         cbioportal_base_url: {
             let toml_value = str_at(
                 &root,
@@ -1676,6 +1804,37 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     phase4.insert(
         "structural_source_only".to_string(),
         toml::Value::Boolean(payload.phase4_structural_source_only),
+    );
+    let structural = nested_table_mut(phase4, "structural");
+    structural.insert(
+        "prewarm_enabled".to_string(),
+        toml::Value::Boolean(payload.phase4_structural_prewarm_enabled),
+    );
+    structural.insert(
+        "prewarm_max_genes".to_string(),
+        toml::Value::Integer(payload.phase4_structural_prewarm_max_genes.clamp(1, 32) as i64),
+    );
+    set_str(
+        structural,
+        "cache_dir",
+        if payload.phase4_structural_cache_dir.trim().is_empty() {
+            default_phase4_structural_cache_dir()
+        } else {
+            payload.phase4_structural_cache_dir.trim().to_string()
+        },
+    );
+    structural.insert(
+        "fpocket_enabled".to_string(),
+        toml::Value::Boolean(payload.phase4_structural_fpocket_enabled),
+    );
+    set_str(
+        structural,
+        "fpocket_bin",
+        if payload.phase4_structural_fpocket_bin.trim().is_empty() {
+            default_phase4_structural_fpocket_bin()
+        } else {
+            payload.phase4_structural_fpocket_bin.trim().to_string()
+        },
     );
     let providers = nested_table_mut(ranker, "providers");
     let cbioportal = nested_table_mut(providers, "cbioportal");
@@ -2101,6 +2260,55 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             "0"
         },
     );
+    let phase4_structural_prewarm_enabled = bool_at(
+        root,
+        &["ranker", "phase4", "structural", "prewarm_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_STRUCTURAL_PREWARM_ENABLED",
+        if phase4_structural_prewarm_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let phase4_structural_prewarm_max_genes = int_at(
+        root,
+        &["ranker", "phase4", "structural", "prewarm_max_genes"],
+        default_phase4_structural_prewarm_max_genes(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_STRUCTURAL_PREWARM_MAX_GENES",
+        phase4_structural_prewarm_max_genes.clamp(1, 32).to_string(),
+    );
+    let phase4_structural_cache_dir = str_at(
+        root,
+        &["ranker", "phase4", "structural", "cache_dir"],
+        &default_phase4_structural_cache_dir(),
+    );
+    std::env::set_var("FERRUMYX_STRUCTURAL_CACHE_DIR", phase4_structural_cache_dir);
+    let phase4_structural_fpocket_enabled = bool_at(
+        root,
+        &["ranker", "phase4", "structural", "fpocket_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_STRUCTURAL_FPOCKET_ENABLED",
+        if phase4_structural_fpocket_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let phase4_structural_fpocket_bin = str_at(
+        root,
+        &["ranker", "phase4", "structural", "fpocket_bin"],
+        &default_phase4_structural_fpocket_bin(),
+    );
+    if !phase4_structural_fpocket_bin.trim().is_empty() {
+        std::env::set_var("FERRUMYX_FPOCKET_BIN", phase4_structural_fpocket_bin);
+    }
 
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
     if !pubmed_key.is_empty() {
