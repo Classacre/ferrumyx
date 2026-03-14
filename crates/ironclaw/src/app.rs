@@ -126,6 +126,7 @@ impl AppBuilder {
     ///
     /// Creates the database connection, runs migrations, reloads config
     /// from DB, attaches DB to session manager, and cleans up stale jobs.
+    #[allow(unreachable_code, unused_variables)]
     pub async fn init_database(&mut self) -> Result<(), anyhow::Error> {
         if self.db.is_some() {
             tracing::debug!("Database already provided, skipping init_database()");
@@ -274,6 +275,7 @@ impl AppBuilder {
             }
         };
 
+        #[allow(unused_variables)]
         let crypto = match crate::secrets::SecretsCrypto::new(master_key.clone()) {
             Ok(c) => Arc::new(c),
             Err(e) => {

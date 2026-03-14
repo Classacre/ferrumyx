@@ -98,7 +98,7 @@ pub async fn connect_from_config(
 /// pattern of [`connect_from_config`] but returns a secrets-specific store.
 pub async fn create_secrets_store(
     config: &crate::config::DatabaseConfig,
-    crypto: Arc<crate::secrets::SecretsCrypto>,
+    _crypto: Arc<crate::secrets::SecretsCrypto>,
 ) -> Result<Arc<dyn crate::secrets::SecretsStore + Send + Sync>, DatabaseError> {
     match config.backend {
         #[cfg(feature = "libsql")]
@@ -126,7 +126,7 @@ pub async fn create_secrets_store(
 
             Ok(Arc::new(crate::secrets::LibSqlSecretsStore::new(
                 backend.shared_db(),
-                crypto,
+                _crypto,
             )))
         }
         #[cfg(feature = "postgres")]
@@ -138,7 +138,7 @@ pub async fn create_secrets_store(
 
             Ok(Arc::new(crate::secrets::PostgresSecretsStore::new(
                 pg.pool(),
-                crypto,
+                _crypto,
             )))
         }
         #[cfg(not(feature = "postgres"))]

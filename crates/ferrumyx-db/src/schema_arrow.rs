@@ -912,7 +912,7 @@ pub fn record_to_ent_gene(batch: &RecordBatch, row: usize) -> Result<EntGene> {
             Some(arr.value(row))
         }
     };
-    let get_opt_i32 = |col: usize| -> Option<i32> {
+    let _get_opt_i32 = |col: usize| -> Option<i32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -924,7 +924,7 @@ pub fn record_to_ent_gene(batch: &RecordBatch, row: usize) -> Result<EntGene> {
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1042,7 +1042,7 @@ pub fn record_to_ent_mutation(batch: &RecordBatch, row: usize) -> Result<EntMuta
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1066,7 +1066,7 @@ pub fn record_to_ent_mutation(batch: &RecordBatch, row: usize) -> Result<EntMuta
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1159,7 +1159,7 @@ pub fn record_to_ent_cancer_type(batch: &RecordBatch, row: usize) -> Result<EntC
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1171,7 +1171,7 @@ pub fn record_to_ent_cancer_type(batch: &RecordBatch, row: usize) -> Result<EntC
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1195,7 +1195,7 @@ pub fn record_to_ent_cancer_type(batch: &RecordBatch, row: usize) -> Result<EntC
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1286,7 +1286,7 @@ pub fn record_to_ent_pathway(batch: &RecordBatch, row: usize) -> Result<EntPathw
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1298,7 +1298,7 @@ pub fn record_to_ent_pathway(batch: &RecordBatch, row: usize) -> Result<EntPathw
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1310,7 +1310,7 @@ pub fn record_to_ent_pathway(batch: &RecordBatch, row: usize) -> Result<EntPathw
             Some(arr.value(row))
         }
     };
-    let get_opt_i32 = |col: usize| -> Option<i32> {
+    let _get_opt_i32 = |col: usize| -> Option<i32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1322,7 +1322,7 @@ pub fn record_to_ent_pathway(batch: &RecordBatch, row: usize) -> Result<EntPathw
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1425,7 +1425,7 @@ pub fn record_to_ent_clinical_evidence(
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1437,7 +1437,7 @@ pub fn record_to_ent_clinical_evidence(
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1449,7 +1449,7 @@ pub fn record_to_ent_clinical_evidence(
             Some(arr.value(row))
         }
     };
-    let get_opt_i32 = |col: usize| -> Option<i32> {
+    let _get_opt_i32 = |col: usize| -> Option<i32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1461,7 +1461,7 @@ pub fn record_to_ent_clinical_evidence(
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1564,7 +1564,7 @@ pub fn record_to_ent_compound(batch: &RecordBatch, row: usize) -> Result<EntComp
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1576,7 +1576,7 @@ pub fn record_to_ent_compound(batch: &RecordBatch, row: usize) -> Result<EntComp
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1600,7 +1600,7 @@ pub fn record_to_ent_compound(batch: &RecordBatch, row: usize) -> Result<EntComp
             Some(arr.value(row))
         }
     };
-    let get_opt_f32 = |col: usize| -> Option<f32> {
+    let _get_opt_f32 = |col: usize| -> Option<f32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1714,7 +1714,7 @@ pub fn record_to_ent_structure(batch: &RecordBatch, row: usize) -> Result<EntStr
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1726,7 +1726,7 @@ pub fn record_to_ent_structure(batch: &RecordBatch, row: usize) -> Result<EntStr
             Some(arr.value(row))
         }
     };
-    let get_opt_i32 = |col: usize| -> Option<i32> {
+    let _get_opt_i32 = |col: usize| -> Option<i32> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1830,7 +1830,7 @@ pub fn record_to_ent_druggability(batch: &RecordBatch, row: usize) -> Result<Ent
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1842,7 +1842,7 @@ pub fn record_to_ent_druggability(batch: &RecordBatch, row: usize) -> Result<Ent
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1967,7 +1967,7 @@ pub fn record_to_ent_synthetic_lethality(
             Some(arr.value(row).to_string())
         }
     };
-    let get_bool = |col: usize| -> bool {
+    let _get_bool = |col: usize| -> bool {
         let arr = batch
             .column(col)
             .as_any()
@@ -1979,7 +1979,7 @@ pub fn record_to_ent_synthetic_lethality(
             arr.value(row)
         }
     };
-    let get_opt_i16 = |col: usize| -> Option<i16> {
+    let _get_opt_i16 = |col: usize| -> Option<i16> {
         let arr = batch
             .column(col)
             .as_any()
@@ -1991,7 +1991,7 @@ pub fn record_to_ent_synthetic_lethality(
             Some(arr.value(row))
         }
     };
-    let get_opt_i32 = |col: usize| -> Option<i32> {
+    let _get_opt_i32 = |col: usize| -> Option<i32> {
         let arr = batch
             .column(col)
             .as_any()

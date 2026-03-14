@@ -6,15 +6,19 @@
 //! - Usage tracking
 //! - Access control (which secrets a tool can use)
 
+#[cfg(any(feature = "postgres", feature = "libsql"))]
 use std::sync::Arc;
 
 use async_trait::async_trait;
+#[cfg(any(feature = "postgres", feature = "libsql"))]
 use chrono::Utc;
 #[cfg(feature = "postgres")]
 use deadpool_postgres::Pool;
+#[cfg(any(feature = "postgres", feature = "libsql"))]
 use secrecy::ExposeSecret;
 use uuid::Uuid;
 
+#[cfg(any(feature = "postgres", feature = "libsql"))]
 use crate::secrets::crypto::SecretsCrypto;
 use crate::secrets::types::{CreateSecretParams, DecryptedSecret, Secret, SecretError, SecretRef};
 

@@ -479,6 +479,7 @@ pub struct HttpSetupResult {
 
 /// Result of Signal channel setup.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SignalSetupResult {
     pub enabled: bool,
     pub http_url: String,
@@ -535,6 +536,7 @@ pub fn generate_webhook_secret() -> String {
     generate_secret_with_length(32)
 }
 
+#[allow(dead_code)]
 fn validate_e164(account: &str) -> Result<(), String> {
     if !account.starts_with('+') {
         return Err("E.164 account must start with '+'".to_string());
@@ -552,6 +554,7 @@ fn validate_e164(account: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn validate_allow_from_list(list: &str) -> Result<(), String> {
     if list.is_empty() {
         return Ok(());
@@ -587,6 +590,7 @@ fn validate_allow_from_list(list: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn validate_allow_from_groups_list(list: &str) -> Result<(), String> {
     if list.is_empty() {
         return Ok(());
@@ -611,6 +615,7 @@ fn validate_allow_from_groups_list(list: &str) -> Result<(), String> {
 
 /// Set up Signal channel.
 /// `Settings` is reserved for future use
+#[allow(dead_code)]
 pub async fn setup_signal(_settings: &Settings) -> Result<SignalSetupResult, ChannelSetupError> {
     println!("Signal Channel Setup:");
     println!();
@@ -719,6 +724,7 @@ pub async fn setup_signal(_settings: &Settings) -> Result<SignalSetupResult, Cha
 
 /// Result of WASM channel setup.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct WasmChannelSetupResult {
     pub enabled: bool,
     pub channel_name: String,
@@ -728,6 +734,7 @@ pub struct WasmChannelSetupResult {
 ///
 /// Reads setup requirements from the channel's capabilities file and
 /// prompts the user for each required secret.
+#[allow(dead_code)]
 pub async fn setup_wasm_channel(
     secrets: &SecretsContext,
     channel_name: &str,

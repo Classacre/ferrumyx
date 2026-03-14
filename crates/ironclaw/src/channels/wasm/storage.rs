@@ -18,6 +18,7 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use uuid::Uuid;
 
+#[cfg(any(feature = "postgres", feature = "libsql"))]
 use crate::tools::wasm::storage::{compute_binary_hash, verify_binary_integrity};
 
 /// A stored WASM channel (metadata only, no binary).
