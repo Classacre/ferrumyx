@@ -128,12 +128,45 @@ requests_per_second = 5
 mailto              = "your@email.com"
 requests_per_second = 5
 
+[ingestion.performance]
+# Validation mode: "off" | "audit" | "strict"
+validation_mode = "audit"
+# Chunk fingerprint scope: "paper" (recommended) | "global" | "off"
+chunk_fingerprint_scope = "paper"
+# Parse-quality guardrails for full text
+pdf_parse_fallback_enabled = true
+pdf_parse_min_sections = 2
+pdf_parse_min_chars = 1200
+pdf_parse_negative_revalidate_secs = 1800
+# Relation extraction quality telemetry thresholds
+predicate_coverage_min_unique = 6
+predicate_coverage_max_generic_share = 0.55
+
 # ── Scoring ───────────────────────────────────────────────────────────────────
 [scoring]
 focus_cancer    = "PAAD"
 focus_mutation  = "G12D"
 primary_threshold   = 0.65
 secondary_threshold = 0.45
+
+# ── Knowledge Graph Rendering ────────────────────────────────────────────────
+[graph]
+default_mode = "2d"   # "2d" or "3d"
+default_lens = "analysis" # "analysis" | "atlas" | "path"
+render_preset = "analytical" # "analytical" or "dense"
+
+[graph.mode_2d]
+max_nodes = 260
+max_links = 1000
+
+[graph.mode_3d]
+max_nodes = 200
+max_links = 650
+
+[graph.layout]
+hub_suppression = 0.62
+per_node_edge_cap = 12
+atlas_max_clusters = 40
 
 # ── NER service ───────────────────────────────────────────────────────────────
 [ner]
@@ -154,6 +187,8 @@ fpocket_binary      = "fpocket"   # must be on PATH
 # For cohorts above this size, ranker reads provider cache rows only and avoids
 # live provider API fanout during interactive ranking.
 provider_live_fetch_max_candidates = 8
+source_backed_only = true
+n3n4_semantic_fallback = false
 structural_source_only = false
 
 [ranker.phase4.structural]
@@ -172,6 +207,19 @@ stale_force_after_secs = 86400
 backoff_factor = 2
 success_accel_div = 2
 recent_runs = 8
+
+[ranker.phase4.background_refresh]
+enabled = true
+interval_secs = 900
+max_genes = 24
+batch_size = 6
+retries = 1
+fact_scan_limit = 4000
+min_gene_mentions = 2
+alert_error_rate = 0.55
+alert_streak_runs = 3
+cancer_code = ""   # Optional (e.g. "PAAD")
+seed_genes = ""    # Optional CSV seed list (e.g. "KRAS,EGFR,BRAF")
 
 [ranker.providers.cbioportal]
 base_url = "https://www.cbioportal.org/api"

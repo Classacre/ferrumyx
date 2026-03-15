@@ -104,6 +104,7 @@ impl Tool for RefreshProviderSignalsTool {
                 .and_then(|v| v.as_u64())
                 .map(|v| v as u8)
                 .unwrap_or(1),
+            offline_strict: false,
         };
 
         let started = std::time::Instant::now();

@@ -22,10 +22,12 @@ async fn main() -> anyhow::Result<()> {
     // Build router
     let app = ferrumyx_web::router::build_router(state);
 
-    // Bind to port
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
+    // Bind to port (override with FERRUMYX_WEB_ADDR, e.g. 127.0.0.1:3005)
+    let addr: SocketAddr = std::env::var("FERRUMYX_WEB_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:3001".to_string())
+        .parse()?;
     info!("🚀 Server listening on http://{}", addr);
-    info!("📱 Open your browser and navigate to http://localhost:3001");
+    info!("📱 Open your browser and navigate to http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

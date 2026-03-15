@@ -17,6 +17,9 @@ pub struct PerfSummaryView {
     avg_papers_inserted_per_min: f64,
     avg_chunks_inserted_per_min: f64,
     avg_pdf_cache_hit_rate: f64,
+    avg_unique_predicates: f64,
+    avg_predicate_generic_share: f64,
+    predicate_coverage_flagged_runs: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -30,6 +33,10 @@ pub struct PerfSnapshotView {
     quality_gate_skips: usize,
     pdf_cache_hits: usize,
     pdf_cache_misses: usize,
+    relation_fact_count: usize,
+    unique_predicate_count: usize,
+    predicate_generic_share: f64,
+    predicate_coverage_flagged: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -218,6 +225,24 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
             color: var(--text-main);
             margin-top: 0.25rem;
         }}
+        .metrics-disclosure {{
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(14, 21, 33, 0.58);
+        }}
+        .metrics-disclosure summary {{
+            cursor: pointer;
+            list-style: none;
+            padding: 0.72rem 0.95rem;
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+        }}
+        .metrics-disclosure-body {{
+            border-top: 1px solid var(--border-glass);
+            padding: 0.55rem 0.85rem 0.8rem;
+        }}
     </style>
 </head>
 <body>
@@ -254,11 +279,18 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
                 <div class="metric-card"><div class="metric-label">Avg Chunks / Min</div><div id="perf_avg_chunks" class="metric-value">0.00</div></div>
                 <div class="metric-card"><div class="metric-label">PDF Parse Cache Hit Rate</div><div id="perf_cache_hit_rate" class="metric-value">0.0%</div></div>
             </div>
-            <div class="table-container p-0">
-                <table class="table mb-0">
-                    <thead><tr><th>When</th><th>Query</th><th>Duration</th><th>Papers</th><th>Inserted</th><th>Chunks</th></tr></thead>
-                    <tbody id="perf_recent_rows"><tr><td colspan="6" class="text-muted text-center py-3">No ingestion telemetry yet.</td></tr></tbody>
-                </table>
+            <div class="metrics-disclosure">
+                <details>
+                    <summary>Recent Run Breakdown (Expand)</summary>
+                    <div class="metrics-disclosure-body">
+                        <div class="table-container p-0">
+                            <table class="table mb-0">
+                                <thead><tr><th>When</th><th>Query</th><th>Duration</th><th>Papers</th><th>Inserted</th><th>Chunks</th></tr></thead>
+                                <tbody id="perf_recent_rows"><tr><td colspan="6" class="text-muted text-center py-3">No ingestion telemetry yet.</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
     </div>
@@ -269,7 +301,7 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
     <div class="grid-2 mt-4">
         <div class="card h-100">
             <div class="card-header d-flex align-center gap-2">
-                <span>Current Metric Values</span>
+                <span>Metric Definitions</span>
                 <span class="info-tip">i
                     <span class="tooltip-card">
                         <strong class="text-main">Metric Definitions</strong><br>
@@ -335,6 +367,9 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
     let mut chunks_per_min_total = 0.0f64;
     let mut hit_total = 0usize;
     let mut miss_total = 0usize;
+    let mut unique_pred_total = 0usize;
+    let mut generic_share_total = 0.0f64;
+    let mut coverage_flagged = 0usize;
 
     let recent: Vec<PerfSnapshotView> = recent_raw
         .iter()
@@ -345,6 +380,11 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
             chunks_per_min_total += s.chunks_inserted as f64 / minutes;
             hit_total += s.pdf_cache_hits;
             miss_total += s.pdf_cache_misses;
+            unique_pred_total += s.unique_predicate_count;
+            generic_share_total += s.predicate_generic_share;
+            if s.predicate_coverage_flagged {
+                coverage_flagged += 1;
+            }
             PerfSnapshotView {
                 recorded_at_epoch_secs: s.recorded_at_epoch_secs,
                 query: s.query.clone(),
@@ -355,6 +395,10 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
                 quality_gate_skips: s.quality_gate_skips,
                 pdf_cache_hits: s.pdf_cache_hits,
                 pdf_cache_misses: s.pdf_cache_misses,
+                relation_fact_count: s.relation_fact_count,
+                unique_predicate_count: s.unique_predicate_count,
+                predicate_generic_share: s.predicate_generic_share,
+                predicate_coverage_flagged: s.predicate_coverage_flagged,
             }
         })
         .collect();
@@ -369,6 +413,9 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
         } else {
             0.0
         },
+        avg_unique_predicates: unique_pred_total as f64 / n,
+        avg_predicate_generic_share: generic_share_total / n,
+        predicate_coverage_flagged_runs: coverage_flagged,
     };
 
     Json(PerfResponse { summary, recent })

@@ -21,6 +21,7 @@ use crate::handlers::{
 use crate::sse::sse_handler;
 use crate::state::{AppState, SharedState};
 use axum::{
+    response::Redirect,
     routing::{get, post},
     Router,
 };
@@ -50,6 +51,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ranker", get(ranker_page))
         .route("/settings", get(settings_page))
         .route("/chat", get(chat_page))
+        .route("/favicon.ico", get(|| async { Redirect::permanent("/static/logo.svg") }))
         // SSE streaming
         .route("/api/events", get(sse_handler))
         // API endpoints

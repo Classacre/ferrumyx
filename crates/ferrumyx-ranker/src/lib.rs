@@ -10,11 +10,11 @@ pub mod tcga_provider;
 pub mod weights;
 
 use ferrumyx_common::query::{QueryRequest, QueryResult, TargetMetrics};
+use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::kg_conflicts::KgConflictRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
 use ferrumyx_db::papers::{PaperNoveltySignal, PaperRepository};
-use ferrumyx_db::schema::{EntDruggability, EntStructure};
-use ferrumyx_db::target_scores::TargetScoreRepository;
+use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType, EntDruggability, EntStructure, KgFact};
 use ferrumyx_db::Database;
 use ferrumyx_db::{
     EntCbioMutationFrequency, EntChemblTarget, EntCosmicMutationFrequency, EntGtexExpression,
@@ -42,6 +42,94 @@ pub struct TargetQueryEngine {
     db: Arc<Database>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FactProvenance {
+    Provider,
+    Extracted,
+    Generic,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfidenceTier {
+    High,
+    Medium,
+    Low,
+}
+
+fn classify_fact_provenance(f: &KgFact) -> FactProvenance {
+    let evidence_type = f.evidence_type.trim().to_ascii_lowercase();
+    let predicate = f.predicate.trim().to_ascii_lowercase();
+    let evidence = f.evidence.as_deref().unwrap_or("").to_ascii_lowercase();
+    let provider_predicate = predicate.ends_with("_cbioportal")
+        || predicate.ends_with("_cosmic")
+        || predicate.ends_with("_tcga")
+        || predicate.ends_with("_gtex")
+        || predicate.ends_with("_chembl")
+        || predicate.ends_with("_reactome");
+    if evidence_type.contains("provider") || provider_predicate || evidence.contains("provider=") {
+        FactProvenance::Provider
+    } else if evidence_type.contains("mention")
+        || evidence_type.contains("generic")
+        || predicate == "mentions"
+        || predicate == "associated_with"
+    {
+        FactProvenance::Generic
+    } else {
+        FactProvenance::Extracted
+    }
+}
+
+fn classify_confidence_tier(f: &KgFact, provenance: FactProvenance) -> ConfidenceTier {
+    let confidence = (f.confidence as f64).clamp(0.0, 1.0);
+    match provenance {
+        FactProvenance::Provider => {
+            if confidence >= 0.62 {
+                ConfidenceTier::High
+            } else {
+                ConfidenceTier::Medium
+            }
+        }
+        FactProvenance::Generic => {
+            if confidence >= 0.80 && !f.predicate.eq_ignore_ascii_case("mentions") {
+                ConfidenceTier::Medium
+            } else {
+                ConfidenceTier::Low
+            }
+        }
+        FactProvenance::Extracted => {
+            if confidence >= 0.78 {
+                ConfidenceTier::High
+            } else if confidence >= 0.52 {
+                ConfidenceTier::Medium
+            } else {
+                ConfidenceTier::Low
+            }
+        }
+    }
+}
+
+fn fact_signal_weight(provenance: FactProvenance, tier: ConfidenceTier, predicate: &str) -> f64 {
+    let provenance_weight: f64 = match provenance {
+        FactProvenance::Provider => 1.28_f64,
+        FactProvenance::Extracted => 1.0_f64,
+        FactProvenance::Generic => 0.68_f64,
+    };
+    let tier_weight: f64 = match tier {
+        ConfidenceTier::High => 1.18_f64,
+        ConfidenceTier::Medium => 1.0_f64,
+        ConfidenceTier::Low => 0.74_f64,
+    };
+    let predicate_lc = predicate.trim().to_ascii_lowercase();
+    let predicate_weight: f64 = if predicate_lc == "mentions" {
+        0.52_f64
+    } else if predicate_lc == "associated_with" {
+        0.74_f64
+    } else {
+        1.0_f64
+    };
+    (provenance_weight * tier_weight * predicate_weight).clamp(0.18_f64, 2.2_f64)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderRefreshRequest {
     pub genes: Vec<String>,
@@ -49,6 +137,8 @@ pub struct ProviderRefreshRequest {
     pub max_genes: usize,
     pub batch_size: usize,
     pub retries: u8,
+    #[serde(default)]
+    pub offline_strict: bool,
 }
 
 impl Default for ProviderRefreshRequest {
@@ -59,6 +149,7 @@ impl Default for ProviderRefreshRequest {
             max_genes: 24,
             batch_size: 6,
             retries: 1,
+            offline_strict: false,
         }
     }
 }
@@ -92,6 +183,10 @@ pub struct ProviderRefreshReport {
     pub reactome_failed: usize,
     pub reactome_skipped: usize,
     pub provider_decisions: BTreeMap<String, String>,
+    pub provider_timing_ms: BTreeMap<String, u64>,
+    pub kg_backfill_inserted: usize,
+    pub kg_backfill_deleted: usize,
+    pub kg_backfill_failed: usize,
     pub duration_ms: u64,
 }
 
@@ -104,7 +199,6 @@ impl TargetQueryEngine {
         let t0 = Instant::now();
         let kg_repo = KgFactRepository::new(self.db.clone());
         let conflict_repo = KgConflictRepository::new(self.db.clone());
-        let score_repo = TargetScoreRepository::new(self.db.clone());
 
         // Fetch a bounded cohort of facts, then rank unique gene candidates.
         let fact_limit = (req.max_results.saturating_mul(250)).clamp(200, 5000);
@@ -170,19 +264,33 @@ impl TargetQueryEngine {
             let entry = candidates
                 .entry(f.subject_id)
                 .or_insert_with(|| GeneCandidate::new(f.subject_name.clone()));
+            let provenance = classify_fact_provenance(&f);
+            let tier = classify_confidence_tier(&f, provenance);
+            let signal_weight = fact_signal_weight(provenance, tier, &f.predicate);
+            let weighted_confidence = (confidence_adj.clamp(0.0, 1.0) * signal_weight).clamp(0.0, 1.0);
 
             if disputed {
                 entry.flags.insert("DISPUTED".to_string());
             }
 
             entry.fact_count += 1;
+            entry.weighted_evidence_sum += signal_weight;
             entry.confidence_sum += confidence_adj.clamp(0.0, 1.0);
             entry.confidence_n += 1;
+            entry.weighted_confidence_sum += weighted_confidence;
+            entry.weighted_confidence_weight += signal_weight;
+            if matches!(provenance, FactProvenance::Provider) {
+                entry.provider_fact_count += 1;
+            }
+            if matches!(tier, ConfidenceTier::High) {
+                entry.high_tier_fact_count += 1;
+            }
             entry.paper_ids.insert(f.paper_id);
 
             let predicate_lc = f.predicate.to_lowercase();
             if predicate_lc.contains("mutation") || predicate_lc == "has_mutation" {
                 entry.mutation_mentions += 1;
+                entry.mutation_mentions_w += signal_weight;
             }
             if predicate_lc.contains("survival")
                 || predicate_lc.contains("hazard")
@@ -192,6 +300,7 @@ impl TargetQueryEngine {
                 || predicate_lc.contains("progression_free")
             {
                 entry.survival_mentions += 1;
+                entry.survival_mentions_w += signal_weight;
                 let survival_ctx = format!(
                     "{} {} {}",
                     f.subject_name.to_lowercase(),
@@ -205,6 +314,7 @@ impl TargetQueryEngine {
                     || survival_ctx.contains("reduced")
                 {
                     entry.survival_negative += 1;
+                    entry.survival_negative_w += signal_weight;
                 } else if survival_ctx.contains("improved")
                     || survival_ctx.contains("better")
                     || survival_ctx.contains("longer")
@@ -212,6 +322,7 @@ impl TargetQueryEngine {
                     || survival_ctx.contains("increased")
                 {
                     entry.survival_positive += 1;
+                    entry.survival_positive_w += signal_weight;
                 }
             }
             if predicate_lc.contains("expression")
@@ -232,8 +343,10 @@ impl TargetQueryEngine {
                     || expr_ctx.contains("adjacent")
                 {
                     entry.expression_normal_mentions += 1;
+                    entry.expression_normal_mentions_w += signal_weight;
                 } else {
                     entry.expression_tumor_mentions += 1;
+                    entry.expression_tumor_mentions_w += signal_weight;
                 }
             }
             if predicate_lc.contains("inhibit")
@@ -242,22 +355,27 @@ impl TargetQueryEngine {
                 || predicate_lc.contains("antagon")
             {
                 entry.inhibitor_mentions += 1;
+                entry.inhibitor_mentions_w += signal_weight;
             }
             if predicate_lc.contains("pathway") || predicate_lc.contains("reactome") {
                 entry.pathway_mentions += 1;
+                entry.pathway_mentions_w += signal_weight;
             }
             if predicate_lc.contains("pdb")
                 || predicate_lc.contains("alphafold")
                 || predicate_lc.contains("structure")
             {
                 entry.structural_mentions += 1;
+                entry.structural_mentions_w += signal_weight;
             }
             if predicate_lc.contains("pocket") || predicate_lc.contains("drugg") {
                 entry.pocket_mentions += 1;
+                entry.pocket_mentions_w += signal_weight;
             }
 
             if is_cancer_like(&f.object_name) {
                 entry.cancer_mentions += 1;
+                entry.cancer_mentions_w += signal_weight;
                 *entry
                     .cancer_codes
                     .entry(f.object_name.to_uppercase())
@@ -272,19 +390,7 @@ impl TargetQueryEngine {
             }
         }
 
-        let gene_ids: Vec<uuid::Uuid> = candidates.keys().copied().collect();
-        let persisted_scores = score_repo
-            .find_current_by_gene_ids(&gene_ids, 150)
-            .await
-            .unwrap_or_default();
         let t_scores = Instant::now();
-        let mut score_map_gene: HashMap<uuid::Uuid, f64> = HashMap::new();
-        for s in persisted_scores {
-            score_map_gene
-                .entry(s.gene_id)
-                .and_modify(|v| *v = v.max(s.confidence_adjusted_score))
-                .or_insert(s.confidence_adjusted_score);
-        }
 
         let ent_repo = EntStageRepository::new(self.db.clone());
         let signal_repo = Phase4SignalRepository::new(self.db.clone());
@@ -310,13 +416,22 @@ impl TargetQueryEngine {
         let mut by_gene_metrics: HashMap<uuid::Uuid, TargetMetrics> = HashMap::new();
         let mut component_sources_by_gene: HashMap<uuid::Uuid, BTreeMap<String, String>> =
             HashMap::new();
-        let disable_structural_proxy = should_disable_structural_proxy(candidates.len());
-        let allow_live_provider_fetch = should_allow_live_provider_fetch(candidates.len());
+        let source_backed_only = phase4_source_backed_only();
+        let semantic_fallback_enabled = phase4_semantic_fallback_enabled();
+        let query_cache_only = phase4_query_cache_only();
+        let disable_structural_proxy =
+            source_backed_only || should_disable_structural_proxy(candidates.len());
+        let allow_live_provider_fetch =
+            !query_cache_only && should_allow_live_provider_fetch(candidates.len());
         let mut structural_source_missing: HashSet<uuid::Uuid> = HashSet::new();
         for (gene_id, candidate) in &candidates {
-            let mut metrics = candidate.to_target_metrics();
-            let mut component_sources = default_component_sources();
-            if disable_structural_proxy {
+            let mut metrics = if source_backed_only {
+                source_backed_default_metrics()
+            } else {
+                candidate.to_target_metrics()
+            };
+            let mut component_sources = default_component_sources(source_backed_only);
+            if !source_backed_only && disable_structural_proxy {
                 // For larger cohorts we avoid KG-derived structural proxies and
                 // only accept source-backed structural signals.
                 metrics.pdb_structure_count = 0;
@@ -332,7 +447,7 @@ impl TargetQueryEngine {
                 );
             }
             if let Some(enrich) = enrichment_by_symbol.get(&candidate.gene_symbol.to_uppercase()) {
-                if enrich.mutation_count > 0 {
+                if !source_backed_only && enrich.mutation_count > 0 {
                     let source_mutation = (enrich.mutation_count as f64 / 20.0).clamp(0.0, 1.0);
                     metrics.mutation_freq = metrics.mutation_freq.max(source_mutation);
                     component_sources
@@ -360,14 +475,14 @@ impl TargetQueryEngine {
                         "ent_stage".to_string(),
                     );
                 }
-                if enrich.chembl_inhibitor_count > 0 {
+                if !source_backed_only && enrich.chembl_inhibitor_count > 0 {
                     metrics.chembl_inhibitor_count = metrics
                         .chembl_inhibitor_count
                         .max(enrich.chembl_inhibitor_count);
                     component_sources
                         .insert("n7_novelty_score".to_string(), "ent_stage".to_string());
                 }
-                if enrich.pathway_count > 0 {
+                if !source_backed_only && enrich.pathway_count > 0 {
                     metrics.reactome_escape_pathway_count = metrics
                         .reactome_escape_pathway_count
                         .max(enrich.pathway_count);
@@ -378,7 +493,7 @@ impl TargetQueryEngine {
                 }
             }
 
-            if disable_structural_proxy
+            if (source_backed_only || disable_structural_proxy)
                 && component_sources
                     .get("n5_structural_tractability")
                     .is_some_and(|v| v == "source_missing")
@@ -472,18 +587,6 @@ impl TargetQueryEngine {
                     .to_string(),
                 );
             }
-            if candidate.survival_mentions > 0 {
-                component_sources.insert(
-                    "n3_survival_correlation".to_string(),
-                    "kg_fact_semantic".to_string(),
-                );
-            }
-            if candidate.expression_tumor_mentions + candidate.expression_normal_mentions > 0 {
-                component_sources.insert(
-                    "n4_expression_specificity".to_string(),
-                    "kg_fact_semantic".to_string(),
-                );
-            }
 
             if let Some(depmap) = depmap_cache() {
                 if let Some(ceres) = depmap.get_mean_ceres(&candidate.gene_symbol, &inferred_cancer)
@@ -496,20 +599,22 @@ impl TargetQueryEngine {
                 }
             }
 
-            if should_fetch_tcga(candidates.len(), &req) {
-                if let Some(tcga_survival_score) = get_cached_tcga_survival_score(
-                    &signal_repo,
-                    &candidate.gene_symbol,
-                    &inferred_cancer,
-                    allow_live_provider_fetch,
-                )
-                .await
-                {
-                    metrics.survival_correlation = tcga_survival_score;
-                    component_sources.insert(
-                        "n3_survival_correlation".to_string(),
-                        "tcga_table".to_string(),
-                    );
+            if should_fetch_tcga(candidates.len(), provider_cancer.is_some()) {
+                if let Some(cancer_code) = provider_cancer.as_deref() {
+                    if let Some(tcga_survival_score) = get_cached_tcga_survival_score(
+                        &signal_repo,
+                        &candidate.gene_symbol,
+                        cancer_code,
+                        allow_live_provider_fetch,
+                    )
+                    .await
+                    {
+                        metrics.survival_correlation = tcga_survival_score;
+                        component_sources.insert(
+                            "n3_survival_correlation".to_string(),
+                            "tcga_table".to_string(),
+                        );
+                    }
                 }
             }
 
@@ -529,6 +634,35 @@ impl TargetQueryEngine {
                 }
             }
 
+            if source_backed_only
+                && semantic_fallback_enabled
+                && component_sources
+                    .get("n3_survival_correlation")
+                    .is_some_and(|v| v == "source_missing")
+            {
+                if let Some(semantic_survival_score) = candidate.semantic_survival_score() {
+                    metrics.survival_correlation = semantic_survival_score;
+                    component_sources.insert(
+                        "n3_survival_correlation".to_string(),
+                        "kg_fact_semantic_fallback".to_string(),
+                    );
+                }
+            }
+            if source_backed_only
+                && semantic_fallback_enabled
+                && component_sources
+                    .get("n4_expression_specificity")
+                    .is_some_and(|v| v == "source_missing")
+            {
+                if let Some(semantic_expr_score) = candidate.semantic_expression_specificity() {
+                    metrics.expression_specificity = semantic_expr_score;
+                    component_sources.insert(
+                        "n4_expression_specificity".to_string(),
+                        "kg_fact_semantic_fallback".to_string(),
+                    );
+                }
+            }
+
             if should_fetch_chembl(candidates.len(), &req) {
                 if let Some(chembl_count) = get_cached_chembl_inhibitor_count(
                     &signal_repo,
@@ -537,8 +671,11 @@ impl TargetQueryEngine {
                 )
                 .await
                 {
-                    metrics.chembl_inhibitor_count =
-                        metrics.chembl_inhibitor_count.max(chembl_count);
+                    metrics.chembl_inhibitor_count = if source_backed_only {
+                        chembl_count
+                    } else {
+                        metrics.chembl_inhibitor_count.max(chembl_count)
+                    };
                     component_sources
                         .insert("n7_novelty_score".to_string(), "chembl_table".to_string());
                 }
@@ -552,8 +689,11 @@ impl TargetQueryEngine {
                 )
                 .await
                 {
-                    metrics.reactome_escape_pathway_count =
-                        metrics.reactome_escape_pathway_count.max(reactome_count);
+                    metrics.reactome_escape_pathway_count = if source_backed_only {
+                        reactome_count
+                    } else {
+                        metrics.reactome_escape_pathway_count.max(reactome_count)
+                    };
                     component_sources.insert(
                         "n8_pathway_independence".to_string(),
                         "reactome_table".to_string(),
@@ -581,10 +721,10 @@ impl TargetQueryEngine {
                     .or_else(|| req.cancer_code.clone())
                     .unwrap_or_else(|| "UNK".to_string());
 
-                let persisted_score = score_map_gene.get(gene_id).copied();
-                let effective_score = persisted_score.unwrap_or(score_res.composite_score);
-                let confidence_adj =
-                    (effective_score * candidate.mean_confidence()).clamp(0.0, 1.0);
+                let effective_score = score_res.composite_score.clamp(0.0, 0.98);
+                let confidence_factor =
+                    (0.55 + 0.45 * candidate.mean_confidence().clamp(0.0, 1.0)).clamp(0.55, 1.0);
+                let confidence_adj = (effective_score * confidence_factor).clamp(0.0, 0.95);
 
                 let penalties = scorer::PenaltyInputs {
                     chembl_inhibitor_count: metrics.chembl_inhibitor_count,
@@ -617,7 +757,9 @@ impl TargetQueryEngine {
                 if penalties.chembl_inhibitor_count > 50 && score_res.n7_novelty_score < 0.20 {
                     flags.push("HARD_EXCLUSION_SATURATED_TARGET".to_string());
                 }
-                if !enrichment_by_symbol.contains_key(&candidate.gene_symbol.to_uppercase()) {
+                if !source_backed_only
+                    && !enrichment_by_symbol.contains_key(&candidate.gene_symbol.to_uppercase())
+                {
                     flags.push("COVERAGE_PROXY_ONLY".to_string());
                 }
                 if structural_source_missing.contains(gene_id) {
@@ -659,10 +801,12 @@ impl TargetQueryEngine {
         }
         results.truncate(req.max_results);
 
-        if should_prewarm_large_cohort(candidates.len()) {
+        let large_cohort = should_prewarm_large_cohort(candidates.len());
+        if query_cache_only || large_cohort {
+            let prewarm_take = if large_cohort { 20 } else { 12 };
             let prewarm_genes: Vec<String> = results
                 .iter()
-                .take(20)
+                .take(prewarm_take)
                 .map(|r| r.gene_symbol.trim().to_uppercase())
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -670,7 +814,11 @@ impl TargetQueryEngine {
                 let db = self.db.clone();
                 let cancer_code = req.cancer_code.clone();
                 tokio::spawn(async move {
-                    prewarm_phase4_large_cohort_signals(db, prewarm_genes, cancer_code).await;
+                    if large_cohort {
+                        prewarm_phase4_large_cohort_signals(db, prewarm_genes, cancer_code).await;
+                    } else {
+                        prewarm_phase4_provider_signals(db, prewarm_genes, cancer_code).await;
+                    }
                 });
             }
         }
@@ -699,7 +847,12 @@ impl TargetQueryEngine {
         let mut uniq = HashSet::new();
         let max_genes = request.max_genes.clamp(1, 200);
         let batch_size = request.batch_size.clamp(1, 32);
-        let retries = request.retries.min(3);
+        let force_refresh = !request.offline_strict;
+        let retries = if request.offline_strict {
+            0
+        } else {
+            request.retries.min(3)
+        };
 
         let genes: Vec<String> = request
             .genes
@@ -778,110 +931,183 @@ impl TargetQueryEngine {
             for gene in batch {
                 report.genes_processed += 1;
 
-                if !cbio_policy.run_now {
-                    report.cbio_skipped += 1;
-                } else if let Some(cc) = cancer_code.as_deref() {
-                    report.cbio_attempted += 1;
-                    if retry_fetch_f64(retries, || {
-                        get_cached_cbio_mutation_frequency(&signal_repo, gene, cc, true)
-                    })
-                    .await
-                    {
-                        report.cbio_success += 1;
-                    } else {
-                        report.cbio_failed += 1;
-                    }
-                } else {
-                    report.cbio_skipped += 1;
-                }
-
-                if !cosmic_policy.run_now {
-                    report.cosmic_skipped += 1;
-                } else {
-                    report.cosmic_attempted += 1;
-                    let ok = if let Some(cc) = cancer_code.as_deref() {
-                        retry_fetch_f64(retries, || {
-                            get_cached_cosmic_mutation_frequency(&signal_repo, gene, cc, true)
-                        })
-                        .await
-                    } else {
-                        retry_fetch_f64(retries, || {
-                            get_cached_cosmic_mutation_frequency_any_cancer(
+                {
+                    let t_provider = Instant::now();
+                    if !cbio_policy.run_now {
+                        report.cbio_skipped += 1;
+                    } else if let Some(cc) = cancer_code.as_deref() {
+                        report.cbio_attempted += 1;
+                        if retry_fetch_f64(retries, || {
+                            get_cached_cbio_mutation_frequency(
                                 &signal_repo,
                                 gene,
-                                true,
+                                cc,
+                                force_refresh,
                             )
                         })
                         .await
-                    };
-                    if ok {
-                        report.cosmic_success += 1;
+                        {
+                            report.cbio_success += 1;
+                        } else {
+                            report.cbio_failed += 1;
+                        }
                     } else {
-                        report.cosmic_failed += 1;
+                        report.cbio_skipped += 1;
                     }
+                    *report
+                        .provider_timing_ms
+                        .entry("cbioportal".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
                 }
 
-                if !gtex_policy.run_now {
-                    report.gtex_skipped += 1;
-                } else {
-                    report.gtex_attempted += 1;
-                    if retry_fetch_f64(retries, || {
-                        get_cached_gtex_expression_score(&signal_repo, gene, true)
-                    })
-                    .await
-                    {
-                        report.gtex_success += 1;
+                {
+                    let t_provider = Instant::now();
+                    if !cosmic_policy.run_now {
+                        report.cosmic_skipped += 1;
                     } else {
-                        report.gtex_failed += 1;
+                        report.cosmic_attempted += 1;
+                        let ok = if let Some(cc) = cancer_code.as_deref() {
+                            retry_fetch_f64(retries, || {
+                                get_cached_cosmic_mutation_frequency(
+                                    &signal_repo,
+                                    gene,
+                                    cc,
+                                    force_refresh,
+                                )
+                            })
+                            .await
+                        } else {
+                            retry_fetch_f64(retries, || {
+                                get_cached_cosmic_mutation_frequency_any_cancer(
+                                    &signal_repo,
+                                    gene,
+                                    force_refresh,
+                                )
+                            })
+                            .await
+                        };
+                        if ok {
+                            report.cosmic_success += 1;
+                        } else {
+                            report.cosmic_failed += 1;
+                        }
                     }
+                    *report
+                        .provider_timing_ms
+                        .entry("cosmic".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
                 }
 
-                if !chembl_policy.run_now {
-                    report.chembl_skipped += 1;
-                } else {
-                    report.chembl_attempted += 1;
-                    if retry_fetch_u32(retries, || {
-                        get_cached_chembl_inhibitor_count(&signal_repo, gene, true)
-                    })
-                    .await
-                    {
-                        report.chembl_success += 1;
+                {
+                    let t_provider = Instant::now();
+                    if !gtex_policy.run_now {
+                        report.gtex_skipped += 1;
                     } else {
-                        report.chembl_failed += 1;
+                        report.gtex_attempted += 1;
+                        if retry_fetch_f64(retries, || {
+                            get_cached_gtex_expression_score(&signal_repo, gene, force_refresh)
+                        })
+                        .await
+                        {
+                            report.gtex_success += 1;
+                        } else {
+                            report.gtex_failed += 1;
+                        }
                     }
+                    *report
+                        .provider_timing_ms
+                        .entry("gtex".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
                 }
 
-                if !reactome_policy.run_now {
-                    report.reactome_skipped += 1;
-                } else {
-                    report.reactome_attempted += 1;
-                    if retry_fetch_u32(retries, || {
-                        get_cached_reactome_pathway_count(&signal_repo, gene, true)
-                    })
-                    .await
-                    {
-                        report.reactome_success += 1;
+                {
+                    let t_provider = Instant::now();
+                    if !chembl_policy.run_now {
+                        report.chembl_skipped += 1;
                     } else {
-                        report.reactome_failed += 1;
+                        report.chembl_attempted += 1;
+                        if retry_fetch_u32(retries, || {
+                            get_cached_chembl_inhibitor_count(&signal_repo, gene, force_refresh)
+                        })
+                        .await
+                        {
+                            report.chembl_success += 1;
+                        } else {
+                            report.chembl_failed += 1;
+                        }
                     }
+                    *report
+                        .provider_timing_ms
+                        .entry("chembl".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
                 }
 
-                if !tcga_policy.run_now {
-                    report.tcga_skipped += 1;
-                } else if let Some(cc) = cancer_code.as_deref() {
-                    report.tcga_attempted += 1;
-                    if retry_fetch_f64(retries, || {
-                        get_cached_tcga_survival_score(&signal_repo, gene, cc, true)
-                    })
-                    .await
-                    {
-                        report.tcga_success += 1;
+                {
+                    let t_provider = Instant::now();
+                    if !reactome_policy.run_now {
+                        report.reactome_skipped += 1;
                     } else {
-                        report.tcga_failed += 1;
+                        report.reactome_attempted += 1;
+                        if retry_fetch_u32(retries, || {
+                            get_cached_reactome_pathway_count(&signal_repo, gene, force_refresh)
+                        })
+                        .await
+                        {
+                            report.reactome_success += 1;
+                        } else {
+                            report.reactome_failed += 1;
+                        }
                     }
-                } else {
-                    report.tcga_skipped += 1;
+                    *report
+                        .provider_timing_ms
+                        .entry("reactome".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
                 }
+
+                {
+                    let t_provider = Instant::now();
+                    if !tcga_policy.run_now {
+                        report.tcga_skipped += 1;
+                    } else if let Some(cc) = cancer_code.as_deref() {
+                        report.tcga_attempted += 1;
+                        if retry_fetch_f64(retries, || {
+                            get_cached_tcga_survival_score(&signal_repo, gene, cc, force_refresh)
+                        })
+                        .await
+                        {
+                            report.tcga_success += 1;
+                        } else {
+                            report.tcga_failed += 1;
+                        }
+                    } else {
+                        report.tcga_skipped += 1;
+                    }
+                    *report
+                        .provider_timing_ms
+                        .entry("tcga".to_string())
+                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
+                }
+            }
+        }
+
+        match materialize_provider_cache_facts_to_kg(
+            self.db.clone(),
+            &genes,
+            cancer_code.as_deref(),
+        )
+        .await
+        {
+            Ok(stats) => {
+                report.kg_backfill_inserted = stats.inserted;
+                report.kg_backfill_deleted = stats.deleted;
+            }
+            Err(err) => {
+                report.kg_backfill_failed += 1;
+                warn!(
+                    target: "ferrumyx_provider_refresh",
+                    error = %err,
+                    "failed to backfill provider cache rows into KG facts"
+                );
             }
         }
 
@@ -922,12 +1148,328 @@ impl TargetQueryEngine {
             reactome_success = report.reactome_success,
             reactome_failed = report.reactome_failed,
             reactome_skipped = report.reactome_skipped,
+            kg_backfill_inserted = report.kg_backfill_inserted,
+            kg_backfill_deleted = report.kg_backfill_deleted,
+            kg_backfill_failed = report.kg_backfill_failed,
             duration_ms = report.duration_ms,
             "provider signal refresh complete"
         );
 
         Ok(report)
     }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct ProviderKgBackfillStats {
+    inserted: usize,
+    deleted: usize,
+}
+
+const PROVIDER_BACKFILL_PREDICATES: &[&str] = &[
+    "mutation_frequency_cbioportal",
+    "mutation_frequency_cosmic",
+    "survival_association_tcga",
+    "expression_signal_gtex",
+    "inhibitor_evidence_chembl",
+    "pathway_membership_reactome",
+];
+
+async fn materialize_provider_cache_facts_to_kg(
+    db: Arc<Database>,
+    genes: &[String],
+    cancer_code_hint: Option<&str>,
+) -> anyhow::Result<ProviderKgBackfillStats> {
+    if genes.is_empty() {
+        return Ok(ProviderKgBackfillStats::default());
+    }
+
+    let signal_repo = Phase4SignalRepository::new(db.clone());
+    let entity_repo = EntityRepository::new(db.clone());
+    let fact_repo = KgFactRepository::new(db);
+    let mut stats = ProviderKgBackfillStats::default();
+
+    let mut dedup = HashSet::new();
+    for gene in genes {
+        let gene_symbol = gene.trim().to_uppercase();
+        if gene_symbol.is_empty() || !dedup.insert(gene_symbol.clone()) {
+            continue;
+        }
+
+        let Some(gene_id) =
+            ensure_entity_id(&entity_repo, DbEntityType::Gene, &gene_symbol, "provider_cache")
+                .await?
+        else {
+            continue;
+        };
+
+        let existing = fact_repo.find_by_subject(gene_id).await.unwrap_or_default();
+        for fact in existing {
+            if PROVIDER_BACKFILL_PREDICATES
+                .iter()
+                .any(|p| fact.predicate.eq_ignore_ascii_case(p))
+            {
+                if fact_repo.delete(fact.id).await.is_ok() {
+                    stats.deleted += 1;
+                }
+            }
+        }
+
+        let mut new_facts: Vec<KgFact> = Vec::new();
+
+        let cbio = if let Some(cc) = cancer_code_hint {
+            signal_repo
+                .find_cbio_mutation_frequency(&gene_symbol, cc)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            signal_repo
+                .find_cbio_mutation_frequency_any_cancer(&gene_symbol)
+                .await
+                .ok()
+                .flatten()
+        };
+        if let Some(signal) = cbio {
+            let cc = signal.cancer_code.trim().to_uppercase();
+            if let Some(cancer_id) =
+                ensure_entity_id(&entity_repo, DbEntityType::CancerType, &cc, "cbioportal").await?
+            {
+                let mut fact = KgFact::new(
+                    uuid::Uuid::nil(),
+                    gene_id,
+                    gene_symbol.clone(),
+                    "mutation_frequency_cbioportal".to_string(),
+                    cancer_id,
+                    cc,
+                );
+                fact.confidence = signal.mutation_frequency.clamp(0.0, 1.0) as f32;
+                fact.evidence_type = "provider_fact".to_string();
+                fact.evidence = Some(format!(
+                    "provider=cbioportal;study={};mutated={};profiled={};freq={:.5};fetched_at={}",
+                    signal.study_id,
+                    signal.mutated_sample_count,
+                    signal.profiled_sample_count,
+                    signal.mutation_frequency,
+                    signal.fetched_at
+                ));
+                new_facts.push(fact);
+            }
+        }
+
+        let cosmic = if let Some(cc) = cancer_code_hint {
+            signal_repo
+                .find_cosmic_mutation_frequency(&gene_symbol, cc)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            signal_repo
+                .find_cosmic_mutation_frequency_any_cancer(&gene_symbol)
+                .await
+                .ok()
+                .flatten()
+        };
+        if let Some(signal) = cosmic {
+            let cc = signal.cancer_code.trim().to_uppercase();
+            if let Some(cancer_id) =
+                ensure_entity_id(&entity_repo, DbEntityType::CancerType, &cc, "cosmic").await?
+            {
+                let mut fact = KgFact::new(
+                    uuid::Uuid::nil(),
+                    gene_id,
+                    gene_symbol.clone(),
+                    "mutation_frequency_cosmic".to_string(),
+                    cancer_id,
+                    cc,
+                );
+                fact.confidence = signal.mutation_frequency.clamp(0.0, 1.0) as f32;
+                fact.evidence_type = "provider_fact".to_string();
+                fact.evidence = Some(format!(
+                    "provider=cosmic;mutated={};profiled={};freq={:.5};fetched_at={}",
+                    signal.mutated_sample_count,
+                    signal.profiled_sample_count,
+                    signal.mutation_frequency,
+                    signal.fetched_at
+                ));
+                new_facts.push(fact);
+            }
+        }
+
+        if let Some(cc) = cancer_code_hint {
+            if let Some(signal) = signal_repo
+                .find_tcga_survival(&gene_symbol, cc)
+                .await
+                .ok()
+                .flatten()
+            {
+                let cancer_code = signal.cancer_code.trim().to_uppercase();
+                if let Some(cancer_id) =
+                    ensure_entity_id(&entity_repo, DbEntityType::CancerType, &cancer_code, "tcga")
+                        .await?
+                {
+                    let mut fact = KgFact::new(
+                        uuid::Uuid::nil(),
+                        gene_id,
+                        gene_symbol.clone(),
+                        "survival_association_tcga".to_string(),
+                        cancer_id,
+                        cancer_code,
+                    );
+                    fact.confidence = signal.survival_score.abs().clamp(0.0, 1.0) as f32;
+                    fact.evidence_type = "provider_fact".to_string();
+                    fact.evidence = Some(format!(
+                        "provider=tcga;project={};score={:.5};fetched_at={}",
+                        signal.tcga_project_id, signal.survival_score, signal.fetched_at
+                    ));
+                    new_facts.push(fact);
+                }
+            }
+        }
+
+        if let Some(signal) = signal_repo
+            .find_gtex_expression(&gene_symbol)
+            .await
+            .ok()
+            .flatten()
+        {
+            if let Some(obj_id) = ensure_entity_id(
+                &entity_repo,
+                DbEntityType::Disease,
+                "GTEX_PAN_TISSUE",
+                "gtex",
+            )
+            .await?
+            {
+                let mut fact = KgFact::new(
+                    uuid::Uuid::nil(),
+                    gene_id,
+                    gene_symbol.clone(),
+                    "expression_signal_gtex".to_string(),
+                    obj_id,
+                    "GTEX_PAN_TISSUE".to_string(),
+                );
+                fact.confidence = signal.expression_score.abs().min(20.0) as f32 / 20.0;
+                fact.evidence_type = "provider_fact".to_string();
+                fact.evidence = Some(format!(
+                    "provider=gtex;score={:.5};fetched_at={}",
+                    signal.expression_score, signal.fetched_at
+                ));
+                new_facts.push(fact);
+            }
+        }
+
+        if let Some(signal) = signal_repo
+            .find_chembl_target(&gene_symbol)
+            .await
+            .ok()
+            .flatten()
+        {
+            if let Some(obj_id) =
+                ensure_entity_id(&entity_repo, DbEntityType::Chemical, "CHEMBL_TARGET", "chembl")
+                    .await?
+            {
+                let mut fact = KgFact::new(
+                    uuid::Uuid::nil(),
+                    gene_id,
+                    gene_symbol.clone(),
+                    "inhibitor_evidence_chembl".to_string(),
+                    obj_id,
+                    "CHEMBL_TARGET".to_string(),
+                );
+                fact.confidence = (signal.inhibitor_count as f64).min(25.0) as f32 / 25.0;
+                fact.evidence_type = "provider_fact".to_string();
+                fact.evidence = Some(format!(
+                    "provider=chembl;inhibitor_count={};fetched_at={}",
+                    signal.inhibitor_count, signal.fetched_at
+                ));
+                new_facts.push(fact);
+            }
+        }
+
+        if let Some(signal) = signal_repo
+            .find_reactome_gene(&gene_symbol)
+            .await
+            .ok()
+            .flatten()
+        {
+            if let Some(obj_id) = ensure_entity_id(
+                &entity_repo,
+                DbEntityType::Pathway,
+                "REACTOME_PATHWAYS",
+                "reactome",
+            )
+            .await?
+            {
+                let mut fact = KgFact::new(
+                    uuid::Uuid::nil(),
+                    gene_id,
+                    gene_symbol.clone(),
+                    "pathway_membership_reactome".to_string(),
+                    obj_id,
+                    "REACTOME_PATHWAYS".to_string(),
+                );
+                fact.confidence = (signal.pathway_count as f64).min(20.0) as f32 / 20.0;
+                fact.evidence_type = "provider_fact".to_string();
+                fact.evidence = Some(format!(
+                    "provider=reactome;pathway_count={};fetched_at={}",
+                    signal.pathway_count, signal.fetched_at
+                ));
+                new_facts.push(fact);
+            }
+        }
+
+        for fact in new_facts {
+            if fact_repo.insert(&fact).await.is_ok() {
+                stats.inserted += 1;
+            }
+        }
+    }
+
+    Ok(stats)
+}
+
+async fn ensure_entity_id(
+    entity_repo: &EntityRepository,
+    entity_type: DbEntityType,
+    display_name: &str,
+    source_db: &str,
+) -> anyhow::Result<Option<uuid::Uuid>> {
+    let trimmed = display_name.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let canonical = canonical_entity_key(entity_type, trimmed);
+    let external_id = format!("FERRUMYX:{}", canonical);
+    if let Some(existing) = entity_repo
+        .find_by_external_id(&external_id)
+        .await?
+        .into_iter()
+        .next()
+    {
+        return Ok(Some(existing.id));
+    }
+
+    let mut entity = DbEntity::new(
+        entity_type,
+        trimmed.to_string(),
+        external_id,
+        source_db.to_string(),
+    );
+    entity.canonical_name = Some(trimmed.to_uppercase());
+    entity_repo.insert(&entity).await?;
+    Ok(Some(entity.id))
+}
+
+fn canonical_entity_key(entity_type: DbEntityType, name: &str) -> String {
+    let mut normalized = name.trim().to_uppercase();
+    normalized = normalized
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    while normalized.contains("__") {
+        normalized = normalized.replace("__", "_");
+    }
+    format!("{}:{}", entity_type, normalized.trim_matches('_'))
 }
 
 fn depmap_cache() -> Option<&'static DepMapCache> {
@@ -969,6 +1511,24 @@ fn should_fetch_gtex(candidate_count: usize, req: &QueryRequest) -> bool {
     true
 }
 
+fn phase4_source_backed_only() -> bool {
+    !std::env::var("FERRUMYX_PHASE4_SOURCE_BACKED_ONLY")
+        .ok()
+        .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+fn phase4_semantic_fallback_enabled() -> bool {
+    std::env::var("FERRUMYX_PHASE4_N3N4_SEMANTIC_FALLBACK")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+fn phase4_query_cache_only() -> bool {
+    std::env::var("FERRUMYX_PHASE4_QUERY_CACHE_ONLY")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
 fn should_disable_structural_proxy(candidate_count: usize) -> bool {
     if std::env::var("FERRUMYX_PHASE4_STRUCTURAL_SOURCE_ONLY")
         .ok()
@@ -987,17 +1547,11 @@ fn should_fetch_cbio(candidate_count: usize, req: &QueryRequest) -> bool {
     true
 }
 
-fn should_fetch_tcga(candidate_count: usize, req: &QueryRequest) -> bool {
+fn should_fetch_tcga(candidate_count: usize, has_cancer_context: bool) -> bool {
     if candidate_count == 0 {
         return false;
     }
-    let cancer_present = req
-        .cancer_code
-        .as_deref()
-        .map(str::trim)
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    cancer_present
+    has_cancer_context
 }
 
 fn should_fetch_chembl(candidate_count: usize, _req: &QueryRequest) -> bool {
@@ -1034,6 +1588,7 @@ async fn prewarm_phase4_provider_signals(
             max_genes: 24,
             batch_size: 6,
             retries: 1,
+            offline_strict: false,
         })
         .await;
 }
@@ -1970,32 +2525,52 @@ async fn get_cached_reactome_pathway_count(
     resolved
 }
 
-fn default_component_sources() -> BTreeMap<String, String> {
+fn source_backed_default_metrics() -> TargetMetrics {
+    TargetMetrics {
+        mutation_freq: 0.0,
+        crispr_dependency: -1.0,
+        survival_correlation: 0.5,
+        expression_specificity: 1.5,
+        pdb_structure_count: 0,
+        af_plddt_mean: 50.0,
+        fpocket_best_score: 0.0,
+        chembl_inhibitor_count: 1,
+        reactome_escape_pathway_count: 1,
+        literature_novelty_velocity: 0.5,
+    }
+}
+
+fn default_component_sources(source_backed_only: bool) -> BTreeMap<String, String> {
+    let default_source = if source_backed_only {
+        "source_missing".to_string()
+    } else {
+        "proxy_kg".to_string()
+    };
     let mut out = BTreeMap::new();
-    out.insert("n1_mutation_freq".to_string(), "proxy_kg".to_string());
-    out.insert("n2_crispr_dependency".to_string(), "proxy_kg".to_string());
+    out.insert("n1_mutation_freq".to_string(), default_source.clone());
+    out.insert("n2_crispr_dependency".to_string(), default_source.clone());
     out.insert(
         "n3_survival_correlation".to_string(),
-        "proxy_kg".to_string(),
+        default_source.clone(),
     );
     out.insert(
         "n4_expression_specificity".to_string(),
-        "proxy_kg".to_string(),
+        default_source.clone(),
     );
     out.insert(
         "n5_structural_tractability".to_string(),
-        "proxy_kg".to_string(),
+        default_source.clone(),
     );
     out.insert(
         "n6_pocket_detectability".to_string(),
-        "proxy_kg".to_string(),
+        default_source.clone(),
     );
-    out.insert("n7_novelty_score".to_string(), "proxy_kg".to_string());
+    out.insert("n7_novelty_score".to_string(), default_source.clone());
     out.insert(
         "n8_pathway_independence".to_string(),
-        "proxy_kg".to_string(),
+        default_source.clone(),
     );
-    out.insert("n9_literature_novelty".to_string(), "proxy_kg".to_string());
+    out.insert("n9_literature_novelty".to_string(), default_source);
     out
 }
 
@@ -2005,19 +2580,35 @@ struct GeneCandidate {
     flags: HashSet<String>,
     paper_ids: HashSet<uuid::Uuid>,
     fact_count: u32,
+    weighted_evidence_sum: f64,
     confidence_sum: f64,
     confidence_n: u32,
+    weighted_confidence_sum: f64,
+    weighted_confidence_weight: f64,
+    provider_fact_count: u32,
+    high_tier_fact_count: u32,
     mutation_mentions: u32,
+    mutation_mentions_w: f64,
     survival_mentions: u32,
+    survival_mentions_w: f64,
     survival_positive: u32,
+    survival_positive_w: f64,
     survival_negative: u32,
+    survival_negative_w: f64,
     expression_tumor_mentions: u32,
+    expression_tumor_mentions_w: f64,
     expression_normal_mentions: u32,
+    expression_normal_mentions_w: f64,
     cancer_mentions: u32,
+    cancer_mentions_w: f64,
     inhibitor_mentions: u32,
+    inhibitor_mentions_w: f64,
     pathway_mentions: u32,
+    pathway_mentions_w: f64,
     structural_mentions: u32,
+    structural_mentions_w: f64,
     pocket_mentions: u32,
+    pocket_mentions_w: f64,
     sample_size_sum: f64,
     sample_obs: u32,
     cancer_codes: HashMap<String, u32>,
@@ -2030,19 +2621,35 @@ impl GeneCandidate {
             flags: HashSet::new(),
             paper_ids: HashSet::new(),
             fact_count: 0,
+            weighted_evidence_sum: 0.0,
             confidence_sum: 0.0,
             confidence_n: 0,
+            weighted_confidence_sum: 0.0,
+            weighted_confidence_weight: 0.0,
+            provider_fact_count: 0,
+            high_tier_fact_count: 0,
             mutation_mentions: 0,
+            mutation_mentions_w: 0.0,
             survival_mentions: 0,
+            survival_mentions_w: 0.0,
             survival_positive: 0,
+            survival_positive_w: 0.0,
             survival_negative: 0,
+            survival_negative_w: 0.0,
             expression_tumor_mentions: 0,
+            expression_tumor_mentions_w: 0.0,
             expression_normal_mentions: 0,
+            expression_normal_mentions_w: 0.0,
             cancer_mentions: 0,
+            cancer_mentions_w: 0.0,
             inhibitor_mentions: 0,
+            inhibitor_mentions_w: 0.0,
             pathway_mentions: 0,
+            pathway_mentions_w: 0.0,
             structural_mentions: 0,
+            structural_mentions_w: 0.0,
             pocket_mentions: 0,
+            pocket_mentions_w: 0.0,
             sample_size_sum: 0.0,
             sample_obs: 0,
             cancer_codes: HashMap::new(),
@@ -2050,6 +2657,13 @@ impl GeneCandidate {
     }
 
     fn mean_confidence(&self) -> f64 {
+        if self.weighted_confidence_weight > 0.0 {
+            let weighted = (self.weighted_confidence_sum / self.weighted_confidence_weight)
+                .clamp(0.0, 1.0);
+            let provider_bonus = if self.provider_fact_count > 0 { 0.02 } else { 0.0 };
+            let tier_bonus = if self.high_tier_fact_count > 0 { 0.02 } else { 0.0 };
+            return (weighted + provider_bonus + tier_bonus).clamp(0.0, 1.0);
+        }
         if self.confidence_n == 0 {
             return 0.5;
         }
@@ -2063,49 +2677,122 @@ impl GeneCandidate {
             .map(|(code, _)| code.clone())
     }
 
+    fn semantic_survival_score(&self) -> Option<f64> {
+        let mentions = if self.survival_mentions_w > 0.0 {
+            self.survival_mentions_w
+        } else {
+            self.survival_mentions as f64
+        };
+        if mentions <= 0.0 {
+            return None;
+        }
+        let positive = if self.survival_positive_w > 0.0 {
+            self.survival_positive_w
+        } else {
+            self.survival_positive as f64
+        };
+        let negative = if self.survival_negative_w > 0.0 {
+            self.survival_negative_w
+        } else {
+            self.survival_negative as f64
+        };
+        let signed = (positive - negative) / mentions;
+        Some(((signed + 1.0) / 2.0).clamp(0.0, 1.0))
+    }
+
+    fn semantic_expression_specificity(&self) -> Option<f64> {
+        let tumor = if self.expression_tumor_mentions_w > 0.0 {
+            self.expression_tumor_mentions_w
+        } else {
+            self.expression_tumor_mentions as f64
+        };
+        let normal = if self.expression_normal_mentions_w > 0.0 {
+            self.expression_normal_mentions_w
+        } else {
+            self.expression_normal_mentions as f64
+        };
+        if tumor + normal <= 0.0 {
+            return None;
+        }
+        Some(((tumor + 1.0) / (normal + 1.0)).clamp(0.5, 5.0))
+    }
+
     fn to_target_metrics(&self) -> TargetMetrics {
-        let evidence = self.fact_count.max(1) as f64;
+        let evidence = if self.weighted_evidence_sum > 0.0 {
+            self.weighted_evidence_sum.max(1.0)
+        } else {
+            self.fact_count.max(1) as f64
+        };
         let confidence_mean = self.mean_confidence();
 
-        let mutation_freq = (self.mutation_mentions as f64 / evidence).clamp(0.0, 1.0);
+        let mutation_mentions = if self.mutation_mentions_w > 0.0 {
+            self.mutation_mentions_w
+        } else {
+            self.mutation_mentions as f64
+        };
+        let mutation_freq = (mutation_mentions / evidence).clamp(0.0, 1.0);
         let crispr_dependency = (-2.0 * confidence_mean).clamp(-2.0, 0.0);
 
         // Source-derived from survival semantics when present; confidence/sample fallback otherwise.
-        let survival_correlation = if self.survival_mentions > 0 {
-            let signed = (self.survival_positive as f64 - self.survival_negative as f64)
-                / self.survival_mentions as f64;
-            ((signed + 1.0) / 2.0).clamp(0.0, 1.0)
-        } else if self.sample_obs > 0 {
-            (self.sample_size_sum / self.sample_obs as f64)
-                .ln_1p()
-                .min(10.0)
-                / 10.0
-        } else {
-            confidence_mean
-        };
+        let survival_correlation = self
+            .semantic_survival_score()
+            .or_else(|| {
+                if self.sample_obs > 0 {
+                    Some(
+                        (self.sample_size_sum / self.sample_obs as f64)
+                            .ln_1p()
+                            .min(10.0)
+                            / 10.0,
+                    )
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(confidence_mean);
 
         // Source-derived from expression predicates (tumor/normal ratio) when present.
-        let expression_specificity =
-            if self.expression_tumor_mentions + self.expression_normal_mentions > 0 {
-                ((self.expression_tumor_mentions as f64 + 1.0)
-                    / (self.expression_normal_mentions as f64 + 1.0))
-                    .clamp(0.5, 5.0)
+        let expression_specificity = self.semantic_expression_specificity().unwrap_or_else(|| {
+            let cancer_mentions = if self.cancer_mentions_w > 0.0 {
+                self.cancer_mentions_w
             } else {
-                (1.0 + 4.0 * (self.cancer_mentions as f64 / evidence)).clamp(0.5, 5.0)
+                self.cancer_mentions as f64
             };
+            (1.0 + 4.0 * (cancer_mentions / evidence)).clamp(0.5, 5.0)
+        });
 
-        let pdb_structure_count = self.structural_mentions;
+        let structural_mentions = if self.structural_mentions_w > 0.0 {
+            self.structural_mentions_w
+        } else {
+            self.structural_mentions as f64
+        };
+        let pocket_mentions = if self.pocket_mentions_w > 0.0 {
+            self.pocket_mentions_w
+        } else {
+            self.pocket_mentions as f64
+        };
+        let inhibitor_mentions = if self.inhibitor_mentions_w > 0.0 {
+            self.inhibitor_mentions_w
+        } else {
+            self.inhibitor_mentions as f64
+        };
+        let pathway_mentions = if self.pathway_mentions_w > 0.0 {
+            self.pathway_mentions_w
+        } else {
+            self.pathway_mentions as f64
+        };
+
+        let pdb_structure_count = structural_mentions.round().clamp(0.0, u32::MAX as f64) as u32;
         let af_plddt_mean = if pdb_structure_count > 0 {
             (70.0 + 25.0 * confidence_mean).clamp(0.0, 100.0)
         } else {
             (45.0 + 20.0 * confidence_mean).clamp(0.0, 100.0)
         };
 
-        let fpocket_best_score =
-            (0.2 + 0.8 * (self.pocket_mentions as f64 / evidence)).clamp(0.0, 1.0);
+        let fpocket_best_score = (0.2 + 0.8 * (pocket_mentions / evidence)).clamp(0.0, 1.0);
 
-        let chembl_inhibitor_count = self.inhibitor_mentions;
-        let reactome_escape_pathway_count = self.pathway_mentions;
+        let chembl_inhibitor_count = inhibitor_mentions.round().clamp(0.0, u32::MAX as f64) as u32;
+        let reactome_escape_pathway_count =
+            pathway_mentions.round().clamp(0.0, u32::MAX as f64) as u32;
 
         // Inverted evidence velocity proxy: underexplored genes score higher.
         let literature_novelty_velocity = 1.0 / (1.0 + evidence.ln_1p());

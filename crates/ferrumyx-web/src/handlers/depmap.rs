@@ -47,8 +47,8 @@ pub async fn api_depmap_gene(
     State(_state): State<SharedState>,
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
-    let gene = filter.gene.as_deref().unwrap_or("KRAS");
-    let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
+    let gene = filter.gene.as_deref().unwrap_or("").trim();
+    let cancer_type = filter.cancer_type.as_deref().unwrap_or("").trim();
 
     let mut stats = DepMapGeneStats {
         gene: gene.to_string(),
@@ -62,7 +62,8 @@ pub async fn api_depmap_gene(
         non_essential_count: 0,
     };
 
-    if let Ok(depmap) = DepMapClientAdapter::init().await {
+    if !gene.is_empty() && !cancer_type.is_empty() {
+        if let Ok(depmap) = DepMapClientAdapter::init().await {
         let scores = depmap.client().get_gene_scores(gene, cancer_type);
         if !scores.is_empty() {
             let mut sorted = scores.clone();
@@ -100,6 +101,7 @@ pub async fn api_depmap_gene(
             stats.non_essential_count = non_essential;
         }
     }
+    }
 
     Json(stats)
 }
@@ -109,8 +111,8 @@ pub async fn api_depmap_celllines(
     State(_state): State<SharedState>,
     Query(filter): Query<DepMapFilter>,
 ) -> impl IntoResponse {
-    let _gene = filter.gene.as_deref().unwrap_or("KRAS");
-    let _cancer = filter.cancer_type.as_deref().unwrap_or("PAAD");
+    let _gene = filter.gene.as_deref().unwrap_or("").trim();
+    let _cancer = filter.cancer_type.as_deref().unwrap_or("").trim();
     // Real-data only: no fabricated cell-line rows.
     let cell_lines: Vec<DepMapCellLine> = Vec::new();
     Json(cell_lines)
@@ -165,6 +167,7 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                     <form id="geneForm" class="mb-4">
                         <div class="search-container">
                             <input type="text" id="geneInput" class="form-control" style="flex:1" placeholder="Enter gene symbol">
+                            <input type="text" id="cancerInput" class="form-control" style="flex:1" placeholder="Cancer type (e.g., LUAD)">
                             <button class="btn btn-primary" type="submit">Run</button>
                         </div>
                     </form>
@@ -208,20 +211,26 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
                     <div>Cell-Line Dependencies</div>
                     <span class="badge badge-outline">Ranked</span>
                 </div>
-                <div class="table-container p-0">
-                    <table class="table mb-0">
-                        <thead>
-                            <tr>
-                                <th>Cell Line Origin</th>
-                                <th>Pathology Classification</th>
-                                <th>CERES Score</th>
-                                <th>Status Marker</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cellLineTable">
-                            <tr><td colspan="4" class="text-center text-muted py-4">No DepMap metrics ingested yet. Please populate downstream cell line data.</td></tr>
-                        </tbody>
-                    </table>
+                <details class="method-note" style="margin: 0 1rem 1rem 1rem;">
+                    <summary>Dependency Table (Expand)</summary>
+                    <div class="table-container p-0">
+                        <table class="table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Cell Line Origin</th>
+                                    <th>Pathology Classification</th>
+                                    <th>CERES Score</th>
+                                    <th>Status Marker</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cellLineTable">
+                                <tr><td colspan="4" class="text-center text-muted py-4">No DepMap metrics ingested yet. Please populate downstream cell line data.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+                <div class="card-body pt-0 text-muted small">
+                    Large cell-line tables are collapsed by default to keep focus on gene-level interpretation first.
                 </div>
             </div>
         </div>
@@ -279,14 +288,47 @@ fn render_depmap_page(_stats: Option<DepMapGeneStats>, _error: Option<String>) -
         }});
         
         function loadGene(selectedGene) {{
-            document.getElementById('geneInput').value = selectedGene;
-            document.getElementById('geneName').textContent = selectedGene;
+            document.getElementById('geneName').textContent = selectedGene || '—';
+        }}
+
+        async function fetchStats(gene, cancerType) {{
+            if (!gene || !cancerType) {{
+                document.getElementById('meanCeres').textContent = '—';
+                document.getElementById('cellLines').textContent = '—';
+                document.getElementById('essentialCount').textContent = '—';
+                document.getElementById('selectiveCount').textContent = '—';
+                return;
+            }}
+            try {{
+                const qs = new URLSearchParams();
+                qs.set('gene', gene);
+                qs.set('cancer_type', cancerType);
+                const resp = await fetch('/api/depmap/gene?' + qs.toString());
+                const stats = await resp.json();
+
+                document.getElementById('meanCeres').textContent = Number(stats.mean_ceres || 0).toFixed(3);
+                document.getElementById('cellLines').textContent = Number(stats.cell_lines_count || 0);
+                document.getElementById('essentialCount').textContent = Number(stats.essential_count || 0);
+                document.getElementById('selectiveCount').textContent = Number(stats.selective_count || 0);
+            }} catch (e) {{
+                document.getElementById('meanCeres').textContent = 'err';
+                document.getElementById('cellLines').textContent = 'err';
+                document.getElementById('essentialCount').textContent = 'err';
+                document.getElementById('selectiveCount').textContent = 'err';
+            }}
         }}
         
         document.getElementById('geneForm').addEventListener('submit', function(e) {{
             e.preventDefault();
-            const gene = document.getElementById('geneInput').value;
+            const gene = (document.getElementById('geneInput').value || '').trim();
+            const cancer = (document.getElementById('cancerInput').value || '').trim();
+            if (!gene || !cancer) {{
+                loadGene('—');
+                fetchStats('', '');
+                return;
+            }}
             loadGene(gene);
+            fetchStats(gene, cancer);
         }});
     </script>
 </body>

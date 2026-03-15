@@ -128,8 +128,12 @@ pub fn compute_composite_score(
         .map(|(n, w)| n * w)
         .sum();
 
-    let composite = (weighted_sum - penalty).clamp(0.0, 1.0);
-    let adjusted = (composite * mean_confidence).clamp(0.0, 1.0);
+    let base = (weighted_sum - penalty).clamp(0.0, 1.0);
+    let active_components = components.iter().filter(|v| **v >= 0.15).count() as f64;
+    let diversity_factor = (0.72 + 0.04 * active_components).clamp(0.72, 1.0);
+    let composite = ((1.0 - (-1.7 * base).exp()) * diversity_factor).clamp(0.0, 0.98);
+    let confidence_factor = (0.55 + 0.45 * mean_confidence.clamp(0.0, 1.0)).clamp(0.55, 1.0);
+    let adjusted = (composite * confidence_factor).clamp(0.0, 0.95);
 
     (composite, adjusted)
 }
@@ -193,7 +197,7 @@ impl PrioritizationEngine {
                 penalty += 0.08;
             }
 
-            let mut composite = (0.20 * n1
+            let base = ((0.20 * n1
                 + 0.18 * n2
                 + 0.15 * n3
                 + 0.12 * n4
@@ -202,9 +206,14 @@ impl PrioritizationEngine {
                 + 0.07 * n7
                 + 0.05 * n8
                 + 0.03 * n9)
-                - penalty;
-
-            composite = composite.clamp(0.0, 1.0);
+                - penalty)
+                .clamp(0.0, 1.0);
+            let active_components = [n1, n2, n3, n4, n5, n6, n7, n8, n9]
+                .iter()
+                .filter(|v| **v >= 0.15)
+                .count() as f64;
+            let diversity_factor = (0.72 + 0.03 * active_components).clamp(0.72, 1.0);
+            let composite = ((1.0 - (-1.6 * base).exp()) * diversity_factor).clamp(0.0, 0.98);
 
             results.insert(
                 *id,
@@ -260,7 +269,7 @@ pub fn determine_shortlist_tier(
     }
 
     // Primary shortlist
-    if score_adjusted > 0.60
+    if score_adjusted >= 0.65
         && mutation_freq_raw.unwrap_or(0.0) > 0.05
         && structural_tractability > 0.40
     {
@@ -268,7 +277,7 @@ pub fn determine_shortlist_tier(
     }
 
     // Secondary shortlist
-    if score_adjusted > 0.45 {
+    if score_adjusted >= 0.50 {
         return ShortlistTier::Secondary;
     }
 

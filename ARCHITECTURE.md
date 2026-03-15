@@ -4,8 +4,8 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening and performance optimization in progress)  
-**Date:** 2026-03-14
+**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening complete; Phase 5+ in progress)  
+**Date:** 2026-03-15
 
 ---
 
@@ -28,16 +28,27 @@
 
 ---
 
-## Current Implementation Snapshot (2026-03-14)
+## Current Implementation Snapshot (2026-03-15)
 
 - Phase 1-3 functionality is operational end-to-end with IronClaw as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
 - Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
 - Settings are tab-organized and now drive secure API configuration for active providers (Ollama, OpenAI, Anthropic, Gemini, OpenAI-compatible), including cached-chat toggle support for compatible providers.
-- Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, DOI/PMID batch prefetch dedupe, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
+- Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, canonical DOI/PMID/PMCID/title identity dedupe during source fan-in, early source-abort on unique-target saturation, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
 - Sci-Hub fallback now includes settings-driven mirror parallelism/cooldown and adaptive fallback controls (deferred launch, failure-streak backoff, probe cadence, and adaptive step budgets) to keep full-text retrieval fast under mirror instability.
 - Metrics include live ingestion performance telemetry (`/api/metrics/perf`) and persisted snapshots for run-to-run benchmarking.
 - KG/query surfaces now use bounded/aggregated paths to avoid large table scans and keep UI/API latency stable under larger corpora.
+- KG rendering now uses deterministic topology-derived coordinates (2D projected from Rust 3D layout) with stable seeded fallback (no random jitter path), plus confidence/provenance edge metadata.
+- Target scoring now consumes confidence/provenance-weighted KG evidence so source-backed high-tier facts contribute more than generic mentions.
 - Sci-Hub support is multi-domain and settings-driven (domain list + timeout), aligned to currently active mirrors.
+- Ranker/DepMap web APIs are now dynamic-input driven (no hardcoded cancer defaults) and hardened for web latency via bounded read paths and reduced fanout in hot endpoints.
+- Web UI information architecture now follows progressive disclosure: dense tables/details are collapsed by default across KG/Query/Targets/DepMap/Molecules, with lightweight summaries first and drill-down evidence on demand.
+
+## UI Information Architecture Snapshot (2026-03-15)
+
+- Default views prioritize concise summaries (scores, counts, top-level state) before raw evidence rows.
+- High-volume artifacts (paper evidence, provider cache rows, relation breakdowns, dependency tables) are hidden behind `<details>` disclosures by default.
+- Query and KG controls are split into primary vs advanced controls to reduce cognitive load while preserving full operator control.
+- Entity-level drill-down remains one-click accessible (e.g., `Insights`, collapsed evidence groups, provider health/history panels).
 
 ---
 
@@ -1284,6 +1295,11 @@ pub struct EntityMention {
 Duplicate papers arise when the same work is indexed by multiple sources (e.g., a paper appears
 in both PubMed and Europe PMC). Three deduplication tiers are applied in sequence:
 
+**Tier 0 — Canonical identity key during source fan-in:**
+- Every fetched paper is normalized to an identity key in this order: `doi:*` -> `pmid:*` -> `pmcid:*` -> `title:*` (normalized text).
+- Cross-source dedupe is applied before upsert and before expensive full-text/NER work.
+- Source fan-in can terminate early once a unique-result target is reached, preventing unnecessary duplicate fetch work.
+
 **Tier 1 — DOI match (primary):**
 - If `doi` field is non-null and matches an existing `papers.doi`: skip ingestion, log as duplicate in `ingestion_audit`
 - DOIs are normalised before comparison: lowercase, strip `https://doi.org/` prefix, trim whitespace
@@ -1725,12 +1741,14 @@ Rationale: For the MVP cancer domain (KRAS G12D PDAC), the knowledge graph will 
 
 **Trigger for dedicated graph adoption:** If at Month 12, path traversal queries on >5M facts exceed 500ms P95 latency for common patterns. If adopted, the graph DB is a read-only analytical mirror updated via CDC; LanceDB remains the write-primary source of truth.
 
-## 3.9 Completion Status (2026-03-14)
+## 3.9 Completion Status (2026-03-15)
 
 Phase 3 is now treated as complete for the current codebase baseline.
 
 - [x] Paper-centric KG ingestion and relation extraction are live.
 - [x] Dynamic entity typeahead and performance-capped KG rendering are live.
+- [x] KG graph coordinates are deterministic/topology-aware (2D projected from Rust 3D layout, stable seeded fallback; no random layout dependency in runtime rendering).
+- [x] KG confidence/provenance tiering is surfaced in API/UI (`high|medium|low`, `provider|extracted|generic`) for focused filtering and interpretation.
 - [x] Chat gateway flow is asynchronous and thread/history-backed (no longer assuming immediate sync replies).
 - [x] Agent tool surface now includes autonomous loop controls:
   - `ingest_literature`
@@ -1760,8 +1778,12 @@ constrained to: S(g, c) ∈ [0, 1]
 Confidence-adjusted:
 S_adj(g, c) = S(g, c) × C(g, c)
 
-where C(g, c) = mean confidence of all KG facts
-               contributing to the 9 component scores
+where C(g, c) = weighted_mean(confidence_i, weight_i)
+               over KG facts contributing to the 9 component scores
+               with weight_i derived from:
+               - provenance tier (provider > extracted > generic),
+               - confidence tier (high > medium > low),
+               - predicate specificity (typed > associated_with > mentions)
 ```
 
 ### Components
@@ -1920,15 +1942,15 @@ OUTPUT FIELDS (per candidate):
 - [x] Ranker/targets/metrics handlers now avoid large full-table scans and use bounded reads + aggregated counters for stable latency on larger corpora.
 
 Remaining Phase 4 hardening work:
-- [ ] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins).
+- [x] Replace proxy-derived components with fully source-backed components for all 9 metrics (DepMap/TCGA/GTEx/Reactome/ChEMBL joins) via source-missing defaults + provider/entity-stage fills.
 - [x] `n1` mutation frequency supports source-backed cBioPortal + COSMIC caching (`ent_cbio_mutation_frequency`, `ent_cosmic_mutation_frequency`) with runtime fetch + TTL-backed reuse, same-cancer fallback, and any-cancer fallback paths for broader cohort coverage.
 - [x] `n5`/`n6` structural components run in source-backed mode for larger cohorts (`STRUCTURAL_SOURCE_MISSING` surfaced when absent), with optional strict mode for all cohorts via `ranker.phase4.structural_source_only`.
 - [x] Add explicit percentile field and richer component breakdown in API output.
 - [x] Add score-run versioning/is_current semantics exactly as specified for `target_scores` history.
   - Note: legacy databases without these columns are handled via backward-compatible runtime dedupe; new/updated tables use native `score_version` + `is_current`.
-- [x] CRISPR dependency (`n2`) now uses local DepMap cache when present (`data/depmap`) with deterministic proxy fallback.
+- [x] CRISPR dependency (`n2`) now uses local DepMap cache when present (`data/depmap`), with source-missing baseline when absent in strict source-backed mode.
 - [x] Query API output now includes per-component source provenance (`component_sources`) so source-backed vs proxy values are explicit.
-- [~] `n3` (survival) and `n4` (expression) derive from KG semantic predicates when available (`kg_fact_semantic`) with source-cache overrides from TCGA/GTEx when present.
+- [x] `n3` (survival) and `n4` (expression) are now source-first (TCGA/GTEx) with optional semantic fallback only when explicitly enabled (`ranker.phase4.n3n4_semantic_fallback`).
 - [x] `n4` supports GTEx-backed enrichment with persistent cache table (`ent_gtex_expression`) and bounded runtime fallback (`gtex_api`) for small cohorts; large cohorts remain cache-only for latency control.
 - [x] `n3` supports TCGA-backed enrichment with persistent cache table (`ent_tcga_survival`) and bounded runtime fallback (`tcga_api`) for small cohorts with cancer context; large cohorts remain cache-only.
 - [x] `n7` supports ChEMBL-backed inhibitor counts with persistent cache table (`ent_chembl_targets`) and bounded runtime fallback (`chembl_api`) for small cohorts; large cohorts remain cache-only.
@@ -1937,10 +1959,10 @@ Remaining Phase 4 hardening work:
 - [x] Large-cohort mode now keeps query latency bounded while asynchronously prewarming top candidates into provider cache tables for subsequent source-backed runs.
 - [x] Explicit staged refresh path added (`refresh_provider_signals`) with bounded batch size, per-provider retries, and refresh telemetry for cBioPortal/COSMIC/TCGA/GTEx/ChEMBL/Reactome.
 - [x] Autonomous cycle now runs provider refresh before ranking so iterative runs progressively replace proxy/semantic fallbacks with source-backed cache signals.
-- [x] `n9` (literature novelty) now derives from paper publication + citation metadata (`papers.raw_json`/`published_at`) when available (`papers_metadata_citations`), with fallback to evidence-density proxy.
-- [~] Staged refresh now persists per-provider run history (`ent_provider_refresh_runs`) and applies adaptive cadence (error-rate + staleness aware); remaining gap is externalized background scheduling/alerting orchestration.
+- [x] `n9` (literature novelty) now derives from paper publication + citation metadata (`papers.raw_json`/`published_at`) when available (`papers_metadata_citations`), with source-missing baseline instead of proxy-only coupling.
+- [x] Staged refresh now persists per-provider run history (`ent_provider_refresh_runs`), applies adaptive cadence (error-rate + staleness aware), and is externalized through a continuous background scheduling/alerting loop (`ranker.phase4.background_refresh`).
 
-### 4.7 Phase 4 Review (2026-03-14)
+### 4.7 Phase 4 Review (2026-03-15)
 
 Reality check against code:
 
@@ -1950,7 +1972,8 @@ Reality check against code:
 - Adaptive refresh persistence now records provider refresh outcomes in `ent_provider_refresh_runs` and uses recent error-rate/staleness policy to modulate refresh cadence.
 - Literature novelty (`n9`) now uses publication + citation metadata when available, reducing dependency on pure evidence-density proxy behavior.
 - `component_sources` is exposed per result so proxy-vs-source-backed provenance is explicit at query time.
-- Remaining gap to strict architecture target: full source-backed parity for all 9 components under large cohorts, especially strict structural completeness (`n5`/`n6`) and background orchestration around provider refresh.
+- Confidence adjustment now uses provenance/tier-weighted KG evidence in the ranker path (provider-backed high-tier typed relations are upweighted versus generic mention edges).
+- Phase 4 architecture targets are functionally met; remaining operational risk is provider data sparsity/availability (runtime source-missing on sparse cohorts), not framework-level gap.
 
 ---
 

@@ -57,10 +57,18 @@ struct IngestionRuntimeDefaults {
     full_text_success_cache_ttl_secs: u64,
     chunk_fingerprint_cache_enabled: bool,
     chunk_fingerprint_cache_ttl_secs: u64,
+    chunk_fingerprint_scope: String,
     heavy_lane_async_enabled: bool,
     heavy_lane_max_inflight: usize,
+    validation_mode: String,
+    pdf_parse_fallback_enabled: bool,
+    pdf_parse_min_chars: usize,
+    pdf_parse_min_sections: usize,
+    pdf_parse_negative_revalidate_secs: u64,
     min_ner_chars: usize,
     max_relation_genes_per_chunk: usize,
+    predicate_coverage_min_unique: usize,
+    predicate_coverage_max_generic_share: f64,
     async_post_ingest_scoring: bool,
     source_profile: String,
     pubmed_api_key: Option<String>,
@@ -192,6 +200,11 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(172_800)
             .clamp(300, 1_209_600),
+            chunk_fingerprint_scope: std::env::var("FERRUMYX_CHUNK_FINGERPRINT_SCOPE")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "paper".to_string())
+                .to_lowercase(),
             heavy_lane_async_enabled: std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_ASYNC")
                 .ok()
                 .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -200,6 +213,31 @@ impl Default for IngestionRuntimeDefaults {
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(8)
                 .clamp(1, 64),
+            validation_mode: std::env::var("FERRUMYX_INGESTION_VALIDATION_MODE")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "audit".to_string())
+                .to_lowercase(),
+            pdf_parse_fallback_enabled: std::env::var("FERRUMYX_PDF_PARSE_FALLBACK_ENABLED")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            pdf_parse_min_chars: std::env::var("FERRUMYX_PDF_PARSE_MIN_CHARS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(1200)
+                .clamp(200, 20_000),
+            pdf_parse_min_sections: std::env::var("FERRUMYX_PDF_PARSE_MIN_SECTIONS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(2)
+                .clamp(1, 12),
+            pdf_parse_negative_revalidate_secs: std::env::var(
+                "FERRUMYX_PDF_PARSE_NEG_REVALIDATE_SECS",
+            )
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(1800)
+            .clamp(60, 86_400),
             min_ner_chars: std::env::var("FERRUMYX_INGESTION_MIN_NER_CHARS")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
@@ -212,6 +250,20 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(4)
             .clamp(1, 16),
+            predicate_coverage_min_unique: std::env::var(
+                "FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE",
+            )
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(6)
+            .clamp(2, 64),
+            predicate_coverage_max_generic_share: std::env::var(
+                "FERRUMYX_INGESTION_PREDICATE_MAX_GENERIC_SHARE",
+            )
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.55)
+            .clamp(0.05, 0.95),
             async_post_ingest_scoring: std::env::var("FERRUMYX_INGESTION_ASYNC_POST_SCORE")
                 .ok()
                 .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -294,6 +346,19 @@ fn toml_u64(root: &toml::Value, path: &[&str], default: u64) -> u64 {
     }
     cur.as_integer()
         .and_then(|v| if v >= 0 { Some(v as u64) } else { None })
+        .unwrap_or(default)
+}
+
+fn toml_f64(root: &toml::Value, path: &[&str], default: f64) -> f64 {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return default,
+        }
+    }
+    cur.as_float()
+        .or_else(|| cur.as_integer().map(|v| v as f64))
         .unwrap_or(default)
 }
 
@@ -507,6 +572,12 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.chunk_fingerprint_cache_ttl_secs,
     )
     .clamp(300, 1_209_600);
+    defaults.chunk_fingerprint_scope = toml_string(
+        &root,
+        &["ingestion", "performance", "chunk_fingerprint_scope"],
+    )
+    .unwrap_or_else(|| defaults.chunk_fingerprint_scope.clone())
+    .to_lowercase();
     defaults.heavy_lane_async_enabled = toml_bool(
         &root,
         &["ingestion", "performance", "heavy_lane_async_enabled"],
@@ -518,6 +589,37 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.heavy_lane_max_inflight as u64,
     )
     .clamp(1, 64) as usize;
+    defaults.validation_mode =
+        toml_string(&root, &["ingestion", "performance", "validation_mode"])
+            .unwrap_or_else(|| defaults.validation_mode.clone())
+            .to_lowercase();
+    defaults.pdf_parse_fallback_enabled = toml_bool(
+        &root,
+        &["ingestion", "performance", "pdf_parse_fallback_enabled"],
+        defaults.pdf_parse_fallback_enabled,
+    );
+    defaults.pdf_parse_min_chars = toml_u64(
+        &root,
+        &["ingestion", "performance", "pdf_parse_min_chars"],
+        defaults.pdf_parse_min_chars as u64,
+    )
+    .clamp(200, 20_000) as usize;
+    defaults.pdf_parse_min_sections = toml_u64(
+        &root,
+        &["ingestion", "performance", "pdf_parse_min_sections"],
+        defaults.pdf_parse_min_sections as u64,
+    )
+    .clamp(1, 12) as usize;
+    defaults.pdf_parse_negative_revalidate_secs = toml_u64(
+        &root,
+        &[
+            "ingestion",
+            "performance",
+            "pdf_parse_negative_revalidate_secs",
+        ],
+        defaults.pdf_parse_negative_revalidate_secs,
+    )
+    .clamp(60, 86_400);
     defaults.min_ner_chars = toml_u64(
         &root,
         &["ingestion", "performance", "min_ner_chars"],
@@ -530,6 +632,18 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.max_relation_genes_per_chunk as u64,
     )
     .clamp(1, 16) as usize;
+    defaults.predicate_coverage_min_unique = toml_u64(
+        &root,
+        &["ingestion", "performance", "predicate_coverage_min_unique"],
+        defaults.predicate_coverage_min_unique as u64,
+    )
+    .clamp(2, 64) as usize;
+    defaults.predicate_coverage_max_generic_share = toml_f64(
+        &root,
+        &["ingestion", "performance", "predicate_coverage_max_generic_share"],
+        defaults.predicate_coverage_max_generic_share,
+    )
+    .clamp(0.05, 0.95);
     defaults.async_post_ingest_scoring = toml_bool(
         &root,
         &["ingestion", "performance", "async_post_ingest_scoring"],
@@ -839,6 +953,14 @@ impl Tool for IngestionTool {
             defaults.chunk_fingerprint_cache_ttl_secs.to_string(),
         );
         std::env::set_var(
+            "FERRUMYX_CHUNK_FINGERPRINT_SCOPE",
+            match defaults.chunk_fingerprint_scope.as_str() {
+                "global" => "global",
+                "off" | "disabled" => "off",
+                _ => "paper",
+            },
+        );
+        std::env::set_var(
             "FERRUMYX_INGESTION_HEAVY_LANE_ASYNC",
             if defaults.heavy_lane_async_enabled {
                 "1"
@@ -849,6 +971,34 @@ impl Tool for IngestionTool {
         std::env::set_var(
             "FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT",
             defaults.heavy_lane_max_inflight.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_VALIDATION_MODE",
+            match defaults.validation_mode.as_str() {
+                "strict" => "strict",
+                "off" | "disabled" => "off",
+                _ => "audit",
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_PARSE_FALLBACK_ENABLED",
+            if defaults.pdf_parse_fallback_enabled {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_PARSE_MIN_CHARS",
+            defaults.pdf_parse_min_chars.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_PARSE_MIN_SECTIONS",
+            defaults.pdf_parse_min_sections.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_PDF_PARSE_NEG_REVALIDATE_SECS",
+            defaults.pdf_parse_negative_revalidate_secs.to_string(),
         );
         std::env::set_var(
             "FERRUMYX_INGESTION_MIN_NER_CHARS",
@@ -863,6 +1013,14 @@ impl Tool for IngestionTool {
         std::env::set_var(
             "FERRUMYX_INGESTION_MAX_RELATION_GENES_PER_CHUNK",
             defaults.max_relation_genes_per_chunk.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE",
+            defaults.predicate_coverage_min_unique.to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_INGESTION_PREDICATE_MAX_GENERIC_SHARE",
+            defaults.predicate_coverage_max_generic_share.to_string(),
         );
         std::env::set_var(
             "FERRUMYX_INGESTION_ASYNC_POST_SCORE",
@@ -1108,6 +1266,7 @@ impl Tool for IngestionTool {
                         max_genes: 8,
                         batch_size: 4,
                         retries: 1,
+                        offline_strict: false,
                     })
                     .await
                     .ok();
@@ -1148,6 +1307,7 @@ impl Tool for IngestionTool {
                     max_genes: 8,
                     batch_size: 4,
                     retries: 1,
+                    offline_strict: false,
                 })
                 .await
                 .ok();

@@ -96,6 +96,8 @@ async function loadSettings() {
   byId('scihub_adaptive_backoff_secs').value = data.scihub_adaptive_backoff_secs;
   byId('scihub_adaptive_probe_every').value = data.scihub_adaptive_probe_every;
   byId('scihub_adaptive_min_step_timeout_secs').value = data.scihub_adaptive_min_step_timeout_secs;
+  byId('phase4_source_backed_only').checked = data.phase4_source_backed_only;
+  byId('phase4_n3n4_semantic_fallback').checked = data.phase4_n3n4_semantic_fallback;
   byId('phase4_structural_source_only').checked = data.phase4_structural_source_only;
   byId('phase4_structural_prewarm_enabled').checked = data.phase4_structural_prewarm_enabled;
   byId('phase4_structural_prewarm_max_genes').value = data.phase4_structural_prewarm_max_genes;
@@ -103,6 +105,7 @@ async function loadSettings() {
   byId('phase4_structural_fpocket_enabled').checked = data.phase4_structural_fpocket_enabled;
   byId('phase4_structural_fpocket_bin').value = data.phase4_structural_fpocket_bin;
   byId('phase4_provider_live_fetch_max_candidates').value = data.phase4_provider_live_fetch_max_candidates;
+  byId('phase4_query_cache_only').checked = data.phase4_query_cache_only;
   byId('phase4_provider_refresh_adaptive_enabled').checked = data.phase4_provider_refresh_adaptive_enabled;
   byId('phase4_provider_refresh_base_interval_secs').value = data.phase4_provider_refresh_base_interval_secs;
   byId('phase4_provider_refresh_min_interval_secs').value = data.phase4_provider_refresh_min_interval_secs;
@@ -111,6 +114,33 @@ async function loadSettings() {
   byId('phase4_provider_refresh_backoff_factor').value = data.phase4_provider_refresh_backoff_factor;
   byId('phase4_provider_refresh_success_accel_div').value = data.phase4_provider_refresh_success_accel_div;
   byId('phase4_provider_refresh_recent_runs').value = data.phase4_provider_refresh_recent_runs;
+  byId('phase4_bg_refresh_enabled').checked = data.phase4_bg_refresh_enabled;
+  byId('phase4_bg_refresh_interval_secs').value = data.phase4_bg_refresh_interval_secs;
+  byId('phase4_bg_refresh_max_genes').value = data.phase4_bg_refresh_max_genes;
+  byId('phase4_bg_refresh_batch_size').value = data.phase4_bg_refresh_batch_size;
+  byId('phase4_bg_refresh_retries').value = data.phase4_bg_refresh_retries;
+  byId('phase4_bg_refresh_fact_scan_limit').value = data.phase4_bg_refresh_fact_scan_limit;
+  byId('phase4_bg_refresh_min_gene_mentions').value = data.phase4_bg_refresh_min_gene_mentions;
+  byId('phase4_bg_refresh_alert_error_rate').value = data.phase4_bg_refresh_alert_error_rate;
+  byId('phase4_bg_refresh_alert_streak_runs').value = data.phase4_bg_refresh_alert_streak_runs;
+  byId('phase4_bg_refresh_cancer_code').value = data.phase4_bg_refresh_cancer_code;
+  byId('phase4_bg_refresh_genes').value = data.phase4_bg_refresh_genes;
+  byId('benchmark_offline_strict').checked = data.benchmark_offline_strict;
+  byId('benchmark_provider_timing').checked = data.benchmark_provider_timing;
+  byId('benchmark_phase1_profile').value = data.benchmark_phase1_profile;
+  byId('benchmark_phase2_profile').value = data.benchmark_phase2_profile;
+  byId('benchmark_phase3_profile').value = data.benchmark_phase3_profile;
+  byId('benchmark_phase4_profile').value = data.benchmark_phase4_profile;
+  byId('graph_default_mode').value = data.graph_default_mode;
+  byId('graph_default_lens').value = data.graph_default_lens;
+  byId('graph_render_preset').value = data.graph_render_preset;
+  byId('graph_2d_max_nodes').value = data.graph_2d_max_nodes;
+  byId('graph_2d_max_links').value = data.graph_2d_max_links;
+  byId('graph_3d_max_nodes').value = data.graph_3d_max_nodes;
+  byId('graph_3d_max_links').value = data.graph_3d_max_links;
+  byId('graph_hub_suppression').value = data.graph_hub_suppression;
+  byId('graph_per_node_edge_cap').value = data.graph_per_node_edge_cap;
+  byId('graph_atlas_max_clusters').value = data.graph_atlas_max_clusters;
   byId('cbioportal_base_url').value = data.cbioportal_base_url;
   byId('cbioportal_timeout_secs').value = data.cbioportal_timeout_secs;
   byId('cosmic_base_url').value = data.cosmic_base_url;
@@ -200,6 +230,8 @@ async function saveSettings() {
     scihub_adaptive_backoff_secs: Number(byId('scihub_adaptive_backoff_secs').value || 300),
     scihub_adaptive_probe_every: Number(byId('scihub_adaptive_probe_every').value || 10),
     scihub_adaptive_min_step_timeout_secs: Number(byId('scihub_adaptive_min_step_timeout_secs').value || 3),
+    phase4_source_backed_only: byId('phase4_source_backed_only').checked,
+    phase4_n3n4_semantic_fallback: byId('phase4_n3n4_semantic_fallback').checked,
     phase4_structural_source_only: byId('phase4_structural_source_only').checked,
     phase4_structural_prewarm_enabled: byId('phase4_structural_prewarm_enabled').checked,
     phase4_structural_prewarm_max_genes: Number(byId('phase4_structural_prewarm_max_genes').value || 8),
@@ -207,6 +239,7 @@ async function saveSettings() {
     phase4_structural_fpocket_enabled: byId('phase4_structural_fpocket_enabled').checked,
     phase4_structural_fpocket_bin: byId('phase4_structural_fpocket_bin').value,
     phase4_provider_live_fetch_max_candidates: Number(byId('phase4_provider_live_fetch_max_candidates').value || 8),
+    phase4_query_cache_only: byId('phase4_query_cache_only').checked,
     phase4_provider_refresh_adaptive_enabled: byId('phase4_provider_refresh_adaptive_enabled').checked,
     phase4_provider_refresh_base_interval_secs: Number(byId('phase4_provider_refresh_base_interval_secs').value || 900),
     phase4_provider_refresh_min_interval_secs: Number(byId('phase4_provider_refresh_min_interval_secs').value || 180),
@@ -215,6 +248,33 @@ async function saveSettings() {
     phase4_provider_refresh_backoff_factor: Number(byId('phase4_provider_refresh_backoff_factor').value || 2),
     phase4_provider_refresh_success_accel_div: Number(byId('phase4_provider_refresh_success_accel_div').value || 2),
     phase4_provider_refresh_recent_runs: Number(byId('phase4_provider_refresh_recent_runs').value || 8),
+    phase4_bg_refresh_enabled: byId('phase4_bg_refresh_enabled').checked,
+    phase4_bg_refresh_interval_secs: Number(byId('phase4_bg_refresh_interval_secs').value || 900),
+    phase4_bg_refresh_max_genes: Number(byId('phase4_bg_refresh_max_genes').value || 24),
+    phase4_bg_refresh_batch_size: Number(byId('phase4_bg_refresh_batch_size').value || 6),
+    phase4_bg_refresh_retries: Number(byId('phase4_bg_refresh_retries').value || 1),
+    phase4_bg_refresh_fact_scan_limit: Number(byId('phase4_bg_refresh_fact_scan_limit').value || 4000),
+    phase4_bg_refresh_min_gene_mentions: Number(byId('phase4_bg_refresh_min_gene_mentions').value || 2),
+    phase4_bg_refresh_alert_error_rate: Number(byId('phase4_bg_refresh_alert_error_rate').value || 0.55),
+    phase4_bg_refresh_alert_streak_runs: Number(byId('phase4_bg_refresh_alert_streak_runs').value || 3),
+    phase4_bg_refresh_cancer_code: byId('phase4_bg_refresh_cancer_code').value,
+    phase4_bg_refresh_genes: byId('phase4_bg_refresh_genes').value,
+    benchmark_offline_strict: byId('benchmark_offline_strict').checked,
+    benchmark_provider_timing: byId('benchmark_provider_timing').checked,
+    benchmark_phase1_profile: byId('benchmark_phase1_profile').value,
+    benchmark_phase2_profile: byId('benchmark_phase2_profile').value,
+    benchmark_phase3_profile: byId('benchmark_phase3_profile').value,
+    benchmark_phase4_profile: byId('benchmark_phase4_profile').value,
+    graph_default_mode: byId('graph_default_mode').value,
+    graph_default_lens: byId('graph_default_lens').value,
+    graph_render_preset: byId('graph_render_preset').value,
+    graph_2d_max_nodes: Number(byId('graph_2d_max_nodes').value || 260),
+    graph_2d_max_links: Number(byId('graph_2d_max_links').value || 1000),
+    graph_3d_max_nodes: Number(byId('graph_3d_max_nodes').value || 200),
+    graph_3d_max_links: Number(byId('graph_3d_max_links').value || 650),
+    graph_hub_suppression: Number(byId('graph_hub_suppression').value || 0.62),
+    graph_per_node_edge_cap: Number(byId('graph_per_node_edge_cap').value || 12),
+    graph_atlas_max_clusters: Number(byId('graph_atlas_max_clusters').value || 40),
     cbioportal_base_url: byId('cbioportal_base_url').value,
     cbioportal_timeout_secs: Number(byId('cbioportal_timeout_secs').value || 10),
     cosmic_base_url: byId('cosmic_base_url').value,
@@ -314,6 +374,8 @@ __NAV__
       <button class="tab-btn" data-tab="tab-ingestion">Ingestion APIs</button>
       <button class="tab-btn" data-tab="tab-embeddings">Embeddings</button>
       <button class="tab-btn" data-tab="tab-runtime">Runtime</button>
+      <button class="tab-btn" data-tab="tab-graph">Graph</button>
+      <button class="tab-btn" data-tab="tab-benchmark">Benchmark</button>
     </nav>
 
     <div>
@@ -366,7 +428,7 @@ __NAV__
           <div class="form-group">
             <label for="cbioportal_base_url">cBioPortal API Base URL</label>
             <input id="cbioportal_base_url" class="form-control" placeholder="https://www.cbioportal.org/api" />
-            <div class="help-text">Phase 4 n1 source-backed mutation frequency provider endpoint.</div>
+            <div class="help-text">Source-backed mutation frequency provider endpoint.</div>
           </div>
           <div class="form-group">
             <label for="cbioportal_timeout_secs">cBioPortal Request Timeout (seconds)</label>
@@ -639,42 +701,57 @@ __NAV__
         <h3 class="settings-section-title">Runtime Notes</h3>
         <div class="form-grid" style="margin-bottom:0.85rem;">
           <div class="form-group">
-            <label for="phase4_structural_source_only">Phase 4 Structural Source-Only Mode</label>
+            <label for="phase4_source_backed_only">Source-Backed Components Only</label>
+            <input id="phase4_source_backed_only" type="checkbox" />
+            <div class="help-text">When enabled (recommended), n1-n9 start in source-missing mode and are filled only by provider/entity-stage source signals.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_n3n4_semantic_fallback">Allow Semantic Fallback for n3/n4</label>
+            <input id="phase4_n3n4_semantic_fallback" type="checkbox" />
+            <div class="help-text">Optional fallback: use KG semantic survival/expression only when TCGA/GTEx source rows are missing.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_structural_source_only">Structural Source-Only Mode</label>
             <input id="phase4_structural_source_only" type="checkbox" />
             <div class="help-text">When enabled, n5/n6 ignore KG structural proxies and require source-backed structural signals.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_structural_prewarm_enabled">Phase 4 Structural Prewarm Enabled</label>
+            <label for="phase4_structural_prewarm_enabled">Structural Prewarm Enabled</label>
             <input id="phase4_structural_prewarm_enabled" type="checkbox" />
             <div class="help-text">Runs background structural enrichment on top ranked genes after large-cohort queries.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_structural_prewarm_max_genes">Phase 4 Structural Prewarm Max Genes</label>
+            <label for="phase4_structural_prewarm_max_genes">Structural Prewarm Max Genes</label>
             <input id="phase4_structural_prewarm_max_genes" type="number" min="1" max="32" class="form-control" />
             <div class="help-text">Upper bound on structural prewarm fanout per large-cohort query.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_structural_cache_dir">Phase 4 Structural Cache Directory</label>
+            <label for="phase4_structural_cache_dir">Structural Cache Directory</label>
             <input id="phase4_structural_cache_dir" class="form-control" placeholder="data/structural_cache" />
             <div class="help-text">Filesystem path used for AlphaFold structure cache files.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_structural_fpocket_enabled">Phase 4 fpocket Enabled</label>
+            <label for="phase4_structural_fpocket_enabled">fpocket Enabled</label>
             <input id="phase4_structural_fpocket_enabled" type="checkbox" />
             <div class="help-text">If enabled and fpocket is available, pocket scores are persisted into `ent_druggability`.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_structural_fpocket_bin">Phase 4 fpocket Binary</label>
+            <label for="phase4_structural_fpocket_bin">fpocket Binary</label>
             <input id="phase4_structural_fpocket_bin" class="form-control" placeholder="fpocket" />
             <div class="help-text">Command or absolute path used to execute fpocket during structural prewarm.</div>
           </div>
           <div class="form-group">
-            <label for="phase4_provider_live_fetch_max_candidates">Phase 4 Live Provider Fetch Max Cohort</label>
+            <label for="phase4_provider_live_fetch_max_candidates">Live Provider Fetch Max Cohort</label>
             <input id="phase4_provider_live_fetch_max_candidates" type="number" min="1" max="128" class="form-control" />
             <div class="help-text">For cohorts larger than this, ranking uses provider cache rows only (no live API fanout).</div>
           </div>
           <div class="form-group">
-            <label for="phase4_provider_refresh_adaptive_enabled">Phase 4 Adaptive Provider Refresh</label>
+            <label for="phase4_query_cache_only">Cache-Only Query Mode</label>
+            <input id="phase4_query_cache_only" type="checkbox" />
+            <div class="help-text">When enabled, interactive target queries never block on live provider APIs and use cache rows only; providers refresh asynchronously in the background.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_provider_refresh_adaptive_enabled">Adaptive Provider Refresh</label>
             <input id="phase4_provider_refresh_adaptive_enabled" type="checkbox" />
             <div class="help-text">Uses persisted provider health history to adapt refresh cadence by error rate and staleness.</div>
           </div>
@@ -713,6 +790,61 @@ __NAV__
             <input id="phase4_provider_refresh_recent_runs" type="number" min="1" max="128" class="form-control" />
             <div class="help-text">How many recent runs are used to estimate provider error-rate trends.</div>
           </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_enabled">Background Provider Refresh Scheduler</label>
+            <input id="phase4_bg_refresh_enabled" type="checkbox" />
+            <div class="help-text">Runs a continuous autonomous provider-refresh loop in the agent runtime.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_interval_secs">Background Refresh Interval (seconds)</label>
+            <input id="phase4_bg_refresh_interval_secs" type="number" min="60" max="86400" class="form-control" />
+            <div class="help-text">Base period between autonomous refresh cycles.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_max_genes">Background Refresh Max Genes</label>
+            <input id="phase4_bg_refresh_max_genes" type="number" min="1" max="200" class="form-control" />
+            <div class="help-text">Maximum unique genes refreshed per background cycle.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_batch_size">Background Refresh Batch Size</label>
+            <input id="phase4_bg_refresh_batch_size" type="number" min="1" max="32" class="form-control" />
+            <div class="help-text">Provider refresh batch size for each autonomous cycle.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_retries">Background Refresh Retries</label>
+            <input id="phase4_bg_refresh_retries" type="number" min="0" max="3" class="form-control" />
+            <div class="help-text">Retry attempts per provider fetch in each cycle.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_fact_scan_limit">Background Gene Discovery Fact Scan Limit</label>
+            <input id="phase4_bg_refresh_fact_scan_limit" type="number" min="250" max="20000" class="form-control" />
+            <div class="help-text">How many KG facts are scanned each cycle to discover high-signal genes.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_min_gene_mentions">Background Gene Discovery Min Mentions</label>
+            <input id="phase4_bg_refresh_min_gene_mentions" type="number" min="1" max="50" class="form-control" />
+            <div class="help-text">Minimum mention count in scanned facts before a gene is selected for refresh.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_alert_error_rate">Background Alert Error Rate</label>
+            <input id="phase4_bg_refresh_alert_error_rate" type="number" min="0.05" max="1.0" step="0.05" class="form-control" />
+            <div class="help-text">If aggregate provider error rate exceeds this threshold, an alert streak is incremented.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_alert_streak_runs">Background Alert Streak Runs</label>
+            <input id="phase4_bg_refresh_alert_streak_runs" type="number" min="1" max="100" class="form-control" />
+            <div class="help-text">Consecutive elevated/failing cycles required before a hard alert is emitted.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_cancer_code">Background Refresh Cancer Code (optional)</label>
+            <input id="phase4_bg_refresh_cancer_code" class="form-control" placeholder="PAAD" />
+            <div class="help-text">Optional cancer code used for TCGA/cancer-specific provider refresh in background mode.</div>
+          </div>
+          <div class="form-group">
+            <label for="phase4_bg_refresh_genes">Background Seed Genes (optional CSV)</label>
+            <input id="phase4_bg_refresh_genes" class="form-control" placeholder="KRAS,EGFR,BRAF" />
+            <div class="help-text">Optional static seed list; background scheduler supplements this with dynamic KG-discovered genes.</div>
+          </div>
         </div>
         <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
         <div class="security-note" style="margin-top:0.8rem;">
@@ -726,6 +858,124 @@ __NAV__
             <div>ANTHROPIC_API_KEY</div><div id="sync_anthropic">Missing</div>
             <div>GEMINI_API_KEY</div><div id="sync_gemini">Missing</div>
             <div>Compat Cached Chat</div><div id="sync_cached_chat">Missing</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-graph" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Knowledge Graph Rendering</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="graph_default_mode">Default Graph Mode</label>
+            <select id="graph_default_mode" class="form-control">
+              <option value="2d">2D</option>
+              <option value="3d">3D</option>
+            </select>
+            <div class="help-text">Controls initial mode when opening the KG page. Users can always switch per-session.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_default_lens">Default Graph Lens</label>
+            <select id="graph_default_lens" class="form-control">
+              <option value="analysis">Analysis</option>
+              <option value="atlas">Atlas</option>
+              <option value="path">Path</option>
+            </select>
+            <div class="help-text">Default lens on KG open. Analysis is best for exploratory workflows and avoids immediate graph overload.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_render_preset">Graph Render Preset</label>
+            <select id="graph_render_preset" class="form-control">
+              <option value="analytical">Analytical</option>
+              <option value="dense">Dense</option>
+            </select>
+            <div class="help-text">Analytical prioritizes clarity and anti-hairball filtering; Dense raises graph budgets for broader context.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_2d_max_nodes">2D Max Nodes</label>
+            <input id="graph_2d_max_nodes" type="number" min="80" max="3000" class="form-control" />
+            <div class="help-text">Upper bound for interactive 2D graph node count.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_2d_max_links">2D Max Links</label>
+            <input id="graph_2d_max_links" type="number" min="120" max="12000" class="form-control" />
+            <div class="help-text">Upper bound for interactive 2D link count.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_3d_max_nodes">3D Max Nodes</label>
+            <input id="graph_3d_max_nodes" type="number" min="60" max="2500" class="form-control" />
+            <div class="help-text">3D path uses Rust-generated coordinates and should usually run with a slightly lower node budget.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_3d_max_links">3D Max Links</label>
+            <input id="graph_3d_max_links" type="number" min="100" max="10000" class="form-control" />
+            <div class="help-text">Upper bound for links in 3D mode for fast camera interaction.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_hub_suppression">Hub Suppression Strength</label>
+            <input id="graph_hub_suppression" type="number" min="0" max="3" step="0.01" class="form-control" />
+            <div class="help-text">Dampens broad, low-specificity hub edges so meaningful structure is easier to see.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_per_node_edge_cap">Per-Node Edge Cap</label>
+            <input id="graph_per_node_edge_cap" type="number" min="3" max="200" class="form-control" />
+            <div class="help-text">Maximum retained edges per node after semantic scoring. Lower values reduce hairball risk.</div>
+          </div>
+          <div class="form-group">
+            <label for="graph_atlas_max_clusters">Atlas Max Clusters</label>
+            <input id="graph_atlas_max_clusters" type="number" min="5" max="300" class="form-control" />
+            <div class="help-text">Upper bound for cluster count in Atlas lens to keep aggregate views responsive.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-benchmark" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Benchmark Profiles</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="benchmark_phase1_profile">Literature Ingestion Profile</label>
+            <select id="benchmark_phase1_profile" class="form-control">
+              <option value="aggressive">aggressive</option>
+              <option value="balanced">balanced</option>
+              <option value="safe">safe</option>
+            </select>
+            <div class="help-text">Default benchmark profile for ingestion-heavy benchmarking.</div>
+          </div>
+          <div class="form-group">
+            <label for="benchmark_phase2_profile">Knowledge Graph Extraction Profile</label>
+            <select id="benchmark_phase2_profile" class="form-control">
+              <option value="aggressive">aggressive</option>
+              <option value="balanced">balanced</option>
+              <option value="safe">safe</option>
+            </select>
+            <div class="help-text">Default benchmark profile for KG extraction and relation scoring.</div>
+          </div>
+          <div class="form-group">
+            <label for="benchmark_phase3_profile">Molecular Docking Profile</label>
+            <select id="benchmark_phase3_profile" class="form-control">
+              <option value="aggressive">aggressive</option>
+              <option value="balanced">balanced</option>
+              <option value="safe">safe</option>
+            </select>
+            <div class="help-text">Default benchmark profile for docking and molecule generation.</div>
+          </div>
+          <div class="form-group">
+            <label for="benchmark_phase4_profile">Target Ranking & Provider Refresh Profile</label>
+            <select id="benchmark_phase4_profile" class="form-control">
+              <option value="aggressive">aggressive</option>
+              <option value="balanced">balanced</option>
+              <option value="safe">safe</option>
+            </select>
+            <div class="help-text">Controls default query/refresh run counts in the target ranking benchmark binary.</div>
+          </div>
+          <div class="form-group">
+            <label for="benchmark_offline_strict">Strict Offline Benchmark Mode</label>
+            <input id="benchmark_offline_strict" type="checkbox" />
+            <div class="help-text">When enabled, benchmark runs avoid live provider fetch and only use already-cached local data paths.</div>
+          </div>
+          <div class="form-group">
+            <label for="benchmark_provider_timing">Per-Provider Timing Breakdown</label>
+            <input id="benchmark_provider_timing" type="checkbox" />
+            <div class="help-text">Emits provider-level timing metrics in benchmark output for bottleneck diagnosis.</div>
           </div>
         </div>
       </section>
@@ -833,6 +1083,10 @@ pub struct SettingsView {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default = "default_true")]
+    phase4_source_backed_only: bool,
+    #[serde(default)]
+    phase4_n3n4_semantic_fallback: bool,
     #[serde(default)]
     phase4_structural_source_only: bool,
     #[serde(default = "default_true")]
@@ -847,6 +1101,8 @@ pub struct SettingsView {
     phase4_structural_fpocket_bin: String,
     #[serde(default = "default_phase4_provider_live_fetch_max_candidates")]
     phase4_provider_live_fetch_max_candidates: u64,
+    #[serde(default = "default_phase4_query_cache_only")]
+    phase4_query_cache_only: bool,
     #[serde(default = "default_true")]
     phase4_provider_refresh_adaptive_enabled: bool,
     #[serde(default = "default_phase4_provider_refresh_base_interval_secs")]
@@ -863,6 +1119,60 @@ pub struct SettingsView {
     phase4_provider_refresh_success_accel_div: u64,
     #[serde(default = "default_phase4_provider_refresh_recent_runs")]
     phase4_provider_refresh_recent_runs: u64,
+    #[serde(default = "default_true")]
+    phase4_bg_refresh_enabled: bool,
+    #[serde(default = "default_phase4_bg_refresh_interval_secs")]
+    phase4_bg_refresh_interval_secs: u64,
+    #[serde(default = "default_phase4_bg_refresh_max_genes")]
+    phase4_bg_refresh_max_genes: u64,
+    #[serde(default = "default_phase4_bg_refresh_batch_size")]
+    phase4_bg_refresh_batch_size: u64,
+    #[serde(default = "default_phase4_bg_refresh_retries")]
+    phase4_bg_refresh_retries: u64,
+    #[serde(default = "default_phase4_bg_refresh_fact_scan_limit")]
+    phase4_bg_refresh_fact_scan_limit: u64,
+    #[serde(default = "default_phase4_bg_refresh_min_gene_mentions")]
+    phase4_bg_refresh_min_gene_mentions: u64,
+    #[serde(default = "default_phase4_bg_refresh_alert_error_rate")]
+    phase4_bg_refresh_alert_error_rate: f64,
+    #[serde(default = "default_phase4_bg_refresh_alert_streak_runs")]
+    phase4_bg_refresh_alert_streak_runs: u64,
+    #[serde(default)]
+    phase4_bg_refresh_cancer_code: String,
+    #[serde(default)]
+    phase4_bg_refresh_genes: String,
+    #[serde(default = "default_benchmark_offline_strict")]
+    benchmark_offline_strict: bool,
+    #[serde(default = "default_benchmark_provider_timing")]
+    benchmark_provider_timing: bool,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase1_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase2_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase3_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase4_profile: String,
+    #[serde(default = "default_graph_mode")]
+    graph_default_mode: String,
+    #[serde(default = "default_graph_default_lens")]
+    graph_default_lens: String,
+    #[serde(default = "default_graph_render_preset")]
+    graph_render_preset: String,
+    #[serde(default = "default_graph_2d_max_nodes")]
+    graph_2d_max_nodes: u64,
+    #[serde(default = "default_graph_2d_max_links")]
+    graph_2d_max_links: u64,
+    #[serde(default = "default_graph_3d_max_nodes")]
+    graph_3d_max_nodes: u64,
+    #[serde(default = "default_graph_3d_max_links")]
+    graph_3d_max_links: u64,
+    #[serde(default = "default_graph_hub_suppression")]
+    graph_hub_suppression: f64,
+    #[serde(default = "default_graph_per_node_edge_cap")]
+    graph_per_node_edge_cap: u64,
+    #[serde(default = "default_graph_atlas_max_clusters")]
+    graph_atlas_max_clusters: u64,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -982,6 +1292,10 @@ pub struct SettingsSaveRequest {
     scihub_adaptive_probe_every: u64,
     #[serde(default = "default_scihub_adaptive_min_step_timeout_secs")]
     scihub_adaptive_min_step_timeout_secs: u64,
+    #[serde(default = "default_true")]
+    phase4_source_backed_only: bool,
+    #[serde(default)]
+    phase4_n3n4_semantic_fallback: bool,
     #[serde(default)]
     phase4_structural_source_only: bool,
     #[serde(default = "default_true")]
@@ -996,6 +1310,8 @@ pub struct SettingsSaveRequest {
     phase4_structural_fpocket_bin: String,
     #[serde(default = "default_phase4_provider_live_fetch_max_candidates")]
     phase4_provider_live_fetch_max_candidates: u64,
+    #[serde(default = "default_phase4_query_cache_only")]
+    phase4_query_cache_only: bool,
     #[serde(default = "default_true")]
     phase4_provider_refresh_adaptive_enabled: bool,
     #[serde(default = "default_phase4_provider_refresh_base_interval_secs")]
@@ -1012,6 +1328,60 @@ pub struct SettingsSaveRequest {
     phase4_provider_refresh_success_accel_div: u64,
     #[serde(default = "default_phase4_provider_refresh_recent_runs")]
     phase4_provider_refresh_recent_runs: u64,
+    #[serde(default = "default_true")]
+    phase4_bg_refresh_enabled: bool,
+    #[serde(default = "default_phase4_bg_refresh_interval_secs")]
+    phase4_bg_refresh_interval_secs: u64,
+    #[serde(default = "default_phase4_bg_refresh_max_genes")]
+    phase4_bg_refresh_max_genes: u64,
+    #[serde(default = "default_phase4_bg_refresh_batch_size")]
+    phase4_bg_refresh_batch_size: u64,
+    #[serde(default = "default_phase4_bg_refresh_retries")]
+    phase4_bg_refresh_retries: u64,
+    #[serde(default = "default_phase4_bg_refresh_fact_scan_limit")]
+    phase4_bg_refresh_fact_scan_limit: u64,
+    #[serde(default = "default_phase4_bg_refresh_min_gene_mentions")]
+    phase4_bg_refresh_min_gene_mentions: u64,
+    #[serde(default = "default_phase4_bg_refresh_alert_error_rate")]
+    phase4_bg_refresh_alert_error_rate: f64,
+    #[serde(default = "default_phase4_bg_refresh_alert_streak_runs")]
+    phase4_bg_refresh_alert_streak_runs: u64,
+    #[serde(default)]
+    phase4_bg_refresh_cancer_code: String,
+    #[serde(default)]
+    phase4_bg_refresh_genes: String,
+    #[serde(default = "default_benchmark_offline_strict")]
+    benchmark_offline_strict: bool,
+    #[serde(default = "default_benchmark_provider_timing")]
+    benchmark_provider_timing: bool,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase1_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase2_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase3_profile: String,
+    #[serde(default = "default_benchmark_phase_profile")]
+    benchmark_phase4_profile: String,
+    #[serde(default = "default_graph_mode")]
+    graph_default_mode: String,
+    #[serde(default = "default_graph_default_lens")]
+    graph_default_lens: String,
+    #[serde(default = "default_graph_render_preset")]
+    graph_render_preset: String,
+    #[serde(default = "default_graph_2d_max_nodes")]
+    graph_2d_max_nodes: u64,
+    #[serde(default = "default_graph_2d_max_links")]
+    graph_2d_max_links: u64,
+    #[serde(default = "default_graph_3d_max_nodes")]
+    graph_3d_max_nodes: u64,
+    #[serde(default = "default_graph_3d_max_links")]
+    graph_3d_max_links: u64,
+    #[serde(default = "default_graph_hub_suppression")]
+    graph_hub_suppression: f64,
+    #[serde(default = "default_graph_per_node_edge_cap")]
+    graph_per_node_edge_cap: u64,
+    #[serde(default = "default_graph_atlas_max_clusters")]
+    graph_atlas_max_clusters: u64,
     #[serde(default = "default_cbioportal_base_url")]
     cbioportal_base_url: String,
     #[serde(default = "default_cbioportal_timeout_secs")]
@@ -1114,6 +1484,9 @@ fn default_phase4_structural_fpocket_bin() -> String {
 fn default_phase4_provider_live_fetch_max_candidates() -> u64 {
     8
 }
+fn default_phase4_query_cache_only() -> bool {
+    false
+}
 fn default_phase4_provider_refresh_base_interval_secs() -> u64 {
     900
 }
@@ -1134,6 +1507,69 @@ fn default_phase4_provider_refresh_success_accel_div() -> u64 {
 }
 fn default_phase4_provider_refresh_recent_runs() -> u64 {
     8
+}
+fn default_phase4_bg_refresh_interval_secs() -> u64 {
+    900
+}
+fn default_phase4_bg_refresh_max_genes() -> u64 {
+    24
+}
+fn default_phase4_bg_refresh_batch_size() -> u64 {
+    6
+}
+fn default_phase4_bg_refresh_retries() -> u64 {
+    1
+}
+fn default_phase4_bg_refresh_fact_scan_limit() -> u64 {
+    4000
+}
+fn default_phase4_bg_refresh_min_gene_mentions() -> u64 {
+    2
+}
+fn default_phase4_bg_refresh_alert_error_rate() -> f64 {
+    0.55
+}
+fn default_phase4_bg_refresh_alert_streak_runs() -> u64 {
+    3
+}
+fn default_benchmark_offline_strict() -> bool {
+    false
+}
+fn default_benchmark_provider_timing() -> bool {
+    true
+}
+fn default_benchmark_phase_profile() -> String {
+    "balanced".to_string()
+}
+fn default_graph_mode() -> String {
+    "2d".to_string()
+}
+fn default_graph_default_lens() -> String {
+    "analysis".to_string()
+}
+fn default_graph_render_preset() -> String {
+    "analytical".to_string()
+}
+fn default_graph_2d_max_nodes() -> u64 {
+    260
+}
+fn default_graph_2d_max_links() -> u64 {
+    1000
+}
+fn default_graph_3d_max_nodes() -> u64 {
+    200
+}
+fn default_graph_3d_max_links() -> u64 {
+    650
+}
+fn default_graph_hub_suppression() -> f64 {
+    0.62
+}
+fn default_graph_per_node_edge_cap() -> u64 {
+    12
+}
+fn default_graph_atlas_max_clusters() -> u64 {
+    40
 }
 fn default_scihub_domains() -> String {
     "https://sci-hub.al,https://sci-hub.mk,https://sci-hub.ee,https://sci-hub.vg,https://sci-hub.st,http://sci-hub.al,http://sci-hub.mk,http://sci-hub.ee,http://sci-hub.vg,http://sci-hub.st".to_string()
@@ -1274,6 +1710,18 @@ fn int_at(root: &toml::Value, path: &[&str], default: u64) -> u64 {
         .unwrap_or(default)
 }
 
+fn float_at(root: &toml::Value, path: &[&str]) -> Option<f64> {
+    let mut cur = root;
+    for p in path {
+        match cur.get(*p) {
+            Some(next) => cur = next,
+            None => return None,
+        }
+    }
+    cur.as_float()
+        .or_else(|| cur.as_integer().map(|v| v as f64))
+}
+
 fn set_str(map: &mut toml::map::Map<String, toml::Value>, key: &str, value: String) {
     map.insert(key.to_string(), toml::Value::String(value));
 }
@@ -1288,6 +1736,29 @@ fn maybe_set_secret(
         if !t.is_empty() && t != "********" {
             set_str(map, key, t.to_string());
         }
+    }
+}
+
+fn sanitize_benchmark_profile(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "aggressive" => "aggressive".to_string(),
+        "safe" => "safe".to_string(),
+        _ => "balanced".to_string(),
+    }
+}
+
+fn sanitize_graph_default_lens(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "atlas" => "atlas".to_string(),
+        "path" => "path".to_string(),
+        _ => "analysis".to_string(),
+    }
+}
+
+fn sanitize_graph_render_preset(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "dense" => "dense".to_string(),
+        _ => "analytical".to_string(),
     }
 }
 
@@ -1577,6 +2048,24 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             default_scihub_adaptive_min_step_timeout_secs(),
         )
         .clamp(2, 60),
+        phase4_source_backed_only: {
+            let toml_value = bool_at(&root, &["ranker", "phase4", "source_backed_only"], true);
+            let env_override = std::env::var("FERRUMYX_PHASE4_SOURCE_BACKED_ONLY")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
+        phase4_n3n4_semantic_fallback: {
+            let toml_value = bool_at(
+                &root,
+                &["ranker", "phase4", "n3n4_semantic_fallback"],
+                false,
+            );
+            let env_override = std::env::var("FERRUMYX_PHASE4_N3N4_SEMANTIC_FALLBACK")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
         phase4_structural_source_only: bool_at(
             &root,
             &["ranker", "phase4", "structural_source_only"],
@@ -1661,6 +2150,13 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                     .unwrap_or(default_phase4_provider_live_fetch_max_candidates())
                     .clamp(1, 128)
             }
+        },
+        phase4_query_cache_only: {
+            let toml_value = bool_at(&root, &["ranker", "phase4", "query_cache_only"], false);
+            let env_override = std::env::var("FERRUMYX_PHASE4_QUERY_CACHE_ONLY")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
         },
         phase4_provider_refresh_adaptive_enabled: {
             let toml_value = bool_at(
@@ -1760,6 +2256,228 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             default_phase4_provider_refresh_recent_runs(),
         )
         .clamp(1, 128),
+        phase4_bg_refresh_enabled: {
+            let toml_value = bool_at(
+                &root,
+                &["ranker", "phase4", "background_refresh", "enabled"],
+                true,
+            );
+            let env_override = std::env::var("FERRUMYX_PHASE4_BG_REFRESH_ENABLED")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            env_override.unwrap_or(toml_value)
+        },
+        phase4_bg_refresh_interval_secs: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "background_refresh", "interval_secs"],
+                0,
+            );
+            if toml_value >= 60 {
+                toml_value.clamp(60, 86_400)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_BG_REFRESH_INTERVAL_SECS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_bg_refresh_interval_secs())
+                    .clamp(60, 86_400)
+            }
+        },
+        phase4_bg_refresh_max_genes: {
+            let toml_value = int_at(
+                &root,
+                &["ranker", "phase4", "background_refresh", "max_genes"],
+                0,
+            );
+            if toml_value >= 1 {
+                toml_value.clamp(1, 200)
+            } else {
+                std::env::var("FERRUMYX_PHASE4_BG_REFRESH_MAX_GENES")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_phase4_bg_refresh_max_genes())
+                    .clamp(1, 200)
+            }
+        },
+        phase4_bg_refresh_batch_size: int_at(
+            &root,
+            &["ranker", "phase4", "background_refresh", "batch_size"],
+            default_phase4_bg_refresh_batch_size(),
+        )
+        .clamp(1, 32),
+        phase4_bg_refresh_retries: int_at(
+            &root,
+            &["ranker", "phase4", "background_refresh", "retries"],
+            default_phase4_bg_refresh_retries(),
+        )
+        .clamp(0, 3),
+        phase4_bg_refresh_fact_scan_limit: int_at(
+            &root,
+            &["ranker", "phase4", "background_refresh", "fact_scan_limit"],
+            default_phase4_bg_refresh_fact_scan_limit(),
+        )
+        .clamp(250, 20_000),
+        phase4_bg_refresh_min_gene_mentions: int_at(
+            &root,
+            &[
+                "ranker",
+                "phase4",
+                "background_refresh",
+                "min_gene_mentions",
+            ],
+            default_phase4_bg_refresh_min_gene_mentions(),
+        )
+        .clamp(1, 50),
+        phase4_bg_refresh_alert_error_rate: {
+            let toml_value = float_at(
+                &root,
+                &["ranker", "phase4", "background_refresh", "alert_error_rate"],
+            )
+            .unwrap_or(default_phase4_bg_refresh_alert_error_rate());
+            let env_override = std::env::var("FERRUMYX_PHASE4_BG_REFRESH_ALERT_ERROR_RATE")
+                .ok()
+                .and_then(|v| v.parse::<f64>().ok());
+            env_override.unwrap_or(toml_value).clamp(0.05, 1.0)
+        },
+        phase4_bg_refresh_alert_streak_runs: int_at(
+            &root,
+            &[
+                "ranker",
+                "phase4",
+                "background_refresh",
+                "alert_streak_runs",
+            ],
+            default_phase4_bg_refresh_alert_streak_runs(),
+        )
+        .clamp(1, 100),
+        phase4_bg_refresh_cancer_code: str_at(
+            &root,
+            &["ranker", "phase4", "background_refresh", "cancer_code"],
+            "",
+        ),
+        phase4_bg_refresh_genes: str_at(
+            &root,
+            &["ranker", "phase4", "background_refresh", "seed_genes"],
+            "",
+        ),
+        benchmark_offline_strict: bool_at(
+            &root,
+            &["benchmark", "offline_strict"],
+            default_benchmark_offline_strict(),
+        ),
+        benchmark_provider_timing: bool_at(
+            &root,
+            &["benchmark", "provider_timing"],
+            default_benchmark_provider_timing(),
+        ),
+        benchmark_phase1_profile: sanitize_benchmark_profile(&str_at(
+            &root,
+            &["benchmark", "phase1", "profile"],
+            &default_benchmark_phase_profile(),
+        )),
+        benchmark_phase2_profile: sanitize_benchmark_profile(&str_at(
+            &root,
+            &["benchmark", "phase2", "profile"],
+            &default_benchmark_phase_profile(),
+        )),
+        benchmark_phase3_profile: sanitize_benchmark_profile(&str_at(
+            &root,
+            &["benchmark", "phase3", "profile"],
+            &default_benchmark_phase_profile(),
+        )),
+        benchmark_phase4_profile: sanitize_benchmark_profile(&str_at(
+            &root,
+            &["benchmark", "phase4", "profile"],
+            &default_benchmark_phase_profile(),
+        )),
+        graph_default_mode: {
+            let raw = str_at(&root, &["graph", "default_mode"], &default_graph_mode());
+            if raw.trim().eq_ignore_ascii_case("3d") {
+                "3d".to_string()
+            } else {
+                "2d".to_string()
+            }
+        },
+        graph_default_lens: {
+            let toml_value = str_at(&root, &["graph", "default_lens"], "");
+            if !toml_value.trim().is_empty() {
+                sanitize_graph_default_lens(&toml_value)
+            } else {
+                sanitize_graph_default_lens(
+                    &std::env::var("FERRUMYX_KG_DEFAULT_LENS")
+                        .unwrap_or_else(|_| default_graph_default_lens()),
+                )
+            }
+        },
+        graph_render_preset: {
+            let toml_value = str_at(&root, &["graph", "render_preset"], "");
+            if !toml_value.trim().is_empty() {
+                sanitize_graph_render_preset(&toml_value)
+            } else {
+                sanitize_graph_render_preset(
+                    &std::env::var("FERRUMYX_KG_RENDER_PRESET")
+                        .unwrap_or_else(|_| default_graph_render_preset()),
+                )
+            }
+        },
+        graph_2d_max_nodes: int_at(
+            &root,
+            &["graph", "mode_2d", "max_nodes"],
+            default_graph_2d_max_nodes(),
+        )
+        .clamp(80, 3000),
+        graph_2d_max_links: int_at(
+            &root,
+            &["graph", "mode_2d", "max_links"],
+            default_graph_2d_max_links(),
+        )
+        .clamp(120, 12000),
+        graph_3d_max_nodes: int_at(
+            &root,
+            &["graph", "mode_3d", "max_nodes"],
+            default_graph_3d_max_nodes(),
+        )
+        .clamp(60, 2500),
+        graph_3d_max_links: int_at(
+            &root,
+            &["graph", "mode_3d", "max_links"],
+            default_graph_3d_max_links(),
+        )
+        .clamp(100, 10000),
+        graph_hub_suppression: {
+            let toml_value = float_at(&root, &["graph", "layout", "hub_suppression"]);
+            let env_override = std::env::var("FERRUMYX_KG_HUB_SUPPRESSION")
+                .ok()
+                .and_then(|v| v.parse::<f64>().ok());
+            env_override
+                .or(toml_value)
+                .unwrap_or(default_graph_hub_suppression())
+                .clamp(0.0, 3.0)
+        },
+        graph_per_node_edge_cap: {
+            let toml_value = int_at(&root, &["graph", "layout", "per_node_edge_cap"], 0);
+            if toml_value >= 1 {
+                toml_value.clamp(3, 200)
+            } else {
+                std::env::var("FERRUMYX_KG_PER_NODE_EDGE_CAP")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_graph_per_node_edge_cap())
+                    .clamp(3, 200)
+            }
+        },
+        graph_atlas_max_clusters: {
+            let toml_value = int_at(&root, &["graph", "layout", "atlas_max_clusters"], 0);
+            if toml_value >= 1 {
+                toml_value.clamp(5, 300)
+            } else {
+                std::env::var("FERRUMYX_KG_ATLAS_MAX_CLUSTERS")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(default_graph_atlas_max_clusters())
+                    .clamp(5, 300)
+            }
+        },
         cbioportal_base_url: {
             let toml_value = str_at(
                 &root,
@@ -2125,6 +2843,14 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     let ranker = table_mut(&mut root, "ranker");
     let phase4 = nested_table_mut(ranker, "phase4");
     phase4.insert(
+        "source_backed_only".to_string(),
+        toml::Value::Boolean(payload.phase4_source_backed_only),
+    );
+    phase4.insert(
+        "n3n4_semantic_fallback".to_string(),
+        toml::Value::Boolean(payload.phase4_n3n4_semantic_fallback),
+    );
+    phase4.insert(
         "structural_source_only".to_string(),
         toml::Value::Boolean(payload.phase4_structural_source_only),
     );
@@ -2166,6 +2892,10 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
                 .phase4_provider_live_fetch_max_candidates
                 .clamp(1, 128) as i64,
         ),
+    );
+    phase4.insert(
+        "query_cache_only".to_string(),
+        toml::Value::Boolean(payload.phase4_query_cache_only),
     );
     let provider_refresh = nested_table_mut(phase4, "provider_refresh");
     provider_refresh.insert(
@@ -2220,6 +2950,54 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
         "recent_runs".to_string(),
         toml::Value::Integer(payload.phase4_provider_refresh_recent_runs.clamp(1, 128) as i64),
     );
+    let background_refresh = nested_table_mut(phase4, "background_refresh");
+    background_refresh.insert(
+        "enabled".to_string(),
+        toml::Value::Boolean(payload.phase4_bg_refresh_enabled),
+    );
+    background_refresh.insert(
+        "interval_secs".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_interval_secs.clamp(60, 86_400) as i64),
+    );
+    background_refresh.insert(
+        "max_genes".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_max_genes.clamp(1, 200) as i64),
+    );
+    background_refresh.insert(
+        "batch_size".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_batch_size.clamp(1, 32) as i64),
+    );
+    background_refresh.insert(
+        "retries".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_retries.clamp(0, 3) as i64),
+    );
+    background_refresh.insert(
+        "fact_scan_limit".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_fact_scan_limit.clamp(250, 20_000) as i64),
+    );
+    background_refresh.insert(
+        "min_gene_mentions".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_min_gene_mentions.clamp(1, 50) as i64),
+    );
+    background_refresh.insert(
+        "alert_error_rate".to_string(),
+        toml::Value::Float(payload.phase4_bg_refresh_alert_error_rate.clamp(0.05, 1.0)),
+    );
+    background_refresh.insert(
+        "alert_streak_runs".to_string(),
+        toml::Value::Integer(payload.phase4_bg_refresh_alert_streak_runs.clamp(1, 100) as i64),
+    );
+    set_str(
+        background_refresh,
+        "cancer_code",
+        payload.phase4_bg_refresh_cancer_code.trim().to_uppercase(),
+    );
+    set_str(
+        background_refresh,
+        "seed_genes",
+        payload.phase4_bg_refresh_genes.trim().to_string(),
+    );
+
     let providers = nested_table_mut(ranker, "providers");
     let cbioportal = nested_table_mut(providers, "cbioportal");
     set_str(
@@ -2262,6 +3040,92 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     );
     maybe_set_secret(cosmic, "api_key", &payload.cosmic_api_key);
     maybe_set_secret(cosmic, "api_key_secret", &payload.cosmic_api_key);
+
+    let benchmark = table_mut(&mut root, "benchmark");
+    benchmark.insert(
+        "offline_strict".to_string(),
+        toml::Value::Boolean(payload.benchmark_offline_strict),
+    );
+    benchmark.insert(
+        "provider_timing".to_string(),
+        toml::Value::Boolean(payload.benchmark_provider_timing),
+    );
+    let bench_phase1 = nested_table_mut(benchmark, "phase1");
+    set_str(
+        bench_phase1,
+        "profile",
+        sanitize_benchmark_profile(&payload.benchmark_phase1_profile),
+    );
+    let bench_phase2 = nested_table_mut(benchmark, "phase2");
+    set_str(
+        bench_phase2,
+        "profile",
+        sanitize_benchmark_profile(&payload.benchmark_phase2_profile),
+    );
+    let bench_phase3 = nested_table_mut(benchmark, "phase3");
+    set_str(
+        bench_phase3,
+        "profile",
+        sanitize_benchmark_profile(&payload.benchmark_phase3_profile),
+    );
+    let bench_phase4 = nested_table_mut(benchmark, "phase4");
+    set_str(
+        bench_phase4,
+        "profile",
+        sanitize_benchmark_profile(&payload.benchmark_phase4_profile),
+    );
+
+    let graph = table_mut(&mut root, "graph");
+    set_str(
+        graph,
+        "default_mode",
+        if payload.graph_default_mode.trim().eq_ignore_ascii_case("3d") {
+            "3d".to_string()
+        } else {
+            "2d".to_string()
+        },
+    );
+    set_str(
+        graph,
+        "default_lens",
+        sanitize_graph_default_lens(&payload.graph_default_lens),
+    );
+    set_str(
+        graph,
+        "render_preset",
+        sanitize_graph_render_preset(&payload.graph_render_preset),
+    );
+    let mode_2d = nested_table_mut(graph, "mode_2d");
+    mode_2d.insert(
+        "max_nodes".to_string(),
+        toml::Value::Integer(payload.graph_2d_max_nodes.clamp(80, 3000) as i64),
+    );
+    mode_2d.insert(
+        "max_links".to_string(),
+        toml::Value::Integer(payload.graph_2d_max_links.clamp(120, 12_000) as i64),
+    );
+    let mode_3d = nested_table_mut(graph, "mode_3d");
+    mode_3d.insert(
+        "max_nodes".to_string(),
+        toml::Value::Integer(payload.graph_3d_max_nodes.clamp(60, 2500) as i64),
+    );
+    mode_3d.insert(
+        "max_links".to_string(),
+        toml::Value::Integer(payload.graph_3d_max_links.clamp(100, 10_000) as i64),
+    );
+    let graph_layout = nested_table_mut(graph, "layout");
+    graph_layout.insert(
+        "hub_suppression".to_string(),
+        toml::Value::Float(payload.graph_hub_suppression.clamp(0.0, 3.0)),
+    );
+    graph_layout.insert(
+        "per_node_edge_cap".to_string(),
+        toml::Value::Integer(payload.graph_per_node_edge_cap.clamp(3, 200) as i64),
+    );
+    graph_layout.insert(
+        "atlas_max_clusters".to_string(),
+        toml::Value::Integer(payload.graph_atlas_max_clusters.clamp(5, 300) as i64),
+    );
 
     let embedding = table_mut(&mut root, "embedding");
     set_str(embedding, "backend", payload.embedding_backend);
@@ -2328,6 +3192,80 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     std::env::set_var(
         "LLM_COMPAT_CACHED_CHAT",
         if compat_cached_chat { "1" } else { "0" },
+    );
+
+    let graph_default_mode = str_at(root, &["graph", "default_mode"], &default_graph_mode());
+    std::env::set_var(
+        "FERRUMYX_KG_DEFAULT_MODE",
+        if graph_default_mode.trim().eq_ignore_ascii_case("3d") {
+            "3d"
+        } else {
+            "2d"
+        },
+    );
+    let graph_default_lens = sanitize_graph_default_lens(&str_at(
+        root,
+        &["graph", "default_lens"],
+        &default_graph_default_lens(),
+    ));
+    std::env::set_var("FERRUMYX_KG_DEFAULT_LENS", graph_default_lens);
+    let graph_render_preset = sanitize_graph_render_preset(&str_at(
+        root,
+        &["graph", "render_preset"],
+        &default_graph_render_preset(),
+    ));
+    std::env::set_var("FERRUMYX_KG_RENDER_PRESET", graph_render_preset);
+    let graph_2d_max_nodes = int_at(
+        root,
+        &["graph", "mode_2d", "max_nodes"],
+        default_graph_2d_max_nodes(),
+    )
+    .clamp(80, 3000);
+    let graph_2d_max_links = int_at(
+        root,
+        &["graph", "mode_2d", "max_links"],
+        default_graph_2d_max_links(),
+    )
+    .clamp(120, 12_000);
+    let graph_3d_max_nodes = int_at(
+        root,
+        &["graph", "mode_3d", "max_nodes"],
+        default_graph_3d_max_nodes(),
+    )
+    .clamp(60, 2500);
+    let graph_3d_max_links = int_at(
+        root,
+        &["graph", "mode_3d", "max_links"],
+        default_graph_3d_max_links(),
+    )
+    .clamp(100, 10_000);
+    std::env::set_var("FERRUMYX_KG_2D_MAX_NODES", graph_2d_max_nodes.to_string());
+    std::env::set_var("FERRUMYX_KG_2D_MAX_LINKS", graph_2d_max_links.to_string());
+    std::env::set_var("FERRUMYX_KG_3D_MAX_NODES", graph_3d_max_nodes.to_string());
+    std::env::set_var("FERRUMYX_KG_3D_MAX_LINKS", graph_3d_max_links.to_string());
+    let graph_hub_suppression = float_at(root, &["graph", "layout", "hub_suppression"])
+        .unwrap_or(default_graph_hub_suppression())
+        .clamp(0.0, 3.0);
+    let graph_per_node_edge_cap = int_at(
+        root,
+        &["graph", "layout", "per_node_edge_cap"],
+        default_graph_per_node_edge_cap(),
+    )
+    .clamp(3, 200);
+    let graph_atlas_max_clusters = int_at(
+        root,
+        &["graph", "layout", "atlas_max_clusters"],
+        default_graph_atlas_max_clusters(),
+    )
+    .clamp(5, 300);
+    std::env::set_var("FERRUMYX_KG_HUB_SUPPRESSION", format!("{graph_hub_suppression:.4}"));
+    std::env::set_var(
+        "FERRUMYX_KG_PER_NODE_EDGE_CAP",
+        graph_per_node_edge_cap.to_string(),
+    );
+    std::env::set_var(
+        "FERRUMYX_KG_ATLAS_MAX_CLUSTERS",
+        graph_atlas_max_clusters.to_string(),
     );
 
     let ingestion_default_max_results = int_at(root, &["ingestion", "default_max_results"], 50);
@@ -2600,6 +3538,19 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             .clamp(300, 1_209_600)
             .to_string(),
     );
+    let ingestion_chunk_fingerprint_scope = str_at(
+        root,
+        &["ingestion", "performance", "chunk_fingerprint_scope"],
+        "paper",
+    );
+    std::env::set_var(
+        "FERRUMYX_CHUNK_FINGERPRINT_SCOPE",
+        match ingestion_chunk_fingerprint_scope.trim().to_ascii_lowercase().as_str() {
+            "global" => "global",
+            "off" | "disabled" => "off",
+            _ => "paper",
+        },
+    );
     let ingestion_heavy_lane_async_enabled = bool_at(
         root,
         &["ingestion", "performance", "heavy_lane_async_enabled"],
@@ -2622,6 +3573,61 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         "FERRUMYX_INGESTION_HEAVY_LANE_MAX_INFLIGHT",
         ingestion_heavy_lane_max_inflight.clamp(1, 64).to_string(),
     );
+    let ingestion_validation_mode = str_at(
+        root,
+        &["ingestion", "performance", "validation_mode"],
+        "audit",
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_VALIDATION_MODE",
+        match ingestion_validation_mode.trim().to_ascii_lowercase().as_str() {
+            "strict" => "strict",
+            "off" | "disabled" => "off",
+            _ => "audit",
+        },
+    );
+    let ingestion_pdf_parse_fallback_enabled = bool_at(
+        root,
+        &["ingestion", "performance", "pdf_parse_fallback_enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_PARSE_FALLBACK_ENABLED",
+        if ingestion_pdf_parse_fallback_enabled {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let ingestion_pdf_parse_min_sections = int_at(
+        root,
+        &["ingestion", "performance", "pdf_parse_min_sections"],
+        2,
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_PARSE_MIN_SECTIONS",
+        ingestion_pdf_parse_min_sections.clamp(1, 12).to_string(),
+    );
+    let ingestion_pdf_parse_min_chars = int_at(
+        root,
+        &["ingestion", "performance", "pdf_parse_min_chars"],
+        1200,
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_PARSE_MIN_CHARS",
+        ingestion_pdf_parse_min_chars.clamp(200, 20_000).to_string(),
+    );
+    let ingestion_pdf_parse_negative_revalidate_secs = int_at(
+        root,
+        &["ingestion", "performance", "pdf_parse_negative_revalidate_secs"],
+        1800,
+    );
+    std::env::set_var(
+        "FERRUMYX_PDF_PARSE_NEG_REVALIDATE_SECS",
+        ingestion_pdf_parse_negative_revalidate_secs
+            .clamp(60, 86_400)
+            .to_string(),
+    );
     let ingestion_min_ner_chars = int_at(
         root,
         &["ingestion", "performance", "min_ner_chars"],
@@ -2642,6 +3648,32 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             .clamp(1, 16)
             .to_string(),
     );
+    let ingestion_predicate_coverage_min_unique = int_at(
+        root,
+        &["ingestion", "performance", "predicate_coverage_min_unique"],
+        6,
+    );
+    std::env::set_var(
+        "FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE",
+        ingestion_predicate_coverage_min_unique
+            .clamp(2, 64)
+            .to_string(),
+    );
+    let ingestion_predicate_coverage_max_generic_share = float_at(
+        root,
+        &[
+            "ingestion",
+            "performance",
+            "predicate_coverage_max_generic_share",
+        ],
+    )
+    .unwrap_or(0.55);
+    std::env::set_var(
+        "FERRUMYX_INGESTION_PREDICATE_MAX_GENERIC_SHARE",
+        ingestion_predicate_coverage_max_generic_share
+            .clamp(0.05, 0.95)
+            .to_string(),
+    );
     let ingestion_async_post_ingest_scoring = bool_at(
         root,
         &["ingestion", "performance", "async_post_ingest_scoring"],
@@ -2650,6 +3682,22 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     std::env::set_var(
         "FERRUMYX_INGESTION_ASYNC_POST_SCORE",
         if ingestion_async_post_ingest_scoring {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    let phase4_source_backed_only =
+        bool_at(root, &["ranker", "phase4", "source_backed_only"], true);
+    std::env::set_var(
+        "FERRUMYX_PHASE4_SOURCE_BACKED_ONLY",
+        if phase4_source_backed_only { "1" } else { "0" },
+    );
+    let phase4_n3n4_semantic_fallback =
+        bool_at(root, &["ranker", "phase4", "n3n4_semantic_fallback"], false);
+    std::env::set_var(
+        "FERRUMYX_PHASE4_N3N4_SEMANTIC_FALLBACK",
+        if phase4_n3n4_semantic_fallback {
             "1"
         } else {
             "0"
@@ -2724,6 +3772,12 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         phase4_provider_live_fetch_max_candidates
             .clamp(1, 128)
             .to_string(),
+    );
+    let phase4_query_cache_only =
+        bool_at(root, &["ranker", "phase4", "query_cache_only"], false);
+    std::env::set_var(
+        "FERRUMYX_PHASE4_QUERY_CACHE_ONLY",
+        if phase4_query_cache_only { "1" } else { "0" },
     );
     let phase4_provider_refresh_adaptive_enabled = bool_at(
         root,
@@ -2820,6 +3874,173 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             .clamp(1, 128)
             .to_string(),
     );
+    let phase4_bg_refresh_enabled = bool_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "enabled"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_ENABLED",
+        if phase4_bg_refresh_enabled { "1" } else { "0" },
+    );
+    let phase4_bg_refresh_interval_secs = int_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "interval_secs"],
+        default_phase4_bg_refresh_interval_secs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_INTERVAL_SECS",
+        phase4_bg_refresh_interval_secs
+            .clamp(60, 86_400)
+            .to_string(),
+    );
+    let phase4_bg_refresh_max_genes = int_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "max_genes"],
+        default_phase4_bg_refresh_max_genes(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_MAX_GENES",
+        phase4_bg_refresh_max_genes.clamp(1, 200).to_string(),
+    );
+    let phase4_bg_refresh_batch_size = int_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "batch_size"],
+        default_phase4_bg_refresh_batch_size(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_BATCH_SIZE",
+        phase4_bg_refresh_batch_size.clamp(1, 32).to_string(),
+    );
+    let phase4_bg_refresh_retries = int_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "retries"],
+        default_phase4_bg_refresh_retries(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_RETRIES",
+        phase4_bg_refresh_retries.clamp(0, 3).to_string(),
+    );
+    let phase4_bg_refresh_fact_scan_limit = int_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "fact_scan_limit"],
+        default_phase4_bg_refresh_fact_scan_limit(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_FACT_SCAN_LIMIT",
+        phase4_bg_refresh_fact_scan_limit
+            .clamp(250, 20_000)
+            .to_string(),
+    );
+    let phase4_bg_refresh_min_gene_mentions = int_at(
+        root,
+        &[
+            "ranker",
+            "phase4",
+            "background_refresh",
+            "min_gene_mentions",
+        ],
+        default_phase4_bg_refresh_min_gene_mentions(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_MIN_GENE_MENTIONS",
+        phase4_bg_refresh_min_gene_mentions.clamp(1, 50).to_string(),
+    );
+    let phase4_bg_refresh_alert_error_rate = float_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "alert_error_rate"],
+    )
+    .unwrap_or(default_phase4_bg_refresh_alert_error_rate())
+    .clamp(0.05, 1.0);
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_ALERT_ERROR_RATE",
+        format!("{:.3}", phase4_bg_refresh_alert_error_rate),
+    );
+    let phase4_bg_refresh_alert_streak_runs = int_at(
+        root,
+        &[
+            "ranker",
+            "phase4",
+            "background_refresh",
+            "alert_streak_runs",
+        ],
+        default_phase4_bg_refresh_alert_streak_runs(),
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_ALERT_STREAK_RUNS",
+        phase4_bg_refresh_alert_streak_runs
+            .clamp(1, 100)
+            .to_string(),
+    );
+    let phase4_bg_refresh_cancer_code = str_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "cancer_code"],
+        "",
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BG_REFRESH_CANCER_CODE",
+        phase4_bg_refresh_cancer_code.trim().to_uppercase(),
+    );
+    let phase4_bg_refresh_genes = str_at(
+        root,
+        &["ranker", "phase4", "background_refresh", "seed_genes"],
+        "",
+    );
+    std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_GENES", phase4_bg_refresh_genes);
+    let benchmark_offline_strict = bool_at(
+        root,
+        &["benchmark", "offline_strict"],
+        default_benchmark_offline_strict(),
+    );
+    std::env::set_var(
+        "FERRUMYX_BENCH_OFFLINE_STRICT",
+        if benchmark_offline_strict { "1" } else { "0" },
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BENCH_OFFLINE_STRICT",
+        if benchmark_offline_strict { "1" } else { "0" },
+    );
+    let benchmark_provider_timing = bool_at(
+        root,
+        &["benchmark", "provider_timing"],
+        default_benchmark_provider_timing(),
+    );
+    std::env::set_var(
+        "FERRUMYX_BENCH_PROVIDER_TIMING",
+        if benchmark_provider_timing { "1" } else { "0" },
+    );
+    std::env::set_var(
+        "FERRUMYX_PHASE4_BENCH_PROVIDER_TIMING",
+        if benchmark_provider_timing { "1" } else { "0" },
+    );
+    let benchmark_phase1_profile = sanitize_benchmark_profile(&str_at(
+        root,
+        &["benchmark", "phase1", "profile"],
+        &default_benchmark_phase_profile(),
+    ));
+    std::env::set_var("FERRUMYX_BENCH_PHASE1_PROFILE", benchmark_phase1_profile);
+    let benchmark_phase2_profile = sanitize_benchmark_profile(&str_at(
+        root,
+        &["benchmark", "phase2", "profile"],
+        &default_benchmark_phase_profile(),
+    ));
+    std::env::set_var("FERRUMYX_BENCH_PHASE2_PROFILE", benchmark_phase2_profile);
+    let benchmark_phase3_profile = sanitize_benchmark_profile(&str_at(
+        root,
+        &["benchmark", "phase3", "profile"],
+        &default_benchmark_phase_profile(),
+    ));
+    std::env::set_var("FERRUMYX_BENCH_PHASE3_PROFILE", benchmark_phase3_profile);
+    let benchmark_phase4_profile = sanitize_benchmark_profile(&str_at(
+        root,
+        &["benchmark", "phase4", "profile"],
+        &default_benchmark_phase_profile(),
+    ));
+    std::env::set_var(
+        "FERRUMYX_BENCH_PHASE4_PROFILE",
+        benchmark_phase4_profile.clone(),
+    );
+    std::env::set_var("FERRUMYX_PHASE4_BENCH_PROFILE", benchmark_phase4_profile);
 
     let pubmed_key = str_at(root, &["ingestion", "pubmed", "api_key"], "");
     if !pubmed_key.is_empty() {

@@ -9,11 +9,9 @@ use axum::{
 };
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::{
-    entities::EntityRepository, kg_facts::KgFactRepository, target_scores::TargetScoreRepository,
+    entities::EntityRepository, target_scores::TargetScoreRepository,
 };
 use ferrumyx_ranker::{
-    depmap_provider::{DepMapClientAdapter, DepMapProvider},
-    normalise::normalise_ceres,
     scorer::ComponentScoresNormed,
     weights::WeightVector,
 };
@@ -65,17 +63,25 @@ pub async fn api_ranker_score(
     State(state): State<SharedState>,
     Query(filter): Query<RankerFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let gene = filter.gene.as_deref().unwrap_or("KRAS");
-    let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
+    let gene = filter
+        .gene
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| ApiError::BadRequest("gene is required".to_string()))?;
+    let cancer_filter = filter
+        .cancer_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
 
-    let all = load_ranked_targets(&state, Some(cancer_type), 50_000).await?;
+    let all = load_ranked_targets(&state, cancer_filter, 3_000).await?;
     let row = all
         .into_iter()
         .find(|r| r.gene.eq_ignore_ascii_case(gene))
         .ok_or_else(|| {
-            ApiError::NotFound(format!(
-                "No persisted score found for {gene} in {cancer_type}"
-            ))
+            let scope = cancer_filter.unwrap_or("all indications");
+            ApiError::NotFound(format!("No persisted score found for {gene} in {scope}"))
         })?;
 
     Ok(Json(row))
@@ -86,9 +92,14 @@ pub async fn api_ranker_top(
     State(state): State<SharedState>,
     Query(filter): Query<RankerFilter>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let cancer_type = filter.cancer_type.as_deref().unwrap_or("PAAD");
+    let cancer_filter = filter
+        .cancer_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
     let limit = filter.limit.unwrap_or(10).clamp(1, 100);
-    let mut top_targets = load_ranked_targets(&state, Some(cancer_type), 50_000).await?;
+    let scan_limit = (limit.saturating_mul(80)).clamp(500, 3_000);
+    let mut top_targets = load_ranked_targets(&state, cancer_filter, scan_limit).await?;
     top_targets.truncate(limit);
     Ok(Json(top_targets))
 }
@@ -128,11 +139,9 @@ async fn load_ranked_targets(
 ) -> Result<Vec<RankedTarget>, ApiError> {
     let score_repo = TargetScoreRepository::new(state.db.clone());
     let entity_repo = EntityRepository::new(state.db.clone());
-    let kg_repo = KgFactRepository::new(state.db.clone());
-    let depmap = DepMapClientAdapter::init().await.ok();
 
     let mut rows = score_repo
-        .list(0, limit.min(10_000))
+        .list(0, limit.min(3_000))
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -142,11 +151,8 @@ async fn load_ranked_targets(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let gene_ids: Vec<uuid::Uuid> = rows.iter().map(|s| s.gene_id).collect();
-    let fact_count_by_gene: HashMap<uuid::Uuid, u32> = kg_repo
-        .count_by_subject_ids(&gene_ids, 300)
-        .await
-        .unwrap_or_default();
+    // Avoid heavy KG fan-out on this hot path; keep ranker page responsive and crash-safe.
+    let fact_count_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
 
     let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
     let mut out = Vec::new();
@@ -191,28 +197,46 @@ async fn load_ranked_targets(
             }
         }
 
-        let mut component_scores = ComponentScoresNormed {
-            mutation_freq: norm_json
-                .get("mutation_score")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
-            crispr_dependency: 0.0,
-            survival_correlation: 0.0,
-            expression_specificity: 0.0,
-            structural_tractability: 0.0,
-            pocket_detectability: 0.0,
-            novelty_score: 0.0,
-            pathway_independence: 0.0,
-            literature_novelty: norm_json
-                .get("literature_score")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
+        let read_normed = |keys: &[&str]| -> f64 {
+            keys.iter()
+                .find_map(|k| norm_json.get(*k).and_then(|v| v.as_f64()))
+                .unwrap_or(0.0)
         };
-        if let Some(depmap) = &depmap {
-            if let Some(ceres) = depmap.get_mean_ceres(&gene, &cancer_type) {
-                component_scores.crispr_dependency = normalise_ceres(ceres);
-            }
-        }
+        let component_scores = ComponentScoresNormed {
+            mutation_freq: read_normed(&["mutation_freq", "mutation_score", "n1_mutation_freq"]),
+            crispr_dependency: read_normed(&[
+                "crispr_dependency",
+                "crispr_score",
+                "n2_crispr_dependency",
+            ]),
+            survival_correlation: read_normed(&[
+                "survival_correlation",
+                "survival_score",
+                "n3_survival_correlation",
+            ]),
+            expression_specificity: read_normed(&[
+                "expression_specificity",
+                "expression_score",
+                "n4_expression_specificity",
+            ]),
+            structural_tractability: read_normed(&[
+                "structural_tractability",
+                "tractability_score",
+                "n5_structural_tractability",
+            ]),
+            pocket_detectability: read_normed(&[
+                "pocket_detectability",
+                "pocket_score",
+                "n6_pocket_detectability",
+            ]),
+            novelty_score: read_normed(&["novelty_score", "n7_novelty_score"]),
+            pathway_independence: read_normed(&["pathway_independence", "n8_pathway_independence"]),
+            literature_novelty: read_normed(&[
+                "literature_novelty",
+                "literature_score",
+                "n9_literature_novelty",
+            ]),
+        };
 
         out.push(RankedTarget {
             gene: gene.clone(),
@@ -256,6 +280,28 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
         .component-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }}
         .method-table td:first-child {{ color: var(--text-main); font-weight: 500; border-bottom: 1px solid var(--border-glass); }}
         .method-table td:last-child {{ text-align: right; color: var(--brand-purple); font-weight: 700; border-bottom: 1px solid var(--border-glass); }}
+        .section-disclosure {{
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            background: rgba(15, 23, 35, 0.58);
+            margin-top: 1rem;
+            overflow: hidden;
+        }}
+        .section-disclosure summary {{
+            cursor: pointer;
+            padding: 0.85rem 1rem;
+            list-style: none;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 1px solid transparent;
+        }}
+        .section-disclosure[open] summary {{
+            border-bottom-color: var(--border-glass);
+        }}
+        .section-disclosure-content {{
+            padding: 0.95rem 1rem 1rem;
+        }}
     </style>
 </head>
 <body>
@@ -278,17 +324,11 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                     <form id="scoreForm">
                         <div class="mb-3">
                             <label class="form-label text-muted small text-uppercase" style="letter-spacing:1px">Target Locus</label>
-                            <input type="text" id="geneInput" class="form-control font-outfit" style="font-size:1.1rem; color:var(--text-main)" placeholder="e.g., KRAS" value="KRAS">
+                            <input type="text" id="geneInput" class="form-control font-outfit" style="font-size:1.1rem; color:var(--text-main)" placeholder="e.g., KRAS">
                         </div>
                         <div class="mb-4">
                             <label class="form-label text-muted small text-uppercase" style="letter-spacing:1px">Pathology Vector</label>
-                            <select id="cancerInput" class="form-control font-outfit" style="font-size:1.05rem; color:var(--text-main)">
-                                <option value="PAAD" selected>Pancreatic Adenocarcinoma (PAAD)</option>
-                                <option value="LUAD">Lung Adenocarcinoma (LUAD)</option>
-                                <option value="BRCA">Breast Cancer (BRCA)</option>
-                                <option value="COAD">Colon Adenocarcinoma (COAD)</option>
-                                <option value="GBM">Glioblastoma (GBM)</option>
-                            </select>
+                            <input type="text" id="cancerInput" class="form-control font-outfit" style="font-size:1.05rem; color:var(--text-main)" placeholder="Any cancer type (optional)">
                         </div>
                         <button type="submit" class="btn btn-primary w-100 py-3">Synthesize Matrix Score</button>
                     </form>
@@ -306,10 +346,10 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
         </div>
         
         <div class="mt-4">
-            <div class="card h-100">
+                <div class="card h-100">
                 <div class="card-header border-bottom border-glass pb-3 mb-3 d-flex justify-between align-center">
                     <div class="d-flex align-center gap-2">
-                        <span>Top Computed Candidates <span class="text-muted" id="cancerLabel">PAAD</span></span>
+                        <span>Top Computed Candidates <span class="text-muted" id="cancerLabel">All indications</span></span>
                         <span class="info-tip">i
                             <span class="tooltip-card">
                                 <strong class="text-main">Mathematical Synthesis Model</strong><br>
@@ -335,9 +375,16 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
     <script>
         async function loadTopTargets(cancerType) {{
             try {{
-                const resp = await fetch('/api/ranker/top?cancer_type=' + cancerType);
+                const qs = new URLSearchParams();
+                if ((cancerType || '').trim()) {{
+                    qs.set('cancer_type', cancerType.trim());
+                }}
+                const resp = await fetch('/api/ranker/top?' + qs.toString());
                 const targets = await resp.json();
-                
+                if (!Array.isArray(targets) || targets.length === 0) {{
+                    document.getElementById('topTargets').innerHTML = '<div class="p-4 text-center text-muted">No persisted targets found for this scope.</div>';
+                    return;
+                }}
                 let html = '<table class="table mb-0"><thead><tr><th>Locus</th><th>Confidence</th><th>Shortlist</th><th>CRISPR Dep</th></tr></thead><tbody>';
                 for (const t of targets) {{
                     const tierClass = t.tier === 'primary' ? 'score-primary' : t.tier === 'secondary' ? 'score-secondary' : 'score-excluded';
@@ -358,7 +405,16 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
         
         async function scoreTarget(gene, cancerType) {{
             try {{
-                const resp = await fetch(`/api/ranker/score?gene=${{gene}}&cancer_type=${{cancerType}}`);
+                const qs = new URLSearchParams();
+                qs.set('gene', (gene || '').trim());
+                if ((cancerType || '').trim()) {{
+                    qs.set('cancer_type', cancerType.trim());
+                }}
+                const resp = await fetch(`/api/ranker/score?${{qs.toString()}}`);
+                if (!resp.ok) {{
+                    const text = await resp.text();
+                    throw new Error(text || 'Unable to score target for this scope');
+                }}
                 const result = await resp.json();
                 
                 const tierClass = result.tier === 'primary' ? 'score-primary' : result.tier === 'secondary' ? 'score-secondary' : 'score-excluded';
@@ -385,8 +441,6 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                             </div>
                         </div>
                     </div>
-                    <div class="text-muted text-uppercase mb-3" style="font-size:0.8rem; letter-spacing:1px">Scalar Constituents</div>
-                    <div class="component-grid">
                 `;
                 
                 const components = [
@@ -400,9 +454,22 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                     ['Pathway Ortho', result.component_scores.pathway_independence],
                     ['Lit. Deficit', result.component_scores.literature_novelty],
                 ];
-                
+
+                const topSignals = [...components]
+                    .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+                    .slice(0, 3)
+                    .map(([name, value]) => `${{name}} ${{(Number(value || 0) * 100).toFixed(0)}}%`)
+                    .join(' • ');
+
+                html += `
+                    <details class="section-disclosure">
+                        <summary>Signal Breakdown (Expand)</summary>
+                        <div class="section-disclosure-content">
+                            <div class="text-muted small mb-3">Top component signals: <span style="color:var(--text-main)">${{topSignals || 'n/a'}}</span></div>
+                            <div class="component-grid">
+                `;
                 for (const [name, value] of components) {{
-                    const pct = (value * 100).toFixed(0);
+                    const pct = (Number(value || 0) * 100).toFixed(0);
                     const color = value > 0.7 ? 'var(--success)' : value > 0.4 ? 'var(--warning)' : 'var(--danger)';
                     html += `<div>
                         <div class="d-flex justify-between align-center mb-1">
@@ -412,8 +479,10 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                         <div class="component-bar"><div class="component-fill" style="width: ${{pct}}%; background: ${{color}};"></div></div>
                     </div>`;
                 }}
-                
-                html += '</div>';
+                html += `       </div>
+                        </div>
+                    </details>
+                `;
                 document.getElementById('scoreResult').innerHTML = html;
             }} catch (e) {{
                 document.getElementById('scoreResult').innerHTML = '<div class="p-4 text-center text-danger">Network synthesis interference detected</div>';
@@ -422,9 +491,13 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
         
         document.getElementById('scoreForm').addEventListener('submit', function(e) {{
             e.preventDefault();
-            const gene = document.getElementById('geneInput').value;
-            const cancer = document.getElementById('cancerInput').value;
-            document.getElementById('cancerLabel').textContent = cancer;
+            const gene = (document.getElementById('geneInput').value || '').trim();
+            const cancer = (document.getElementById('cancerInput').value || '').trim();
+            if (!gene) {{
+                document.getElementById('scoreResult').innerHTML = '<div class="p-4 text-center text-warning">Enter a target locus to compute a score.</div>';
+                return;
+            }}
+            document.getElementById('cancerLabel').textContent = cancer || 'All indications';
             
             document.getElementById('scoreResult').innerHTML = '<div class="d-flex align-center justify-center p-5 text-brand-blue flex-column h-100"><div class="loading" style="width:24px; height:24px; border:3px solid rgba(59,130,246,0.3); border-radius:50%; border-top-color:var(--brand-blue); animation:spin 1s linear infinite;"></div><div class="mt-3 small">Synthesizing Network...</div></div>';
             
@@ -433,9 +506,10 @@ fn render_ranker_page(_result: Option<RankedTarget>) -> String {
                 loadTopTargets(cancer);
             }}, 400);
         }});
-        
-        loadTopTargets('PAAD');
-        scoreTarget('KRAS', 'PAAD');
+
+        const initialCancer = (document.getElementById('cancerInput').value || '').trim();
+        document.getElementById('cancerLabel').textContent = initialCancer || 'All indications';
+        loadTopTargets(initialCancer);
     </script>
     <style>@keyframes spin {{ 100% {{ transform: rotate(360deg); }} }}</style>
 </body>

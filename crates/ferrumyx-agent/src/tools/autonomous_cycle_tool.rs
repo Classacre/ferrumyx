@@ -401,6 +401,7 @@ impl Tool for AutonomousCycleTool {
                     max_genes: 8,
                     batch_size: 4,
                     retries: 1,
+                    offline_strict: false,
                 }),
             )
             .await

@@ -35,12 +35,21 @@ fn score_row_from_evidence(
     let confidence_mean =
         (evidence.confidence_sum / evidence.total_evidence as f64).clamp(0.0, 1.0);
 
-    let composite_score =
+    let base_weighted =
         (0.50 * literature_score + 0.30 * mutation_score + 0.20 * cancer_score).clamp(0.0, 1.0);
-    let adjusted_score = (composite_score * confidence_mean).clamp(0.0, 1.0);
-    let shortlist_tier = if adjusted_score >= 0.60 {
+    let diversity_count = [literature_score, mutation_score, cancer_score]
+        .iter()
+        .filter(|v| **v >= 0.12)
+        .count() as f64;
+    let diversity_factor = (0.70 + 0.10 * diversity_count).clamp(0.70, 1.0);
+    let saturation_curve = 1.0 - (-1.8 * base_weighted).exp();
+    let confidence_factor = (0.50 + 0.50 * confidence_mean).clamp(0.50, 1.0);
+
+    let composite_score = (saturation_curve * diversity_factor).clamp(0.0, 0.98);
+    let adjusted_score = (composite_score * confidence_factor).clamp(0.0, 0.95);
+    let shortlist_tier = if adjusted_score >= 0.65 {
         "primary"
-    } else if adjusted_score >= 0.45 {
+    } else if adjusted_score >= 0.50 {
         "secondary"
     } else {
         "excluded"
@@ -60,7 +69,10 @@ fn score_row_from_evidence(
         "total_evidence": evidence.total_evidence,
         "mutation_evidence": evidence.mutation_evidence,
         "cancer_evidence": evidence.cancer_evidence,
-        "confidence_mean": confidence_mean
+        "confidence_mean": confidence_mean,
+        "base_weighted": base_weighted,
+        "diversity_factor": diversity_factor,
+        "confidence_factor": confidence_factor
     })
     .to_string();
     row.components_normed = serde_json::json!({

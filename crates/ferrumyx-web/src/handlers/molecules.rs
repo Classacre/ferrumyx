@@ -165,20 +165,23 @@ pub async fn molecules_page(
         <div class="card-header">
             <div>Molecular Evidence Snapshot</div>
         </div>
-        <div class="table-container">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Source Entity</th>
-                        <th>Target/Compound</th>
-                        <th>Relation</th>
-                        <th>Confidence</th>
-                        <th>Recorded At</th>
-                    </tr>
-                </thead>
-                <tbody>{}</tbody>
-            </table>
-        </div>
+        <details style="border-top:1px solid var(--border-glass);">
+            <summary style="cursor:pointer; padding:0.8rem 1rem; color:var(--text-main); font-weight:600; font-family:'Outfit',sans-serif;">Evidence Rows (Expand)</summary>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source Entity</th>
+                            <th>Target/Compound</th>
+                            <th>Relation</th>
+                            <th>Confidence</th>
+                            <th>Recorded At</th>
+                        </tr>
+                    </thead>
+                    <tbody>{}</tbody>
+                </table>
+            </div>
+        </details>
     </div>
 </main>
 <script src="/static/js/main.js"></script>

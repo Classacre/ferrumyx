@@ -155,6 +155,84 @@ impl SemanticScholarClient {
         })
     }
 
+    fn canonical_doi(raw: &str) -> Option<String> {
+        let mut doi = raw.trim();
+        if doi.is_empty() {
+            return None;
+        }
+        let lower = doi.to_ascii_lowercase();
+        for prefix in [
+            "https://doi.org/",
+            "http://doi.org/",
+            "https://dx.doi.org/",
+            "http://dx.doi.org/",
+            "doi:",
+        ] {
+            if lower.starts_with(prefix) {
+                doi = &doi[prefix.len()..];
+                break;
+            }
+        }
+        let norm = doi.trim().trim_matches('/').to_ascii_lowercase();
+        if norm.is_empty() { None } else { Some(norm) }
+    }
+
+    fn canonical_id(raw: &str) -> Option<String> {
+        let norm: String = raw
+            .trim()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if norm.is_empty() { None } else { Some(norm) }
+    }
+
+    fn canonical_title(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let mut out = String::with_capacity(trimmed.len());
+        let mut prev_space = false;
+        for ch in trimmed.chars() {
+            let mapped = if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                ' '
+            };
+            if mapped == ' ' {
+                if prev_space {
+                    continue;
+                }
+                prev_space = true;
+                out.push(' ');
+            } else {
+                prev_space = false;
+                out.push(mapped);
+            }
+        }
+        let out = out.trim();
+        if out.is_empty() {
+            None
+        } else {
+            Some(out.to_string())
+        }
+    }
+
+    fn paper_identity_key(p: &PaperMetadata) -> String {
+        if let Some(doi) = p.doi.as_deref().and_then(Self::canonical_doi) {
+            return format!("doi:{doi}");
+        }
+        if let Some(pmid) = p.pmid.as_deref().and_then(Self::canonical_id) {
+            return format!("pmid:{pmid}");
+        }
+        if let Some(pmcid) = p.pmcid.as_deref().and_then(Self::canonical_id) {
+            return format!("pmcid:{pmcid}");
+        }
+        let title = Self::canonical_title(&p.title).unwrap_or_else(|| "untitled".to_string());
+        format!("title:{title}")
+    }
+
     fn citation_expansion_limit(max_results: usize) -> usize {
         let env_limit = std::env::var("FERRUMYX_S2_CITATION_EXPANSION")
             .ok()
@@ -293,16 +371,10 @@ impl LiteratureSource for SemanticScholarClient {
             }
         }
 
-        // final de-dup by DOI+PMID+title
+        // final canonical de-dup to suppress citation/search overlap quickly
         let mut seen = std::collections::HashSet::new();
         papers.retain(|p| {
-            let key = format!(
-                "{}|{}|{}",
-                p.doi.clone().unwrap_or_default().to_lowercase(),
-                p.pmid.clone().unwrap_or_default().to_lowercase(),
-                p.title.to_lowercase()
-            );
-            seen.insert(key)
+            seen.insert(Self::paper_identity_key(p))
         });
         papers.truncate(max_results);
         Ok(papers)

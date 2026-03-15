@@ -41,9 +41,56 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                     "secondary" => r#"<span class="badge badge-warning">Secondary</span>"#,
                     _ => r#"<span class="badge badge-outline">Excluded</span>"#,
                 };
-                let flags_html = t.flags.iter().map(|f| format!(
-                    r#"<span class="badge badge-danger" style="margin-right:4px">{}</span>"#, f
-                )).collect::<String>();
+                let flags_summary = if t.flags.is_empty() {
+                    r#"<span class="text-muted">No flags</span>"#.to_string()
+                } else {
+                    format!(r#"<span class="badge badge-warning">{} flags</span>"#, t.flags.len())
+                };
+                let flags_html = if t.flags.is_empty() {
+                    r#"<div class="text-muted small">No quality flags.</div>"#.to_string()
+                } else {
+                    t.flags
+                        .iter()
+                        .map(|f| {
+                            format!(r#"<span class="badge badge-danger" style="margin-right:4px; margin-bottom:4px;">{}</span>"#, f)
+                        })
+                        .collect::<String>()
+                };
+                let component_sources_html = t
+                    .component_sources
+                    .as_ref()
+                    .map(|sources| {
+                        sources
+                            .iter()
+                            .take(7)
+                            .map(|(k, v)| {
+                                format!(
+                                    r#"<div class="small d-flex justify-between gap-3"><span class="text-muted">{}</span><span class="text-main">{}</span></div>"#,
+                                    k, v
+                                )
+                            })
+                            .collect::<String>()
+                    })
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| {
+                        r#"<div class="small text-muted">No component-source metadata.</div>"#.to_string()
+                    });
+                let metrics_html = t
+                    .metrics
+                    .as_ref()
+                    .map(|m| {
+                        format!(
+                            r#"<div class="small d-flex flex-wrap gap-3">
+<span class="text-muted">Mutation: <strong class="text-main">{:.3}</strong></span>
+<span class="text-muted">Expression: <strong class="text-main">{:.3}</strong></span>
+<span class="text-muted">CRISPR: <strong class="text-main">{:.3}</strong></span>
+</div>"#,
+                            m.mutation_freq,
+                            m.expression_specificity,
+                            m.crispr_dependency
+                        )
+                    })
+                    .unwrap_or_else(|| r#"<div class="small text-muted">No metric snapshot.</div>"#.to_string());
                 format!(r#"
                 <tr>
                     <td><span class="rank-badge">#{}</span></td>
@@ -60,7 +107,16 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                     </td>
                     <td><span style="color:var(--warning); font-family:'Inter',sans-serif; font-weight:600;">{:.3}</span></td>
                     <td>{}</td>
-                    <td>{}</td>
+                    <td>
+                        <details class="row-disclosure">
+                            <summary>{}</summary>
+                            <div class="row-disclosure-content">
+                                <div class="mb-2">{}</div>
+                                <div class="mb-2">{}</div>
+                                <div>{}</div>
+                            </div>
+                        </details>
+                    </td>
                     <td>
                         <div class="d-flex gap-2">
                             <a href="/targets?gene={}&cancer={}" class="btn btn-outline btn-sm">Insights</a>
@@ -70,7 +126,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                 </tr>"#,
                 t.rank, t.percentile.unwrap_or(0.0), t.gene_symbol, t.gene_symbol, t.cancer_code,
                 (t.composite_score * 100.0) as u32, t.composite_score,
-                t.confidence_adj, tier_badge, flags_html,
+                t.confidence_adj, tier_badge, flags_summary, flags_html, component_sources_html, metrics_html,
                 t.gene_symbol, t.cancer_code, t.gene_symbol)
             }).collect();
 
@@ -92,7 +148,7 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                                 <th>Priority Score</th>
                                 <th>Conf. Adj.</th>
                                 <th>Tier</th>
-                                <th>Flags</th>
+                                <th>Details</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -129,6 +185,48 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
             gap: 1.5rem;
             margin-top: 1.5rem;
         }}
+        .row-disclosure {{
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            background: rgba(14, 21, 33, 0.62);
+            overflow: hidden;
+            min-width: 230px;
+        }}
+        .row-disclosure summary {{
+            cursor: pointer;
+            list-style: none;
+            padding: 0.45rem 0.6rem;
+            font-size: 0.82rem;
+            color: var(--text-main);
+            font-weight: 600;
+        }}
+        .row-disclosure-content {{
+            border-top: 1px solid var(--border-glass);
+            padding: 0.55rem 0.6rem 0.65rem;
+        }}
+        .query-advanced {{
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(14, 21, 33, 0.58);
+        }}
+        .query-advanced summary {{
+            cursor: pointer;
+            list-style: none;
+            padding: 0.72rem 0.9rem;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            color: var(--text-main);
+        }}
+        .query-advanced summary::-webkit-details-marker {{
+            display: none;
+        }}
+        .query-advanced[open] summary {{
+            border-bottom: 1px solid var(--border-glass);
+        }}
+        .query-advanced-body {{
+            padding: 0.9rem 0.95rem 1rem;
+        }}
     </style>
 </head>
 <body>
@@ -154,58 +252,62 @@ fn render_query_page(results: Option<(&str, Vec<QueryResult>)>) -> String {
                 <div class="text-muted mt-2" style="font-size:0.85rem;">Ferrumyx will parse entities and map to structured filters below.</div>
             </div>
 
-            <div class="form-row">
-                <div>
-                    <label class="form-label">Cancer Type (OncoTree)</label>
-                    <input type="text" name="cancer_code" class="form-control" placeholder="e.g. PAAD">
+            <details class="query-advanced">
+                <summary>Structured Constraints (Optional)</summary>
+                <div class="query-advanced-body">
+                    <div class="form-row">
+                        <div>
+                            <label class="form-label">Cancer Type (OncoTree)</label>
+                            <input type="text" name="cancer_code" class="form-control" placeholder="e.g. PAAD">
+                        </div>
+                        <div>
+                            <label class="form-label">Gene Symbol</label>
+                            <input type="text" name="gene_symbol" class="form-control" placeholder="e.g. EGFR">
+                        </div>
+                        <div>
+                            <label class="form-label">Mutation Indicator</label>
+                            <input type="text" name="mutation" class="form-control" placeholder="e.g. L858R">
+                        </div>
+                        <div>
+                            <label class="form-label">Target Relationship</label>
+                            <select name="relationship" class="form-control">
+                                <option value="any">Any Pipeline Edge</option>
+                                <option value="synthetic_lethality" selected>Synthetic Lethality</option>
+                                <option value="inhibits">Therapeutic Inhibition</option>
+                                <option value="activates">Therapeutic Activation</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div>
+                            <label class="form-label d-flex justify-between">
+                                <span>Min Confidence</span>
+                                <span id="conf-val" class="text-gradient" style="font-weight:600;">0.45</span>
+                            </label>
+                            <input type="range" name="min_confidence" style="width:100%; margin-top:0.75rem;" min="0" max="1" step="0.05" value="0.45"
+                                oninput="document.getElementById('conf-val').textContent=this.value">
+                        </div>
+                        <div>
+                            <label class="form-label">Min Structural Tractability</label>
+                            <input type="number" name="min_structural" class="form-control"
+                                min="0" max="1" step="0.1" value="0.4" placeholder="0.4">
+                        </div>
+                        <div>
+                            <label class="form-label d-flex justify-between">
+                                <span>Max ChEMBL Inhibitors</span>
+                                <span class="badge badge-primary">Novelty</span>
+                            </label>
+                            <input type="number" name="max_inhibitors" class="form-control"
+                                min="0" max="1000" value="20" placeholder="20">
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label class="form-label">Gene Symbol</label>
-                    <input type="text" name="gene_symbol" class="form-control" placeholder="e.g. EGFR">
-                </div>
-                <div>
-                    <label class="form-label">Mutation Indicator</label>
-                    <input type="text" name="mutation" class="form-control" placeholder="e.g. L858R">
-                </div>
-                <div>
-                    <label class="form-label">Target Relationship</label>
-                    <select name="relationship" class="form-control">
-                        <option value="any">Any Pipeline Edge</option>
-                        <option value="synthetic_lethality" selected>Synthetic Lethality</option>
-                        <option value="inhibits">Therapeutic Inhibition</option>
-                        <option value="activates">Therapeutic Activation</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div>
-                    <label class="form-label d-flex justify-between">
-                        <span>Min Confidence</span>
-                        <span id="conf-val" class="text-gradient" style="font-weight:600;">0.45</span>
-                    </label>
-                    <input type="range" name="min_confidence" style="width:100%; margin-top:0.75rem;" min="0" max="1" step="0.05" value="0.45"
-                        oninput="document.getElementById('conf-val').textContent=this.value">
-                </div>
-                <div>
-                    <label class="form-label">Min Structural Tractability</label>
-                    <input type="number" name="min_structural" class="form-control"
-                        min="0" max="1" step="0.1" value="0.4" placeholder="0.4">
-                </div>
-                <div>
-                    <label class="form-label d-flex justify-between">
-                        <span>Max ChEMBL Inhibitors</span>
-                        <span class="badge badge-primary">Novelty</span>
-                    </label>
-                    <input type="number" name="max_inhibitors" class="form-control"
-                        min="0" max="1000" value="20" placeholder="20">
-                </div>
-                <div class="d-flex align-center" style="margin-top: 1.5rem;">
-                    <input type="hidden" name="max_results" value="20">
-                    <button type="submit" class="btn btn-primary w-100" style="padding: 0.75rem; font-size: 1.05rem;">
-                        Execution Core
-                    </button>
-                </div>
+            </details>
+            <div class="d-flex" style="justify-content:flex-end;">
+                <input type="hidden" name="max_results" value="20">
+                <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.1rem; font-size: 1.05rem;">
+                    Execution Core
+                </button>
             </div>
         </form>
     </div>

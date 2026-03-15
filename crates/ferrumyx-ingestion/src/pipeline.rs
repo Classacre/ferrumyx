@@ -16,7 +16,7 @@
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
+use std::collections::{hash_map::DefaultHasher, BTreeMap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -72,8 +72,33 @@ struct ScihubAdaptiveState {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ParsedPdfCacheEntry {
+    #[serde(default)]
     parse_ok: bool,
+    #[serde(default)]
+    quality_ok: bool,
+    #[serde(default)]
+    parser_variant: String,
+    #[serde(default)]
+    section_count: usize,
+    #[serde(default)]
+    char_count: usize,
+    #[serde(default)]
+    cached_at_epoch_secs: u64,
     sections: Vec<DocumentSection>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngestionValidationMode {
+    Off,
+    Audit,
+    Strict,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChunkFingerprintScope {
+    Off,
+    Paper,
+    Global,
 }
 
 async fn get_or_init_ner() -> anyhow::Result<Arc<TrieNer>> {
@@ -94,6 +119,10 @@ struct PaperProcessingResult {
     chunks_inserted: usize,
     chunks_embedded: usize,
     quality_gate_skipped: bool,
+    relation_fact_count: usize,
+    typed_relation_fact_count: usize,
+    generic_relation_fact_count: usize,
+    unique_predicates: HashSet<String>,
     errors: Vec<String>,
 }
 
@@ -243,6 +272,13 @@ pub struct IngestionPerfTelemetry {
     pub pdf_cache_hits: usize,
     pub pdf_cache_misses: usize,
     pub quality_gate_skips: usize,
+    pub relation_fact_count: usize,
+    pub typed_relation_fact_count: usize,
+    pub generic_relation_fact_count: usize,
+    pub unique_predicate_count: usize,
+    pub predicate_generic_share: f64,
+    pub predicate_coverage_flagged: bool,
+    pub predicate_histogram: BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,6 +300,20 @@ pub struct IngestionPerfSnapshot {
     pub pdf_cache_hits: usize,
     pub pdf_cache_misses: usize,
     pub quality_gate_skips: usize,
+    #[serde(default)]
+    pub relation_fact_count: usize,
+    #[serde(default)]
+    pub typed_relation_fact_count: usize,
+    #[serde(default)]
+    pub generic_relation_fact_count: usize,
+    #[serde(default)]
+    pub unique_predicate_count: usize,
+    #[serde(default)]
+    pub predicate_generic_share: f64,
+    #[serde(default)]
+    pub predicate_coverage_flagged: bool,
+    #[serde(default)]
+    pub predicate_histogram: BTreeMap<String, usize>,
 }
 
 // ── Pipeline orchestrator ─────────────────────────────────────────────────────
@@ -371,12 +421,21 @@ pub async fn run_ingestion(
     // ── 1. Collect papers from all enabled sources ────────────────────────────
     let t_search = std::time::Instant::now();
     let mut all_papers = Vec::new();
+    let mut all_papers_seen = HashSet::new();
+    let mut papers_found_raw_total = 0usize;
     let source_count = job.sources.len().max(1);
     let per_source_max_results = ((job.max_results as f64 / source_count as f64) * 1.35)
         .ceil()
         .max(5.0) as usize;
     let source_inflight_limit = resolve_source_max_inflight();
     let source_semaphore = Arc::new(Semaphore::new(source_inflight_limit));
+    let unique_target = {
+        let scaled = (job.max_results as f64 * resolve_search_unique_target_multiplier()).round();
+        let min_with_buffer = job.max_results.saturating_add((job.max_results / 4).max(8));
+        scaled.max(min_with_buffer as f64) as usize
+    };
+    let abort_on_unique_target = resolve_search_abort_on_unique_target();
+    let mut aborted_for_unique_target = false;
 
     let mut source_tasks = tokio::task::JoinSet::new();
     for source in job.sources.clone() {
@@ -420,13 +479,40 @@ pub async fn run_ingestion(
     while let Some(joined) = source_tasks.join_next().await {
         match joined {
             Ok((source, Ok(papers))) => {
-                info!(source = ?source, n = papers.len(), "Papers retrieved");
+                papers_found_raw_total += papers.len();
+                let mut source_local_seen = HashSet::new();
+                let mut unique_added = 0usize;
+                for paper in papers.iter().cloned() {
+                    let key = canonical_paper_identity_key(&paper);
+                    if !source_local_seen.insert(key.clone()) {
+                        continue;
+                    }
+                    if all_papers_seen.insert(key) {
+                        all_papers.push(paper);
+                        unique_added += 1;
+                    }
+                }
+                info!(
+                    source = ?source,
+                    raw = papers.len(),
+                    unique_added,
+                    total_unique = all_papers.len(),
+                    "Papers retrieved"
+                );
                 result.source_telemetry.push(IngestionSourceTelemetry {
                     source: format!("{:?}", source),
                     fetched: papers.len(),
                     error: None,
                 });
-                all_papers.extend(papers);
+                if abort_on_unique_target && !aborted_for_unique_target && all_papers.len() >= unique_target {
+                    aborted_for_unique_target = true;
+                    source_tasks.abort_all();
+                    info!(
+                        unique_found = all_papers.len(),
+                        unique_target,
+                        "Reached unique target during source search; aborting remaining source calls"
+                    );
+                }
             }
             Ok((source, Err(e))) => {
                 let msg = format!("Source {:?} error: {e}", source);
@@ -439,6 +525,9 @@ pub async fn run_ingestion(
                 result.errors.push(msg);
             }
             Err(e) => {
+                if aborted_for_unique_target && e.is_cancelled() {
+                    continue;
+                }
                 let msg = format!("Source task join error: {e}");
                 warn!("{}", &msg);
                 result.errors.push(msg);
@@ -450,16 +539,10 @@ pub async fn run_ingestion(
     // Source-level dedupe before DB upsert to avoid repeatedly processing
     // the same paper returned by multiple providers.
     let t_dedup = std::time::Instant::now();
-    result.papers_found_raw = all_papers.len();
+    result.papers_found_raw = papers_found_raw_total;
     let mut seen = HashSet::new();
     all_papers.retain(|paper| {
-        let key = paper
-            .doi
-            .as_ref()
-            .map(|d| format!("doi:{}", d.trim().to_uppercase()))
-            .or_else(|| paper.pmid.as_ref().map(|p| format!("pmid:{}", p.trim())))
-            .unwrap_or_else(|| format!("title:{}", paper.title.trim().to_lowercase()));
-        seen.insert(key)
+        seen.insert(canonical_paper_identity_key(paper))
     });
 
     result.papers_found = all_papers.len();
@@ -479,33 +562,49 @@ pub async fn run_ingestion(
     let t_upsert = std::time::Instant::now();
     let mut queued_new_papers: Vec<(crate::models::PaperMetadata, Uuid)> = Vec::new();
     let paper_repo = PaperRepository::new(repo.db());
-    let candidate_dois: Vec<String> = all_papers
+    let mut candidate_dois: Vec<String> = all_papers
         .iter()
-        .filter_map(|p| p.doi.as_ref().map(|v| v.trim().to_string()))
-        .filter(|v| !v.is_empty())
+        .filter_map(|p| p.doi.as_deref().and_then(canonical_doi))
         .collect();
-    let candidate_pmids: Vec<String> = all_papers
+    candidate_dois.sort();
+    candidate_dois.dedup();
+    let mut candidate_pmids: Vec<String> = all_papers
         .iter()
-        .filter_map(|p| p.pmid.as_ref().map(|v| v.trim().to_string()))
-        .filter(|v| !v.is_empty())
+        .filter_map(|p| p.pmid.as_deref().and_then(canonical_pmid))
         .collect();
-    let mut existing_by_doi = paper_repo
+    candidate_pmids.sort();
+    candidate_pmids.dedup();
+    let existing_by_doi_raw = paper_repo
         .find_ids_by_dois(&candidate_dois, 200)
         .await
         .unwrap_or_default();
-    let mut existing_by_pmid = paper_repo
+    let existing_by_pmid_raw = paper_repo
         .find_ids_by_pmids(&candidate_pmids, 200)
         .await
         .unwrap_or_default();
+    let mut existing_by_doi: HashMap<String, Uuid> = HashMap::new();
+    for (raw, id) in existing_by_doi_raw {
+        if let Some(norm) = canonical_doi(&raw) {
+            existing_by_doi.insert(norm, id);
+        }
+    }
+    let mut existing_by_pmid: HashMap<String, Uuid> = HashMap::new();
+    for (raw, id) in existing_by_pmid_raw {
+        if let Some(norm) = canonical_pmid(&raw) {
+            existing_by_pmid.insert(norm, id);
+        }
+    }
     for paper in &all_papers {
         let doi_hit = paper
             .doi
             .as_ref()
-            .and_then(|d| existing_by_doi.get(d.trim()).copied());
+            .and_then(|d| canonical_doi(d))
+            .and_then(|d| existing_by_doi.get(&d).copied());
         let pmid_hit = paper
             .pmid
             .as_ref()
-            .and_then(|p| existing_by_pmid.get(p.trim()).copied());
+            .and_then(|p| canonical_pmid(p))
+            .and_then(|p| existing_by_pmid.get(&p).copied());
         if doi_hit.is_some() || pmid_hit.is_some() {
             result.papers_duplicate += 1;
             continue;
@@ -531,10 +630,10 @@ pub async fn run_ingestion(
             continue;
         }
         result.papers_inserted += 1;
-        if let Some(doi) = paper.doi.as_ref().map(|d| d.trim().to_string()) {
+        if let Some(doi) = paper.doi.as_deref().and_then(canonical_doi) {
             existing_by_doi.insert(doi, upsert.paper_id);
         }
-        if let Some(pmid) = paper.pmid.as_ref().map(|p| p.trim().to_string()) {
+        if let Some(pmid) = paper.pmid.as_deref().and_then(canonical_pmid) {
             existing_by_pmid.insert(pmid, upsert.paper_id);
         }
         queued_new_papers.push((paper.clone(), upsert.paper_id));
@@ -617,6 +716,11 @@ pub async fn run_ingestion(
     let mut processing_set = tokio::task::JoinSet::new();
     let mut completed = 0usize;
     let mut adaptive_process_limit = paper_worker_limit.clamp(1, 16);
+    let mut predicate_hist: HashMap<String, usize> = HashMap::new();
+    let query_gene_hint = {
+        let g = job.gene.trim().to_uppercase();
+        if g.is_empty() { None } else { Some(g) }
+    };
     while prefetch_rx.is_closed() == false || !processing_set.is_empty() {
         while processing_set.len() < adaptive_process_limit {
             let maybe_payload = prefetch_rx.recv().await;
@@ -627,11 +731,13 @@ pub async fn run_ingestion(
             let ner_clone = ner.clone();
             let chunker_cfg_clone = chunker_cfg.clone();
             let embed_client_clone = embed_client.clone();
+            let query_gene_hint_clone = query_gene_hint.clone();
             processing_set.spawn(async move {
                 process_single_paper(
                     paper,
                     paper_id,
                     full_text_sections,
+                    query_gene_hint_clone,
                     repo_clone,
                     ner_clone,
                     chunker_cfg_clone,
@@ -650,6 +756,14 @@ pub async fn run_ingestion(
                     result.errors.extend(outcome.errors);
                     if outcome.quality_gate_skipped {
                         result.perf_telemetry.quality_gate_skips += 1;
+                    }
+                    result.perf_telemetry.relation_fact_count += outcome.relation_fact_count;
+                    result.perf_telemetry.typed_relation_fact_count +=
+                        outcome.typed_relation_fact_count;
+                    result.perf_telemetry.generic_relation_fact_count +=
+                        outcome.generic_relation_fact_count;
+                    for predicate in outcome.unique_predicates {
+                        *predicate_hist.entry(predicate).or_insert(0) += 1;
                     }
                     emit(
                         "progress",
@@ -689,6 +803,24 @@ pub async fn run_ingestion(
     let (pdf_hits, pdf_misses) = pdf_cache_counters();
     result.perf_telemetry.pdf_cache_hits = pdf_hits;
     result.perf_telemetry.pdf_cache_misses = pdf_misses;
+    result.perf_telemetry.unique_predicate_count = predicate_hist.len();
+    result.perf_telemetry.predicate_histogram = predicate_hist
+        .iter()
+        .map(|(k, v)| (k.clone(), *v))
+        .collect::<BTreeMap<_, _>>();
+    let total_relation_facts = result.perf_telemetry.relation_fact_count.max(1);
+    result.perf_telemetry.predicate_generic_share =
+        (result.perf_telemetry.generic_relation_fact_count as f64 / total_relation_facts as f64)
+            .clamp(0.0, 1.0);
+    let min_unique = resolve_predicate_coverage_min_unique();
+    let max_generic_share = resolve_predicate_coverage_max_generic_share();
+    result.perf_telemetry.predicate_coverage_flagged =
+        result.perf_telemetry.unique_predicate_count < min_unique
+            || result.perf_telemetry.predicate_generic_share > max_generic_share;
+    if resolve_heavy_lane_async_enabled() && result.perf_telemetry.relation_fact_count == 0 {
+        // Heavy enrichment can complete after run_ingestion returns; avoid false negatives.
+        result.perf_telemetry.predicate_coverage_flagged = false;
+    }
     let cross_source_dedup_dropped = result.papers_found_raw.saturating_sub(result.papers_found);
     info!(
         papers_found_raw = result.papers_found_raw,
@@ -713,6 +845,10 @@ pub async fn run_ingestion(
         papers_inserted = result.papers_inserted,
         papers_dup      = result.papers_duplicate,
         chunks          = result.chunks_inserted,
+        relation_facts  = result.perf_telemetry.relation_fact_count,
+        unique_predicates = result.perf_telemetry.unique_predicate_count,
+        predicate_generic_share = result.perf_telemetry.predicate_generic_share,
+        predicate_coverage_flagged = result.perf_telemetry.predicate_coverage_flagged,
         duration_ms     = result.duration_ms,
         errors          = result.errors.len(),
         perf_search_ms  = result.perf_telemetry.search_ms,
@@ -722,6 +858,17 @@ pub async fn run_ingestion(
         pdf_cache_misses = result.perf_telemetry.pdf_cache_misses,
         "Ingestion pipeline complete"
     );
+
+    if result.perf_telemetry.predicate_coverage_flagged {
+        warn!(
+            unique_predicates = result.perf_telemetry.unique_predicate_count,
+            min_unique_required = resolve_predicate_coverage_min_unique(),
+            generic_share = result.perf_telemetry.predicate_generic_share,
+            max_generic_share = resolve_predicate_coverage_max_generic_share(),
+            relation_facts = result.perf_telemetry.relation_fact_count,
+            "Predicate coverage below target thresholds; consider parse/NER tuning"
+        );
+    }
 
     persist_perf_snapshot(&result);
 
@@ -759,6 +906,117 @@ pub fn build_query(job: &IngestionJob) -> String {
         }
     }
     parts.join(" AND ")
+}
+
+fn canonical_doi(raw: &str) -> Option<String> {
+    let mut doi = raw.trim();
+    if doi.is_empty() {
+        return None;
+    }
+    let lower = doi.to_ascii_lowercase();
+    let prefixes = [
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+        "doi:",
+    ];
+    for prefix in prefixes {
+        if lower.starts_with(prefix) {
+            doi = &doi[prefix.len()..];
+            break;
+        }
+    }
+    let norm = doi.trim().trim_matches('/').to_ascii_lowercase();
+    if norm.is_empty() {
+        None
+    } else {
+        Some(norm)
+    }
+}
+
+fn canonical_pmid(raw: &str) -> Option<String> {
+    let mut pmid = raw.trim();
+    if pmid.is_empty() {
+        return None;
+    }
+    let lower = pmid.to_ascii_lowercase();
+    for prefix in ["pmid:", "pmcid:"] {
+        if lower.starts_with(prefix) {
+            pmid = &pmid[prefix.len()..];
+            break;
+        }
+    }
+    let norm: String = pmid
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if norm.is_empty() {
+        None
+    } else {
+        Some(norm)
+    }
+}
+
+fn canonical_title_key(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut normalized = String::with_capacity(trimmed.len());
+    let mut prev_space = false;
+    for ch in trimmed.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            ' '
+        };
+        if mapped == ' ' {
+            if prev_space {
+                continue;
+            }
+            prev_space = true;
+            normalized.push(' ');
+        } else {
+            prev_space = false;
+            normalized.push(mapped);
+        }
+    }
+    let normalized = normalized.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
+    }
+}
+
+fn canonical_paper_identity_key(paper: &crate::models::PaperMetadata) -> String {
+    if let Some(doi) = paper.doi.as_deref().and_then(canonical_doi) {
+        return format!("doi:{doi}");
+    }
+    if let Some(pmid) = paper.pmid.as_deref().and_then(canonical_pmid) {
+        return format!("pmid:{pmid}");
+    }
+    if let Some(pmcid) = paper.pmcid.as_deref().and_then(canonical_pmid) {
+        return format!("pmcid:{pmcid}");
+    }
+    let title = canonical_title_key(&paper.title).unwrap_or_else(|| "untitled".to_string());
+    format!("title:{title}")
+}
+
+fn resolve_search_unique_target_multiplier() -> f64 {
+    std::env::var("FERRUMYX_INGESTION_UNIQUE_TARGET_MULTIPLIER")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .unwrap_or(1.30)
+        .clamp(1.0, 3.0)
+}
+
+fn resolve_search_abort_on_unique_target() -> bool {
+    std::env::var("FERRUMYX_INGESTION_ABORT_ON_UNIQUE_TARGET")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
 }
 
 fn resolve_paper_process_workers() -> usize {
@@ -859,6 +1117,78 @@ fn resolve_chunk_fingerprint_cache_ttl_secs() -> u64 {
         .and_then(|v| v.trim().parse::<u64>().ok())
         .unwrap_or(2 * 24 * 60 * 60)
         .clamp(300, 14 * 24 * 60 * 60)
+}
+
+fn resolve_chunk_fingerprint_scope() -> ChunkFingerprintScope {
+    match std::env::var("FERRUMYX_CHUNK_FINGERPRINT_SCOPE")
+        .unwrap_or_else(|_| "paper".to_string())
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "off" | "disabled" => ChunkFingerprintScope::Off,
+        "global" => ChunkFingerprintScope::Global,
+        _ => ChunkFingerprintScope::Paper,
+    }
+}
+
+fn resolve_ingestion_validation_mode() -> IngestionValidationMode {
+    match std::env::var("FERRUMYX_INGESTION_VALIDATION_MODE")
+        .unwrap_or_else(|_| "audit".to_string())
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "off" | "disabled" => IngestionValidationMode::Off,
+        "strict" => IngestionValidationMode::Strict,
+        _ => IngestionValidationMode::Audit,
+    }
+}
+
+fn resolve_pdf_parse_min_sections() -> usize {
+    std::env::var("FERRUMYX_PDF_PARSE_MIN_SECTIONS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(2)
+        .clamp(1, 12)
+}
+
+fn resolve_pdf_parse_min_chars() -> usize {
+    std::env::var("FERRUMYX_PDF_PARSE_MIN_CHARS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(1200)
+        .clamp(200, 20_000)
+}
+
+fn resolve_pdf_parse_negative_revalidate_secs() -> u64 {
+    std::env::var("FERRUMYX_PDF_PARSE_NEG_REVALIDATE_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(1800)
+        .clamp(60, 86_400)
+}
+
+fn resolve_pdf_parse_fallback_enabled() -> bool {
+    std::env::var("FERRUMYX_PDF_PARSE_FALLBACK_ENABLED")
+        .ok()
+        .is_none_or(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+}
+
+fn resolve_predicate_coverage_min_unique() -> usize {
+    std::env::var("FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(6)
+        .clamp(2, 64)
+}
+
+fn resolve_predicate_coverage_max_generic_share() -> f64 {
+    std::env::var("FERRUMYX_INGESTION_PREDICATE_MAX_GENERIC_SHARE")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .unwrap_or(0.55)
+        .clamp(0.05, 0.95)
 }
 
 fn resolve_heavy_lane_async_enabled() -> bool {
@@ -1201,7 +1531,15 @@ async fn search_source_with_cache(
             max_results,
             source_cache_ttl(source_cache_ttl_secs),
         ) {
-            return Ok(cached);
+            let mut seen = HashSet::new();
+            let mut out = Vec::with_capacity(cached.len());
+            for paper in cached {
+                let key = canonical_paper_identity_key(&paper);
+                if seen.insert(key) {
+                    out.push(paper);
+                }
+            }
+            return Ok(out);
         }
     }
 
@@ -1237,6 +1575,9 @@ async fn search_source_with_cache(
         return Err(err);
     }
 
+    let mut seen = HashSet::new();
+    papers.retain(|paper| seen.insert(canonical_paper_identity_key(paper)));
+
     if source_cache_enabled && !papers.is_empty() {
         save_source_cache(&source, source_query, max_results, &papers);
     }
@@ -1268,6 +1609,13 @@ fn snapshot_from_result(result: &IngestionResult) -> IngestionPerfSnapshot {
         pdf_cache_hits: result.perf_telemetry.pdf_cache_hits,
         pdf_cache_misses: result.perf_telemetry.pdf_cache_misses,
         quality_gate_skips: result.perf_telemetry.quality_gate_skips,
+        relation_fact_count: result.perf_telemetry.relation_fact_count,
+        typed_relation_fact_count: result.perf_telemetry.typed_relation_fact_count,
+        generic_relation_fact_count: result.perf_telemetry.generic_relation_fact_count,
+        unique_predicate_count: result.perf_telemetry.unique_predicate_count,
+        predicate_generic_share: result.perf_telemetry.predicate_generic_share,
+        predicate_coverage_flagged: result.perf_telemetry.predicate_coverage_flagged,
+        predicate_histogram: result.perf_telemetry.predicate_histogram.clone(),
     }
 }
 
@@ -1409,6 +1757,17 @@ fn infer_object_type(predicate: &str, object: &str) -> DbEntityType {
     if p == "has_mutation" || p.contains("mutation") {
         return DbEntityType::Mutation;
     }
+    if p.contains("pathway") || p == "in_pathway" || p == "activates_pathway" {
+        return DbEntityType::Pathway;
+    }
+    if p.contains("targeted_by")
+        || p.contains("sensitized_by")
+        || p.contains("resistance_to")
+        || p.contains("inhibitor")
+        || p.contains("activated_by_compound")
+    {
+        return DbEntityType::Chemical;
+    }
     let o = object.trim();
     let oncotree_like = !o.is_empty()
         && o.len() <= 8
@@ -1427,6 +1786,21 @@ fn infer_object_type(predicate: &str, object: &str) -> DbEntityType {
     {
         return DbEntityType::CancerType;
     }
+    if lc.contains("pathway")
+        || lc.contains("signaling")
+        || lc.contains("signalling")
+        || lc.contains("axis")
+    {
+        return DbEntityType::Pathway;
+    }
+    if lc.ends_with("mab")
+        || lc.ends_with("nib")
+        || lc.ends_with("parib")
+        || lc.ends_with("platin")
+        || lc.ends_with("taxel")
+    {
+        return DbEntityType::Chemical;
+    }
     DbEntityType::Disease
 }
 
@@ -1442,10 +1816,39 @@ fn canonical_key(entity_type: DbEntityType, name: &str) -> String {
     format!("{}:{}", entity_type, normalized.trim_matches('_'))
 }
 
+fn infer_gene_candidates_from_text(
+    text: &str,
+    ner: &TrieNer,
+    max_candidates: usize,
+) -> Vec<(String, f32)> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for raw in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_')) {
+        if out.len() >= max_candidates {
+            break;
+        }
+        let token = raw.trim();
+        if token.len() < 3 || token.len() > 14 {
+            continue;
+        }
+        if !token.chars().any(|c| c.is_ascii_alphabetic()) {
+            continue;
+        }
+        if let Some(symbol) = ner.hgnc().normalise_symbol(token) {
+            let canon = symbol.trim().to_uppercase();
+            if !canon.is_empty() && seen.insert(canon.clone()) {
+                out.push((canon, 0.72));
+            }
+        }
+    }
+    out
+}
+
 async fn process_single_paper(
     paper: crate::models::PaperMetadata,
     paper_id: Uuid,
     full_text_sections: Vec<DocumentSection>,
+    query_gene_hint: Option<String>,
     repo: Arc<IngestionRepository>,
     ner: Arc<TrieNer>,
     chunker_cfg: ChunkerConfig,
@@ -1535,7 +1938,13 @@ async fn process_single_paper(
         tokio::spawn(async move {
             let _permit = limiter.acquire_owned().await.ok();
             let _ = run_heavy_enrichment_for_chunks(
-                paper_bg, paper_id, chunks_bg, repo_bg, ner_bg, embed_bg,
+                paper_bg,
+                paper_id,
+                chunks_bg,
+                query_gene_hint.clone(),
+                repo_bg,
+                ner_bg,
+                embed_bg,
             )
             .await;
         });
@@ -1543,9 +1952,21 @@ async fn process_single_paper(
         return out;
     }
 
-    let heavy =
-        run_heavy_enrichment_for_chunks(paper, paper_id, chunks, repo, ner, embed_client).await;
+    let heavy = run_heavy_enrichment_for_chunks(
+        paper,
+        paper_id,
+        chunks,
+        query_gene_hint,
+        repo,
+        ner,
+        embed_client,
+    )
+    .await;
     out.chunks_embedded += heavy.chunks_embedded;
+    out.relation_fact_count += heavy.relation_fact_count;
+    out.typed_relation_fact_count += heavy.typed_relation_fact_count;
+    out.generic_relation_fact_count += heavy.generic_relation_fact_count;
+    out.unique_predicates.extend(heavy.unique_predicates);
     out.errors.extend(heavy.errors);
 
     out
@@ -1570,11 +1991,17 @@ async fn run_heavy_enrichment_for_chunks(
     paper: crate::models::PaperMetadata,
     paper_id: Uuid,
     chunks: Vec<crate::models::DocumentChunk>,
+    query_gene_hint: Option<String>,
     repo: Arc<IngestionRepository>,
     ner: Arc<TrieNer>,
     embed_client: Option<Arc<EmbeddingClient>>,
 ) -> PaperProcessingResult {
     let mut out = PaperProcessingResult::default();
+    debug!(
+        paper_id = %paper_id,
+        query_gene_hint = ?query_gene_hint,
+        "Running heavy enrichment for chunks"
+    );
     let entity_repo = EntityRepository::new(repo.db());
     let mut entity_id_cache: HashMap<String, Uuid> = HashMap::new();
     let cancer_normaliser = ner.cancers();
@@ -1594,9 +2021,20 @@ async fn run_heavy_enrichment_for_chunks(
         } else {
             &chunk.content
         };
-        let fingerprint = hash_text(fp_input);
-        if chunk_fingerprint_seen_or_mark(&fingerprint) {
-            continue;
+        if resolve_ingestion_validation_mode() != IngestionValidationMode::Strict {
+            let base_fingerprint = hash_text(fp_input);
+            let scoped_fingerprint = match resolve_chunk_fingerprint_scope() {
+                ChunkFingerprintScope::Off => None,
+                ChunkFingerprintScope::Global => Some(base_fingerprint),
+                ChunkFingerprintScope::Paper => {
+                    Some(hash_text(&format!("{paper_id}:{base_fingerprint}")))
+                }
+            };
+            if let Some(fp) = scoped_fingerprint {
+                if chunk_fingerprint_seen_or_mark(&fp) {
+                    continue;
+                }
+            }
         }
 
         let entities = ner.extract(&chunk.content);
@@ -1643,6 +2081,35 @@ async fn run_heavy_enrichment_for_chunks(
         }
 
         let max_relation_genes = resolve_max_relation_genes_per_chunk();
+        if genes_for_relations.is_empty() {
+            for (gene, confidence) in infer_gene_candidates_from_text(
+                &chunk.content,
+                ner.as_ref(),
+                max_relation_genes.saturating_mul(3),
+            ) {
+                genes_for_relations.entry(gene).or_insert(confidence);
+            }
+        }
+        if genes_for_relations.is_empty() {
+            for (gene, confidence) in infer_gene_candidates_from_text(
+                &paper.title,
+                ner.as_ref(),
+                max_relation_genes.saturating_mul(2),
+            ) {
+                genes_for_relations.entry(gene).or_insert(confidence);
+            }
+        }
+        if genes_for_relations.is_empty() {
+            if let Some(ref hinted) = query_gene_hint {
+                let canonical = ner
+                    .hgnc()
+                    .normalise_symbol(hinted)
+                    .unwrap_or_else(|| hinted.trim().to_uppercase());
+                if !canonical.trim().is_empty() {
+                    genes_for_relations.insert(canonical, 0.70);
+                }
+            }
+        }
         let mut genes_for_relations: Vec<(String, f32)> = genes_for_relations.into_iter().collect();
         genes_for_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
         genes_for_relations.truncate(max_relation_genes);
@@ -1674,6 +2141,49 @@ async fn run_heavy_enrichment_for_chunks(
             });
         }
     }
+
+    if relation_seeds.is_empty() {
+        if let Some(ref hinted) = query_gene_hint {
+            let canonical_hint = ner
+                .hgnc()
+                .normalise_symbol(hinted)
+                .unwrap_or_else(|| hinted.trim().to_uppercase());
+            if !canonical_hint.trim().is_empty() {
+                let mut stitched = String::new();
+                for chunk in chunks.iter().take(6) {
+                    if stitched.len() > 24_000 {
+                        break;
+                    }
+                    if !stitched.is_empty() {
+                        stitched.push('\n');
+                    }
+                    stitched.push_str(&chunk.content);
+                }
+                for mut fact in build_facts_batch(&[canonical_hint.clone()], &stitched) {
+                    let object_type = infer_object_type(&fact.fact_type, &fact.object);
+                    unique_candidates
+                        .entry(canonical_key(object_type, &fact.object))
+                        .or_insert((object_type, fact.object.clone()));
+                    if fact.fact_type != "has_mutation" {
+                        if let Some(code) = cancer_normaliser.normalise(&fact.object) {
+                            fact.object = code;
+                        }
+                    }
+                    relation_seeds.push(RelationFactSeed {
+                        gene_symbol: canonical_hint.clone(),
+                        predicate: fact.fact_type.clone(),
+                        object_name: fact.object,
+                        confidence: 0.62,
+                    });
+                }
+            }
+        }
+    }
+    debug!(
+        paper_id = %paper_id,
+        relation_seed_count = relation_seeds.len(),
+        "Heavy enrichment relation seeds prepared"
+    );
 
     if !unique_candidates.is_empty() {
         let candidates: Vec<(DbEntityType, String)> = unique_candidates.into_values().collect();
@@ -1708,7 +2218,21 @@ async fn run_heavy_enrichment_for_chunks(
                 mention.object_name,
             );
             fact.confidence = mention.confidence;
+            fact.evidence_type = "mention".to_string();
             paper_facts.push(fact);
+        }
+    }
+
+    if !relation_seeds.is_empty() {
+        out.relation_fact_count += relation_seeds.len();
+        for relation in &relation_seeds {
+            let predicate_lc = relation.predicate.trim().to_ascii_lowercase();
+            if predicate_lc == "associated_with" || predicate_lc == "mentions" {
+                out.generic_relation_fact_count += 1;
+            } else {
+                out.typed_relation_fact_count += 1;
+            }
+            out.unique_predicates.insert(predicate_lc);
         }
     }
 
@@ -1731,6 +2255,13 @@ async fn run_heavy_enrichment_for_chunks(
             relation.object_name.clone(),
         );
         db_fact.confidence = relation.confidence;
+        db_fact.evidence_type = if relation.predicate.eq_ignore_ascii_case("associated_with")
+            || relation.predicate.eq_ignore_ascii_case("mentions")
+        {
+            "generic_relation".to_string()
+        } else {
+            "typed_relation".to_string()
+        };
         paper_facts.push(db_fact);
     }
 
@@ -2196,6 +2727,36 @@ async fn fetch_and_parse_pdf(pdf_url: &str) -> anyhow::Result<Vec<DocumentSectio
     parse_pdf_bytes(&pdf_bytes).await
 }
 
+fn section_char_count(sections: &[DocumentSection]) -> usize {
+    sections
+        .iter()
+        .map(|s| s.text.trim().chars().count())
+        .sum::<usize>()
+}
+
+fn parse_quality_ok(sections: &[DocumentSection]) -> bool {
+    let section_count = sections.iter().filter(|s| !s.text.trim().is_empty()).count();
+    let char_count = section_char_count(sections);
+    section_count >= resolve_pdf_parse_min_sections() && char_count >= resolve_pdf_parse_min_chars()
+}
+
+fn should_use_cached_pdf_parse(entry: &ParsedPdfCacheEntry) -> bool {
+    let validation_mode = resolve_ingestion_validation_mode();
+    let age_secs = now_epoch_secs().saturating_sub(entry.cached_at_epoch_secs);
+
+    if !entry.parse_ok {
+        if validation_mode == IngestionValidationMode::Strict {
+            return false;
+        }
+        return age_secs <= resolve_pdf_parse_negative_revalidate_secs();
+    }
+
+    if validation_mode == IngestionValidationMode::Strict && !entry.quality_ok {
+        return false;
+    }
+    true
+}
+
 async fn parse_pdf_bytes(pdf_bytes: &[u8]) -> anyhow::Result<Vec<DocumentSection>> {
     if pdf_bytes.len() < 4 || &pdf_bytes[0..4] != b"%PDF" {
         anyhow::bail!("payload is not a PDF");
@@ -2203,10 +2764,12 @@ async fn parse_pdf_bytes(pdf_bytes: &[u8]) -> anyhow::Result<Vec<DocumentSection
 
     let cache_key = hash_bytes(pdf_bytes);
     if let Some(cached) = load_pdf_parse_cache(&cache_key) {
-        if cached.parse_ok {
-            return Ok(cached.sections);
+        if should_use_cached_pdf_parse(&cached) {
+            if cached.parse_ok {
+                return Ok(cached.sections);
+            }
+            return Ok(Vec::new());
         }
-        return Ok(Vec::new());
     }
 
     let mut temp_file = NamedTempFile::new()?;
@@ -2221,11 +2784,43 @@ async fn parse_pdf_bytes(pdf_bytes: &[u8]) -> anyhow::Result<Vec<DocumentSection
         page_count = parsed.page_count,
         "PDF parsed with Ferrules"
     );
-    let sections = parsed.sections;
+    let mut sections = parsed.sections;
+    if !resolve_pdf_parse_fallback_enabled() {
+        sections.retain(|s| !s.text.trim().is_empty());
+    }
+    let quality_ok = parse_quality_ok(&sections);
+    let strict_validation = resolve_ingestion_validation_mode() == IngestionValidationMode::Strict;
+    if strict_validation && !quality_ok {
+        info!(
+            min_sections = resolve_pdf_parse_min_sections(),
+            min_chars = resolve_pdf_parse_min_chars(),
+            found_sections = sections.len(),
+            found_chars = section_char_count(&sections),
+            "Rejecting low-quality PDF parse under strict validation mode"
+        );
+        save_pdf_parse_cache(
+            &cache_key,
+            &ParsedPdfCacheEntry {
+                parse_ok: false,
+                quality_ok: false,
+                parser_variant: "ferrules".to_string(),
+                section_count: sections.len(),
+                char_count: section_char_count(&sections),
+                cached_at_epoch_secs: now_epoch_secs(),
+                sections: Vec::new(),
+            },
+        );
+        return Ok(Vec::new());
+    }
     save_pdf_parse_cache(
         &cache_key,
         &ParsedPdfCacheEntry {
             parse_ok: !sections.is_empty(),
+            quality_ok,
+            parser_variant: "ferrules".to_string(),
+            section_count: sections.len(),
+            char_count: section_char_count(&sections),
+            cached_at_epoch_secs: now_epoch_secs(),
             sections: sections.clone(),
         },
     );
@@ -2265,7 +2860,22 @@ fn load_pdf_parse_cache(key: &str) -> Option<ParsedPdfCacheEntry> {
     }
     let path = pdf_parse_cache_dir().join(format!("{key}.json"));
     let payload = std::fs::read_to_string(path).ok()?;
-    let parsed: ParsedPdfCacheEntry = serde_json::from_str(&payload).ok()?;
+    let mut parsed: ParsedPdfCacheEntry = serde_json::from_str(&payload).ok()?;
+    if parsed.cached_at_epoch_secs == 0 {
+        parsed.cached_at_epoch_secs = now_epoch_secs();
+    }
+    if parsed.section_count == 0 {
+        parsed.section_count = parsed.sections.len();
+    }
+    if parsed.char_count == 0 {
+        parsed.char_count = section_char_count(&parsed.sections);
+    }
+    if parsed.parse_ok && !parsed.quality_ok {
+        parsed.quality_ok = parse_quality_ok(&parsed.sections);
+    }
+    if parsed.parser_variant.trim().is_empty() {
+        parsed.parser_variant = "ferrules".to_string();
+    }
     if parsed.parse_ok {
         increment_pdf_cache_hits();
     } else {

@@ -1,6 +1,7 @@
 //! Ferrumyx — Autonomous Oncology Drug Discovery Engine
 //! Entry point for the agent binary.
 
+use std::collections::{HashMap, HashSet};
 use std::io::IsTerminal;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -378,6 +379,278 @@ fn sync_ironclaw_env_from_config(config: &config::Config) {
     }
 }
 
+#[derive(Debug, Clone)]
+struct BackgroundProviderRefreshConfig {
+    enabled: bool,
+    interval_secs: u64,
+    max_genes: usize,
+    batch_size: usize,
+    retries: u8,
+    fact_scan_limit: usize,
+    min_gene_mentions: usize,
+    alert_error_rate: f64,
+    alert_streak_runs: u64,
+    cancer_code: Option<String>,
+    seed_genes: Vec<String>,
+}
+
+impl BackgroundProviderRefreshConfig {
+    fn from_env() -> Self {
+        let enabled = env_bool("FERRUMYX_PHASE4_BG_REFRESH_ENABLED", true);
+        let interval_secs =
+            env_u64("FERRUMYX_PHASE4_BG_REFRESH_INTERVAL_SECS", 900).clamp(60, 86_400);
+        let max_genes = env_u64("FERRUMYX_PHASE4_BG_REFRESH_MAX_GENES", 24).clamp(1, 200) as usize;
+        let batch_size = env_u64("FERRUMYX_PHASE4_BG_REFRESH_BATCH_SIZE", 6).clamp(1, 32) as usize;
+        let retries = env_u64("FERRUMYX_PHASE4_BG_REFRESH_RETRIES", 1).clamp(0, 3) as u8;
+        let fact_scan_limit =
+            env_u64("FERRUMYX_PHASE4_BG_REFRESH_FACT_SCAN_LIMIT", 4000).clamp(250, 20_000) as usize;
+        let min_gene_mentions =
+            env_u64("FERRUMYX_PHASE4_BG_REFRESH_MIN_GENE_MENTIONS", 2).clamp(1, 50) as usize;
+        let alert_error_rate =
+            env_f64("FERRUMYX_PHASE4_BG_REFRESH_ALERT_ERROR_RATE", 0.55).clamp(0.05, 1.0);
+        let alert_streak_runs =
+            env_u64("FERRUMYX_PHASE4_BG_REFRESH_ALERT_STREAK_RUNS", 3).clamp(1, 100);
+        let cancer_code = std::env::var("FERRUMYX_PHASE4_BG_REFRESH_CANCER_CODE")
+            .ok()
+            .map(|v| v.trim().to_uppercase())
+            .filter(|v| !v.is_empty());
+        let seed_genes = parse_seed_genes(
+            &std::env::var("FERRUMYX_PHASE4_BG_REFRESH_GENES").unwrap_or_default(),
+        );
+
+        Self {
+            enabled,
+            interval_secs,
+            max_genes,
+            batch_size,
+            retries,
+            fact_scan_limit,
+            min_gene_mentions,
+            alert_error_rate,
+            alert_streak_runs,
+            cancer_code,
+            seed_genes,
+        }
+    }
+}
+
+fn env_bool(name: &str, default_value: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(default_value)
+}
+
+fn env_u64(name: &str, default_value: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(default_value)
+}
+
+fn env_f64(name: &str, default_value: f64) -> f64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(default_value)
+}
+
+fn parse_seed_genes(raw: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    raw.split(',')
+        .map(|v| v.trim().to_uppercase())
+        .filter(|v| !v.is_empty())
+        .filter(|v| looks_like_gene_symbol(v))
+        .filter(|v| seen.insert(v.clone()))
+        .collect()
+}
+
+fn looks_like_gene_symbol(name: &str) -> bool {
+    let n = name.trim();
+    if n.len() < 2 || n.len() > 12 {
+        return false;
+    }
+    n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && n.chars().any(|c| c.is_ascii_uppercase())
+}
+
+async fn discover_background_refresh_genes(
+    db: Arc<ferrumyx_db::Database>,
+    cfg: &BackgroundProviderRefreshConfig,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for gene in &cfg.seed_genes {
+        if seen.insert(gene.clone()) {
+            out.push(gene.clone());
+        }
+    }
+    if out.len() >= cfg.max_genes {
+        out.truncate(cfg.max_genes);
+        return out;
+    }
+
+    let repo = ferrumyx_db::kg_facts::KgFactRepository::new(db);
+    let facts = match repo.list(0, cfg.fact_scan_limit).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(
+                "background provider refresh: failed to read kg_facts for seed discovery: {}",
+                e
+            );
+            out.truncate(cfg.max_genes);
+            return out;
+        }
+    };
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for fact in facts {
+        let gene = fact.subject_name.trim().to_uppercase();
+        if looks_like_gene_symbol(&gene) {
+            *counts.entry(gene).or_insert(0) += 1;
+        }
+    }
+
+    let mut ranked: Vec<(String, usize)> = counts
+        .into_iter()
+        .filter(|(_, c)| *c >= cfg.min_gene_mentions)
+        .collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+    for (gene, _) in ranked {
+        if out.len() >= cfg.max_genes {
+            break;
+        }
+        if seen.insert(gene.clone()) {
+            out.push(gene);
+        }
+    }
+    out
+}
+
+fn spawn_background_provider_refresh_scheduler(db: Arc<ferrumyx_db::Database>) {
+    let bootstrap_cfg = BackgroundProviderRefreshConfig::from_env();
+    if !bootstrap_cfg.enabled {
+        tracing::info!("Phase 4 background provider refresh scheduler disabled.");
+        return;
+    }
+    tracing::info!(
+        "Phase 4 background provider refresh scheduler enabled (interval={}s, max_genes={})",
+        bootstrap_cfg.interval_secs,
+        bootstrap_cfg.max_genes
+    );
+
+    tokio::spawn(async move {
+        let mut current_interval_secs = bootstrap_cfg.interval_secs.max(60);
+        let mut interval = tokio::time::interval(Duration::from_secs(current_interval_secs));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut alert_streak = 0u64;
+
+        loop {
+            interval.tick().await;
+            let cfg = BackgroundProviderRefreshConfig::from_env();
+            if !cfg.enabled {
+                continue;
+            }
+
+            let next_interval_secs = cfg.interval_secs.max(60);
+            if next_interval_secs != current_interval_secs {
+                current_interval_secs = next_interval_secs;
+                interval = tokio::time::interval(Duration::from_secs(current_interval_secs));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            }
+
+            let genes = discover_background_refresh_genes(db.clone(), &cfg).await;
+            if genes.is_empty() {
+                tracing::debug!(
+                    "background provider refresh skipped: no candidate genes discovered"
+                );
+                continue;
+            }
+
+            let request = ferrumyx_ranker::ProviderRefreshRequest {
+                genes,
+                cancer_code: cfg.cancer_code.clone(),
+                max_genes: cfg.max_genes,
+                batch_size: cfg.batch_size,
+                retries: cfg.retries,
+                offline_strict: false,
+            };
+            let engine = ferrumyx_ranker::TargetQueryEngine::new(db.clone());
+            match engine.refresh_provider_signals(request).await {
+                Ok(report) => {
+                    let attempted = report.cbio_attempted
+                        + report.cosmic_attempted
+                        + report.gtex_attempted
+                        + report.tcga_attempted
+                        + report.chembl_attempted
+                        + report.reactome_attempted;
+                    let failed = report.cbio_failed
+                        + report.cosmic_failed
+                        + report.gtex_failed
+                        + report.tcga_failed
+                        + report.chembl_failed
+                        + report.reactome_failed;
+                    let error_rate = if attempted > 0 {
+                        failed as f64 / attempted as f64
+                    } else {
+                        0.0
+                    };
+
+                    if attempted > 0 && error_rate >= cfg.alert_error_rate {
+                        alert_streak += 1;
+                        tracing::warn!(
+                            target: "ferrumyx_provider_refresh_bg",
+                            attempted = attempted,
+                            failed = failed,
+                            error_rate = error_rate,
+                            streak = alert_streak,
+                            "background provider refresh elevated provider error rate"
+                        );
+                        if alert_streak >= cfg.alert_streak_runs {
+                            tracing::error!(
+                                target: "ferrumyx_provider_refresh_bg",
+                                attempted = attempted,
+                                failed = failed,
+                                error_rate = error_rate,
+                                streak = alert_streak,
+                                "background provider refresh alert threshold exceeded"
+                            );
+                        }
+                    } else {
+                        alert_streak = 0;
+                        tracing::info!(
+                            target: "ferrumyx_provider_refresh_bg",
+                            genes_processed = report.genes_processed,
+                            attempted = attempted,
+                            failed = failed,
+                            duration_ms = report.duration_ms,
+                            "background provider refresh completed"
+                        );
+                    }
+                }
+                Err(e) => {
+                    alert_streak += 1;
+                    tracing::warn!(
+                        target: "ferrumyx_provider_refresh_bg",
+                        streak = alert_streak,
+                        error = %e,
+                        "background provider refresh failed"
+                    );
+                    if alert_streak >= cfg.alert_streak_runs {
+                        tracing::error!(
+                            target: "ferrumyx_provider_refresh_bg",
+                            streak = alert_streak,
+                            error = %e,
+                            "background provider refresh repeated failure alert"
+                        );
+                    }
+                }
+            }
+        }
+    });
+}
+
 use ironclaw::agent::SessionManager;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -433,6 +706,7 @@ async fn async_main() -> anyhow::Result<()> {
     // Start Phase 3: Knowledge Graph Event Queue
     let _kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
     info!("✅ KG event-driven scoring queue initialized.");
+    spawn_background_provider_refresh_scheduler(db.clone());
 
     // Build LLM client
     let ironclaw_llm = build_completion_model(&config).await?;

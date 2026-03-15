@@ -334,6 +334,13 @@
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
 
+        function stopEventStream() {
+            if (chatEventSource) {
+                chatEventSource.close();
+                chatEventSource = null;
+            }
+        }
+
         function toolLink(name) {
             const n = String(name || '').toLowerCase();
             if (n.includes('ingest')) return '/ingestion';
@@ -506,6 +513,7 @@
                 }
                 sendBtn.disabled = false;
                 loadThreads();
+                setTimeout(stopEventStream, 400);
             });
 
             chatEventSource.addEventListener('thinking', (evt) => {
@@ -550,14 +558,15 @@
                 const msg = payload?.message || 'Agent stream error.';
                 appendActivity(msg);
                 sendBtn.disabled = false;
+                if (activeReply) activeReply.done = true;
+                setTimeout(stopEventStream, 350);
             });
 
             chatEventSource.onerror = () => {
-                if (chatEventSource) {
-                    chatEventSource.close();
-                    chatEventSource = null;
+                stopEventStream();
+                if (activeReply && !activeReply.done) {
+                    setTimeout(startEventStream, 1800);
                 }
-                setTimeout(startEventStream, 1200);
             };
         }
 
@@ -596,15 +605,18 @@
                     setMessageContent(agentMessage.body, data.response, { markdown: true });
                     activeReply.done = true;
                     sendBtn.disabled = false;
+                    setTimeout(stopEventStream, 350);
                 } else if (data.status !== 'accepted' && !data.thread_id) {
                     setMessageContent(agentMessage.body, data.response || 'No response from agent.');
                     activeReply.done = true;
                     sendBtn.disabled = false;
+                    setTimeout(stopEventStream, 350);
                 }
             } catch (_) {
                 setMessageContent(agentMessage.body, 'Network error.');
                 activeReply.done = true;
                 sendBtn.disabled = false;
+                setTimeout(stopEventStream, 350);
             }
             chatInput.focus();
         }
@@ -622,7 +634,6 @@
             }
         });
 
-        startEventStream();
         loadThreads();
     </script>
 </body>

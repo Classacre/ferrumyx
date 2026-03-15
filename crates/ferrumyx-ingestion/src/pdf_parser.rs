@@ -11,7 +11,6 @@ use crate::models::SectionType;
 
 /// Parse a PDF file and extract structured sections.
 pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
-    // Ferrules API: use lopdf-based extraction
     use lopdf::Document as PdfDoc;
 
     let pdf = PdfDoc::load(pdf_path)?;
@@ -20,40 +19,39 @@ pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
     let mut full_text = String::new();
     let mut pages: Vec<(u32, String)> = Vec::new();
 
-    for (page_num, page) in pdf.get_pages() {
-        let mut page_text = String::new();
-        if let Ok(content) = pdf.get_page_content(page) {
-            // Simple text extraction via content stream decoding
-            // lopdf returns raw content stream bytes; we decode text operators
-            let content_str = String::from_utf8_lossy(&content);
-            // Basic extraction: look for text between BT/ET operators
-            let mut in_text = false;
-            for line in content_str.lines() {
-                if line.contains("BT") {
-                    in_text = true;
-                } else if line.contains("ET") {
-                    in_text = false;
-                } else if in_text {
-                    // Extract text from Tj and TJ operators
-                    if line.contains("Tj") || line.contains("TJ") {
-                        // Very basic - just capture printable text
-                        let text: String = line
-                            .chars()
-                            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-                            .collect();
-                        page_text.push_str(&text);
-                        page_text.push(' ');
-                    }
-                }
+    for (page_num, page_id) in pdf.get_pages() {
+        let mut page_text = pdf
+            .extract_text(&[page_num])
+            .ok()
+            .map(|txt| normalize_whitespace(&txt))
+            .unwrap_or_default();
+
+        if page_text.trim().is_empty() {
+            if let Ok(content) = pdf.get_page_content(page_id) {
+                page_text = extract_from_content_stream(&content);
             }
         }
+
         pages.push((page_num, page_text.clone()));
-        full_text.push_str(&page_text);
-        full_text.push('\n');
+        if !page_text.trim().is_empty() {
+            full_text.push_str(&page_text);
+            full_text.push('\n');
+        }
     }
 
     // Section detection via heuristics
-    let sections = detect_sections(&full_text, &pages);
+    let mut sections = detect_sections(&full_text, &pages);
+    if sections.is_empty() {
+        sections = fallback_sections_from_pages(&pages);
+    }
+    if sections.is_empty() && !full_text.trim().is_empty() {
+        sections.push(DocumentSection {
+            section_type: SectionType::Introduction,
+            heading: Some("Body".to_string()),
+            text: full_text.clone(),
+            page_number: Some(1),
+        });
+    }
 
     Ok(ParsedPdf {
         title: extract_title(&full_text),
@@ -61,6 +59,54 @@ pub fn parse_pdf_sections(pdf_path: &Path) -> Result<ParsedPdf> {
         full_text,
         page_count: pages.len(),
     })
+}
+
+fn extract_from_content_stream(content: &[u8]) -> String {
+    let mut out = String::new();
+    let mut in_literal = false;
+    let mut escaped = false;
+
+    for ch in String::from_utf8_lossy(content).chars() {
+        match ch {
+            '\\' if in_literal && !escaped => escaped = true,
+            '(' if !in_literal && !escaped => in_literal = true,
+            ')' if in_literal && !escaped => {
+                in_literal = false;
+                out.push(' ');
+            }
+            _ if in_literal => {
+                if ch.is_control() {
+                    out.push(' ');
+                } else {
+                    out.push(ch);
+                }
+                escaped = false;
+            }
+            _ => escaped = false,
+        }
+    }
+    normalize_whitespace(&out)
+}
+
+fn fallback_sections_from_pages(pages: &[(u32, String)]) -> Vec<DocumentSection> {
+    let mut sections = Vec::new();
+    for (page_num, page_text) in pages {
+        let clean = normalize_whitespace(page_text);
+        if clean.len() < 80 {
+            continue;
+        }
+        sections.push(DocumentSection {
+            section_type: SectionType::Introduction,
+            heading: Some(format!("Page {}", page_num)),
+            text: clean,
+            page_number: Some(*page_num),
+        });
+    }
+    sections
+}
+
+fn normalize_whitespace(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Detect sections using keyword heuristics.
