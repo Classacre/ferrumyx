@@ -1,5 +1,11 @@
 pub mod autonomous_cycle_tool;
 pub mod ingestion_tool;
+pub mod lab_autoresearch_tool;
+pub mod lab_planner_tool;
+pub mod lab_retriever_tool;
+pub mod lab_run_status_tool;
+pub mod lab_state;
+pub mod lab_validator_tool;
 pub mod molecule_tool;
 pub mod provider_refresh_tool;
 pub mod query_tool;

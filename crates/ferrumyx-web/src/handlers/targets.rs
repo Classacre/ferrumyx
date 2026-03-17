@@ -7,6 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
@@ -19,6 +21,7 @@ use ferrumyx_db::{
 use ferrumyx_ranker::{
     depmap_provider::{DepMapClientAdapter, DepMapProvider},
     normalise::normalise_ceres,
+    ProviderRefreshRequest, TargetQueryEngine,
 };
 
 #[derive(Deserialize, Default)]
@@ -85,6 +88,8 @@ pub struct ProviderCacheRow {
     pub source: String,
     pub fetched_at: String,
     pub cache_status: String,
+    pub provider_url: Option<String>,
+    pub refresh_hint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -354,16 +359,26 @@ pub async fn targets_page(
                         .provider_cache
                         .iter()
                         .map(|row| {
+                            let provider_label = if let Some(url) = &row.provider_url {
+                                format!(r#"<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>"#, url, row.provider)
+                            } else {
+                                row.provider.clone()
+                            };
+                            let health_hint = row
+                                .refresh_hint
+                                .as_deref()
+                                .unwrap_or("Refresh history unavailable");
                             format!(
                                 r#"<tr>
-<td>{}</td>
+<td>{} <span class="badge badge-outline" title="{}" style="padding:0 0.4rem; line-height:1.2;">i</span></td>
 <td>{}</td>
 <td>{}</td>
 <td class="text-muted">{}</td>
 <td class="text-muted">{}</td>
 <td><span class="badge badge-outline">{}</span></td>
 </tr>"#,
-                                row.provider,
+                                provider_label,
+                                health_hint,
                                 row.metric,
                                 row.value,
                                 row.source,
@@ -374,50 +389,31 @@ pub async fn targets_page(
                         .collect()
                 };
 
-                let provider_refresh_rows: String = if detail.provider_refresh.is_empty() {
-                    r#"<tr><td colspan="7" class="text-muted">No provider refresh history found yet.</td></tr>"#
-                        .to_string()
+                let provider_cache_count = detail.provider_cache.len();
+                let literature_count = detail.literature.len();
+                let provider_refresh_summary = if detail.provider_refresh.is_empty() {
+                    "No provider refresh runs recorded yet.".to_string()
                 } else {
                     detail
                         .provider_refresh
                         .iter()
                         .map(|row| {
-                            let trigger = truncate_label(&row.trigger_reason, 36);
+                            let trigger = truncate_label(&row.trigger_reason, 26);
                             format!(
-                                r#"<tr>
-<td>{}</td>
-<td class="text-muted">{}</td>
-<td class="text-muted">{}</td>
-<td>{}/{}/{} / {}</td>
-<td class="text-muted">{:.2}</td>
-<td class="text-muted">{}</td>
-<td class="text-muted">{}</td>
-</tr>"#,
+                                "{}: {} (ok={}, fail={}, skip={}, attempted={}, err={:.2}, trigger={})",
                                 row.provider,
                                 row.finished_at,
-                                if row.duration_ms > 0 {
-                                    format!("{} ms", row.duration_ms)
-                                } else {
-                                    "n/a".to_string()
-                                },
                                 row.success,
                                 row.failed,
                                 row.skipped,
                                 row.attempted,
                                 row.error_rate,
-                                trigger,
-                                if row.attempted > 0 {
-                                    "ok"
-                                } else {
-                                    "cold"
-                                }
+                                trigger
                             )
                         })
-                        .collect()
+                        .collect::<Vec<_>>()
+                        .join(" | ")
                 };
-                let provider_cache_count = detail.provider_cache.len();
-                let literature_count = detail.literature.len();
-                let provider_refresh_count = detail.provider_refresh.len();
 
                 format!(
                     r#"<div class="card mt-4" id="target-insights">
@@ -439,7 +435,7 @@ pub async fn targets_page(
     </div>
   </details>
   <details class="insight-disclosure">
-    <summary>Provider Cache Snapshot <span class="badge badge-outline">{}</span></summary>
+    <summary>Provider Cache Snapshot <span class="badge badge-outline">{}</span> <span class="badge badge-outline" title="{}" style="padding:0 0.45rem; line-height:1.2;">i</span></summary>
     <div class="insight-disclosure-body">
       <div class="table-container">
         <table class="table provider-cache-table">
@@ -461,27 +457,6 @@ pub async fn targets_page(
   <details class="insight-disclosure">
     <summary>Connected Paper Evidence <span class="badge badge-outline">{}</span></summary>
     <div class="insight-disclosure-body">{}</div>
-  </details>
-  <details class="insight-disclosure">
-    <summary>Provider Refresh Health <span class="badge badge-outline">{}</span></summary>
-    <div class="insight-disclosure-body">
-      <div class="table-container">
-        <table class="table provider-refresh-table">
-          <thead>
-            <tr>
-              <th>Provider</th>
-              <th>Last Run</th>
-              <th>Duration</th>
-              <th>Success/Fail/Skip/Attempted</th>
-              <th>Error Rate</th>
-              <th>Trigger</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>{}</tbody>
-        </table>
-      </div>
-    </div>
   </details>
 </div>
 </div>"#,
@@ -506,11 +481,10 @@ pub async fn targets_page(
                     relation_count,
                     relation_rows,
                     provider_cache_count,
+                    provider_refresh_summary,
                     provider_cache_rows,
                     literature_count,
-                    literature_rows,
-                    provider_refresh_count,
-                    provider_refresh_rows
+                    literature_rows
                 )
             }
             None => r#"<div class="card mt-4"><div class="card-body text-muted">No detailed insights found for the selected target.</div></div>"#.to_string(),
@@ -701,7 +675,8 @@ async fn load_target_detail_for_page(
         .unwrap_or_default();
 
     let mut kg_facts = Vec::new();
-    let mut literature = Vec::new();
+    let mut literature_by_paper: HashMap<uuid::Uuid, LiteratureHit> = HashMap::new();
+    let mut literature_misc = Vec::new();
     for fact in facts.into_iter().take(120) {
         let source = if fact.paper_id.is_nil() {
             "unknown".to_string()
@@ -718,14 +693,57 @@ async fn load_target_detail_for_page(
             confidence: fact.confidence as f64,
             source: source.clone(),
         });
-        if let Some(evidence) = fact.evidence.clone().filter(|s| !s.trim().is_empty()) {
-            literature.push(LiteratureHit {
+
+        let fallback_snippet = format!(
+            "{} {} {}",
+            fact.subject_name,
+            normalize_predicate_label(&fact.predicate),
+            fact.object_name
+        );
+        let snippet = fact
+            .evidence
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(fallback_snippet);
+
+        if !fact.paper_id.is_nil() {
+            literature_by_paper
+                .entry(fact.paper_id)
+                .or_insert(LiteratureHit {
+                    pmid: None,
+                    title: Some(source),
+                    snippet,
+                });
+        } else if !snippet.trim().is_empty() {
+            literature_misc.push(LiteratureHit {
                 pmid: None,
                 title: Some(source),
-                snippet: evidence,
+                snippet,
             });
         }
     }
+    let mut literature: Vec<LiteratureHit> = literature_by_paper.into_values().collect();
+    literature.sort_by(|a, b| {
+        a.title
+            .as_deref()
+            .unwrap_or("")
+            .cmp(b.title.as_deref().unwrap_or(""))
+    });
+    literature.extend(literature_misc.into_iter().take(12));
+    let mut deduped_literature = Vec::new();
+    let mut seen_literature = std::collections::HashSet::new();
+    for hit in literature {
+        let title_key = canonical_literature_key(hit.title.as_deref().unwrap_or(""));
+        let key = if title_key.is_empty() {
+            canonical_literature_key(&hit.snippet)
+        } else {
+            title_key
+        };
+        if key.is_empty() || seen_literature.insert(key) {
+            deduped_literature.push(hit);
+        }
+    }
+    let literature = deduped_literature;
 
     let (provider_cache, provider_refresh) =
         load_provider_cache_data(state, &row.gene, &row.cancer_type).await;
@@ -947,6 +965,43 @@ async fn load_provider_cache_data(
         });
     }
 
+    let refresh_hint_by_provider: HashMap<String, String> = provider_refresh
+        .iter()
+        .map(|row| {
+            (
+                row.provider.to_ascii_lowercase(),
+                format!(
+                    "Last run: {} | success={} failed={} skipped={} attempted={} | error={:.2}",
+                    row.finished_at, row.success, row.failed, row.skipped, row.attempted, row.error_rate
+                ),
+            )
+        })
+        .collect();
+
+    for row in &mut provider_cache {
+        row.provider_url = provider_external_url(
+            &row.provider,
+            &gene_symbol,
+            provider_cancer.as_deref(),
+        );
+        row.refresh_hint = refresh_hint_by_provider
+            .get(&row.provider.to_ascii_lowercase())
+            .cloned();
+    }
+
+    let missing_rows = provider_cache
+        .iter()
+        .filter(|r| r.cache_status.eq_ignore_ascii_case("missing"))
+        .count();
+    if missing_rows > 0 {
+        maybe_spawn_provider_cache_warmup(
+            state,
+            &gene_symbol,
+            provider_cancer.as_deref(),
+            "targets_insights_cache_miss",
+        );
+    }
+
     (provider_cache, provider_refresh)
 }
 
@@ -968,6 +1023,8 @@ fn provider_cache_row(
         },
         fetched_at: format_cache_time(fetched_at),
         cache_status: provider_cache_status(fetched_at),
+        provider_url: None,
+        refresh_hint: None,
     }
 }
 
@@ -979,6 +1036,8 @@ fn provider_cache_missing(provider: &str, metric: &str) -> ProviderCacheRow {
         source: "not_cached".to_string(),
         fetched_at: "n/a".to_string(),
         cache_status: "missing".to_string(),
+        provider_url: None,
+        refresh_hint: None,
     }
 }
 
@@ -994,6 +1053,95 @@ fn provider_cache_status(fetched_at: chrono::DateTime<chrono::Utc>) -> String {
 
 fn format_cache_time(ts: chrono::DateTime<chrono::Utc>) -> String {
     ts.format("%Y-%m-%d %H:%M UTC").to_string()
+}
+
+fn provider_external_url(provider: &str, gene: &str, cancer: Option<&str>) -> Option<String> {
+    let g = gene.trim().to_uppercase();
+    if g.is_empty() {
+        return None;
+    }
+    let c = cancer
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("ALL");
+    let url = match provider.to_ascii_lowercase().as_str() {
+        "cbioportal" => format!(
+            "https://www.cbioportal.org/results/oncoprint?gene_list={}&cancer_study_list={}",
+            g, c
+        ),
+        "cosmic" => format!("https://cancer.sanger.ac.uk/cosmic/search?q={}", g),
+        "gtex" => format!("https://gtexportal.org/home/gene/{}", g),
+        "tcga" => format!(
+            "https://portal.gdc.cancer.gov/exploration?searchTableTab=genes&geneSymbol={}",
+            g
+        ),
+        "chembl" => format!("https://www.ebi.ac.uk/chembl/g/#search_results/all/query={}", g),
+        "reactome" => format!("https://reactome.org/content/query?q={}", g),
+        _ => return None,
+    };
+    Some(url)
+}
+
+fn provider_warmup_gate() -> &'static Mutex<HashMap<String, Instant>> {
+    static GATE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    GATE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn maybe_spawn_provider_cache_warmup(
+    state: &SharedState,
+    gene: &str,
+    cancer_code: Option<&str>,
+    trigger_reason: &str,
+) {
+    let gene_symbol = gene.trim().to_uppercase();
+    if gene_symbol.is_empty() {
+        return;
+    }
+    let cancer = cancer_code
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.to_string());
+    let gate_key = format!(
+        "{}:{}",
+        gene_symbol,
+        cancer.clone().unwrap_or_else(|| "ALL".to_string())
+    );
+    let now = Instant::now();
+    let mut gate = match provider_warmup_gate().lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if let Some(last) = gate.get(&gate_key) {
+        if now.saturating_duration_since(*last) < Duration::from_secs(10 * 60) {
+            return;
+        }
+    }
+    gate.insert(gate_key, now);
+    drop(gate);
+
+    let db = state.db.clone();
+    let trigger = trigger_reason.to_string();
+    tokio::spawn(async move {
+        let engine = TargetQueryEngine::new(db);
+        let _ = engine
+            .refresh_provider_signals(ProviderRefreshRequest {
+                genes: vec![gene_symbol],
+                cancer_code: cancer,
+                max_genes: 1,
+                batch_size: 1,
+                retries: 1,
+                offline_strict: false,
+            })
+            .await
+            .map_err(|e| {
+                tracing::debug!(
+                    "provider cache warmup trigger='{}' failed: {}",
+                    trigger,
+                    e
+                );
+                e
+            });
+    });
 }
 
 fn normalize_provider_cancer_code(cancer_code: &str) -> Option<String> {
@@ -1240,6 +1388,38 @@ fn normalize_tier(raw_tier: &str, adjusted: f64) -> String {
     } else {
         "excluded".to_string()
     }
+}
+
+fn normalize_predicate_label(raw: &str) -> String {
+    let cleaned = raw.trim().replace('_', " ");
+    if cleaned.is_empty() {
+        "is related to".to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn canonical_literature_key(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut prev_space = false;
+    for ch in raw.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            ' '
+        };
+        if mapped == ' ' {
+            if prev_space {
+                continue;
+            }
+            prev_space = true;
+            out.push(' ');
+        } else {
+            prev_space = false;
+            out.push(mapped);
+        }
+    }
+    out.trim().to_string()
 }
 
 fn truncate_label(input: &str, max_chars: usize) -> String {

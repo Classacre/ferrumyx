@@ -2,7 +2,8 @@
 
 use crate::handlers::{
     chat::{
-        chat_events_proxy, chat_history, chat_page, chat_submit, chat_thread_new, chat_threads,
+        chat_events_proxy, chat_history, chat_lab_monitor, chat_page, chat_submit, chat_thread_new,
+        chat_threads,
     },
     dashboard::dashboard,
     depmap::{api_depmap_celllines, api_depmap_gene, depmap_page},
@@ -51,7 +52,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ranker", get(ranker_page))
         .route("/settings", get(settings_page))
         .route("/chat", get(chat_page))
-        .route("/favicon.ico", get(|| async { Redirect::permanent("/static/logo.svg") }))
+        .route(
+            "/favicon.ico",
+            get(|| async { Redirect::permanent("/static/logo.svg") }),
+        )
         // SSE streaming
         .route("/api/events", get(sse_handler))
         // API endpoints
@@ -74,6 +78,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/chat/history", get(chat_history))
         .route("/api/chat/threads", get(chat_threads))
         .route("/api/chat/thread/new", post(chat_thread_new))
+        .route("/api/chat/lab-monitor", get(chat_lab_monitor))
         .route("/api/chat/events", get(chat_events_proxy))
         .route("/api/settings", get(settings_get).post(settings_save))
         // Static files

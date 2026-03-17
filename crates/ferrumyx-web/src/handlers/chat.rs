@@ -335,6 +335,7 @@ pub async fn chat_submit(
 ) -> impl IntoResponse {
     let client = Client::new();
     let _ = ensure_gateway_online(&client).await;
+    let outbound_message = maybe_augment_message_for_lab_roles(&payload.message);
 
     // Resolve a concrete thread so we can poll async completion reliably.
     let thread_id = match payload.thread_id.clone() {
@@ -353,7 +354,7 @@ pub async fn chat_submit(
         .post(gateway_url)
         .header("Authorization", GATEWAY_AUTH_TOKEN)
         .json(&json!({
-            "content": payload.message,
+            "content": outbound_message,
             "thread_id": thread_id
         }))
         .send()
@@ -382,6 +383,7 @@ pub async fn chat_submit(
                     return axum::Json::<Value>(json!({
                         "status": "success",
                         "thread_id": tid,
+                        "before_turn_marker": pre_turn_marker,
                         "response": response
                     }))
                     .into_response();
@@ -391,6 +393,7 @@ pub async fn chat_submit(
             axum::Json::<Value>(json!({
                 "status": "accepted",
                 "thread_id": thread_id,
+                "before_turn_marker": pre_turn_marker,
                 "response": "Task accepted and processing in background."
             }))
             .into_response()
@@ -417,6 +420,52 @@ pub async fn chat_submit(
             }))
             .into_response()
         }
+    }
+}
+
+fn maybe_augment_message_for_lab_roles(message: &str) -> String {
+    let raw = message.trim();
+    if raw.is_empty() {
+        return message.to_string();
+    }
+    let lower = raw.to_ascii_lowercase();
+    let wants_autonomous = lower.contains("autonomous")
+        || lower.contains("overnight")
+        || lower.contains("research run")
+        || (lower.contains("run") && lower.contains("workflow"))
+        || (lower.contains("agent") && lower.contains("team"));
+    let already_mentions_roles = lower.contains("lab_planner")
+        || lower.contains("lab_retriever")
+        || lower.contains("lab_validator")
+        || lower.contains("run_lab_autoresearch")
+        || lower.contains("lab_run_status");
+    if !wants_autonomous || already_mentions_roles {
+        return message.to_string();
+    }
+
+    format!(
+        "{}\n\n[System execution hint for autonomous lab mode: prefer `run_lab_autoresearch` for dynamic planner->retriever->validator cycling, then call `lab_run_status` with run_id for periodic updates. If running manually, use `lab_planner` -> `lab_retriever` -> `lab_validator`, pass run_id between calls, and include brief progress updates after each role.]",
+        message
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::maybe_augment_message_for_lab_roles;
+
+    #[test]
+    fn augments_autonomous_prompt() {
+        let input = "Please run an autonomous research run for lung cancer.";
+        let out = maybe_augment_message_for_lab_roles(input);
+        assert!(out.contains("run_lab_autoresearch"));
+        assert!(out.contains("lab_validator"));
+    }
+
+    #[test]
+    fn does_not_double_augment() {
+        let input = "Use lab_planner then lab_retriever.";
+        let out = maybe_augment_message_for_lab_roles(input);
+        assert_eq!(out, input);
     }
 }
 
@@ -470,6 +519,84 @@ async fn resolve_assistant_thread_id(client: &Client) -> Option<String> {
         return Some(assistant.id);
     }
     threads.active_thread
+}
+
+fn threads_payload_has_any_thread(payload: &Value) -> bool {
+    let has_assistant = payload
+        .get("assistant_thread")
+        .and_then(|v| v.get("id").and_then(Value::as_str))
+        .is_some();
+    let has_active = payload
+        .get("active_thread")
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.trim().is_empty());
+    let has_threads = payload
+        .get("threads")
+        .and_then(Value::as_array)
+        .is_some_and(|arr| !arr.is_empty());
+    has_assistant || has_active || has_threads
+}
+
+async fn fetch_gateway_threads_value(client: &Client) -> Option<Value> {
+    let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/threads");
+    let resp = client
+        .get(gateway_url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    resp.json::<Value>().await.ok()
+}
+
+async fn ensure_gateway_threads_nonempty(client: &Client) -> Option<Value> {
+    let first = fetch_gateway_threads_value(client).await?;
+    if threads_payload_has_any_thread(&first) {
+        return Some(first);
+    }
+
+    let mut created_thread_id: Option<String> = None;
+    let create_url = format!("{GATEWAY_BASE_URL}/api/chat/thread/new");
+    if let Ok(resp) = client
+        .post(create_url)
+        .header("Authorization", GATEWAY_AUTH_TOKEN)
+        .send()
+        .await
+    {
+        if resp.status().is_success() {
+            if let Ok(payload) = resp.json::<Value>().await {
+                created_thread_id = payload
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(|s| s.to_string());
+            }
+        }
+    }
+
+    if let Some(second) = fetch_gateway_threads_value(client).await {
+        if threads_payload_has_any_thread(&second) {
+            return Some(second);
+        }
+    }
+
+    // Gateway returned an empty thread surface even after creation attempt.
+    // Fall back so the web UI can auto-initialize a local thread and keep history.
+    if let Some(thread_id) = created_thread_id {
+        return Some(json!({
+            "assistant_thread": Value::Null,
+            "active_thread": thread_id,
+            "threads": [{
+                "id": thread_id,
+                "title": "Thread",
+                "thread_type": "user",
+                "updated_at": chrono::Utc::now().to_rfc3339(),
+            }]
+        }));
+    }
+
+    None
 }
 
 async fn resolve_or_create_thread_id(client: &Client) -> Option<String> {
@@ -587,27 +714,9 @@ pub async fn chat_history(
 pub async fn chat_threads(State(_state): State<SharedState>) -> impl IntoResponse {
     let client = Client::new();
     let _ = ensure_gateway_online(&client).await;
-    let gateway_url = format!("{GATEWAY_BASE_URL}/api/chat/threads");
-
-    match client
-        .get(gateway_url)
-        .header("Authorization", GATEWAY_AUTH_TOKEN)
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
-            Ok(v) => axum::Json(v).into_response(),
-            Err(_) => (
-                axum::http::StatusCode::BAD_GATEWAY,
-                "Invalid response from agent",
-            )
-                .into_response(),
-        },
-        Ok(_) => axum::Json(local_threads_payload()).into_response(),
-        Err(e) => {
-            tracing::error!("Failed to contact IronClaw Agent threads endpoint: {}", e);
-            axum::Json(local_threads_payload()).into_response()
-        }
+    match ensure_gateway_threads_nonempty(&client).await {
+        Some(v) => axum::Json(v).into_response(),
+        None => axum::Json(local_threads_payload()).into_response(),
     }
 }
 
@@ -701,4 +810,75 @@ pub async fn chat_events_proxy(State(_state): State<SharedState>) -> impl IntoRe
             offline_sse_response("Agent offline")
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChatLabMonitorQuery {
+    run_id: Option<String>,
+    limit: Option<usize>,
+}
+
+fn lab_monitor_path() -> PathBuf {
+    std::env::var("FERRUMYX_LAB_STATE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("output/lab_runs.json"))
+}
+
+fn read_lab_monitor_snapshot() -> Value {
+    let path = lab_monitor_path();
+    let content = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(_) => return json!({ "updated_at": Value::Null, "run_count": 0, "runs": [] }),
+    };
+    serde_json::from_str::<Value>(&content)
+        .unwrap_or_else(|_| json!({ "updated_at": Value::Null, "run_count": 0, "runs": [] }))
+}
+
+pub async fn chat_lab_monitor(
+    State(_state): State<SharedState>,
+    axum::extract::Query(query): axum::extract::Query<ChatLabMonitorQuery>,
+) -> impl IntoResponse {
+    let snapshot = read_lab_monitor_snapshot();
+    let mut runs = snapshot
+        .get("runs")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if let Some(run_id) = query
+        .run_id
+        .as_ref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+    {
+        let found = runs
+            .iter()
+            .find(|run| {
+                run.get("run_id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id == run_id)
+            })
+            .cloned();
+
+        return axum::Json(json!({
+            "status": "ok",
+            "source": "persisted_lab_state",
+            "run_id": run_id,
+            "found": found.is_some(),
+            "run": found,
+            "updated_at": snapshot.get("updated_at").cloned().unwrap_or(Value::Null)
+        }))
+        .into_response();
+    }
+
+    let limit = query.limit.unwrap_or(8).clamp(1, 30);
+    runs.truncate(limit);
+    axum::Json(json!({
+        "status": "ok",
+        "source": "persisted_lab_state",
+        "updated_at": snapshot.get("updated_at").cloned().unwrap_or(Value::Null),
+        "run_count": snapshot.get("run_count").cloned().unwrap_or(json!(runs.len())),
+        "runs": runs
+    }))
+    .into_response()
 }

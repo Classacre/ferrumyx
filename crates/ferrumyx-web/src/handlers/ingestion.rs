@@ -177,8 +177,11 @@ struct PageStats {
 async fn load_stats(state: &SharedState) -> PageStats {
     let repo = IngestionRepository::new(state.db.clone());
     let total = repo.paper_count().await.unwrap_or(0);
-    let parsed = repo.paper_count_by_status("parsed").await.unwrap_or(0);
-    let pending = repo.paper_count_by_status("pending").await.unwrap_or(0);
+    let parsed = repo.paper_count_by_status("parsed").await.unwrap_or(0)
+        + repo.paper_count_by_status("parsed_fast").await.unwrap_or(0)
+        + repo.paper_count_by_status("parsed_light").await.unwrap_or(0);
+    let pending = repo.paper_count_by_status("pending").await.unwrap_or(0)
+        + repo.paper_count_by_status("processing").await.unwrap_or(0);
     let failed = repo.paper_count_by_status("failed").await.unwrap_or(0);
 
     PageStats {
@@ -516,10 +519,10 @@ fn render_page_with_progress(stats: PageStats, summary: &str, total_expected: i6
             <div class="stat-value text-gradient" id="papers-count">{}</div><div class="stat-label">Total Literature</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--success);">
             <div class="stat-icon"><svg stroke="var(--success)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
-            <div class="stat-value" style="color:var(--success)">{}</div><div class="stat-label">Parsed Successfully</div></div>
+            <div class="stat-value" style="color:var(--success)">{}</div><div class="stat-label">Parsed Successfully (full+fast+light)</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--warning);">
             <div class="stat-icon"><svg stroke="var(--warning)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
-            <div class="stat-value" style="color:var(--warning)">{}</div><div class="stat-label">Pending Queues</div></div>
+            <div class="stat-value" style="color:var(--warning)">{}</div><div class="stat-label">Pending Queues (pending+processing)</div></div>
         <div class="stat-card card-hover" style="border-bottom: 2px solid var(--danger);">
             <div class="stat-icon"><svg stroke="var(--danger)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
             <div class="stat-value" style="color:var(--danger)">{}</div><div class="stat-label">Parsing Failures</div></div>

@@ -2,12 +2,13 @@
 
 use axum::{extract::State, response::Html, Json};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
 use ferrumyx_db::{
-    entities::EntityRepository, kg_facts::KgFactRepository, schema::EntityType,
-    target_scores::TargetScoreRepository,
+    entities::EntityRepository, kg_facts::KgFactRepository, papers::PaperRepository,
+    schema::EntityType, target_scores::TargetScoreRepository,
 };
 use ferrumyx_ingestion::pipeline::load_recent_perf_snapshots;
 
@@ -79,14 +80,19 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
         0.0
     };
 
+    // Use a small Bayesian prior so tiny sample sizes don't render as extreme 0/1.
     let primary_tier_rate = if scored_count > 0.0 {
-        (primary_count / scored_count).clamp(0.0, 1.0)
+        let prior_strength = 8.0;
+        let prior_mean = 0.25;
+        ((primary_count + prior_mean * prior_strength) / (scored_count + prior_strength))
+            .clamp(0.0, 1.0)
     } else {
         0.0
     };
 
     let evidence_per_target = if scored_count > 0.0 {
-        (fact_count / scored_count / 100.0).clamp(0.0, 1.0)
+        let avg_facts_per_target = fact_count / scored_count;
+        (avg_facts_per_target.ln_1p() / 1000.0_f64.ln_1p()).clamp(0.0, 1.0)
     } else {
         0.0
     };
@@ -101,8 +107,17 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
         Ok(table) => table.count_rows(None).await.unwrap_or(0) as f64,
         Err(_) => 0.0,
     };
+    let heuristic_conflict_rate = if conflicts == 0.0 && fact_count > 0.0 {
+        estimate_conflict_rate_from_facts(&fact_repo).await
+    } else {
+        0.0
+    };
     let conflict_rate = if fact_count > 0.0 {
-        (conflicts / fact_count).clamp(0.0, 1.0)
+        if conflicts > 0.0 {
+            (conflicts / fact_count).clamp(0.0, 1.0)
+        } else {
+            heuristic_conflict_rate
+        }
     } else {
         0.0
     };
@@ -277,7 +292,7 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
                 <div class="metric-card"><div class="metric-label">Avg Run Duration</div><div id="perf_avg_duration" class="metric-value">0 ms</div></div>
                 <div class="metric-card"><div class="metric-label">Avg Papers / Min</div><div id="perf_avg_papers" class="metric-value">0.00</div></div>
                 <div class="metric-card"><div class="metric-label">Avg Chunks / Min</div><div id="perf_avg_chunks" class="metric-value">0.00</div></div>
-                <div class="metric-card"><div class="metric-label">PDF Parse Cache Hit Rate</div><div id="perf_cache_hit_rate" class="metric-value">0.0%</div></div>
+                <div class="metric-card"><div class="metric-label">PDF Parse Hit Rate</div><div id="perf_cache_hit_rate" class="metric-value">0.0%</div></div>
             </div>
             <div class="metrics-disclosure">
                 <details>
@@ -308,8 +323,8 @@ pub async fn metrics_page(State(state): State<SharedState>) -> Html<String> {
                         <strong>target_score_coverage</strong>: scored targets / gene-like KG subjects.<br>
                         <strong>avg_confidence_adjusted</strong>: mean confidence-adjusted score from target_scores.<br>
                         <strong>primary_tier_rate</strong>: share of targets in primary tier.<br>
-                        <strong>evidence_density</strong>: KG evidence per scored target (normalized).<br>
-                        <strong>kg_conflict_rate</strong>: conflict rows relative to KG fact volume.
+                        <strong>evidence_density</strong>: log-scaled KG evidence per scored target.<br>
+                        <strong>kg_conflict_rate</strong>: explicit conflicts or inferred contradiction rate from predicates.
                     </span>
                 </span>
             </div>
@@ -360,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {{
     ))
 }
 
-pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfResponse> {
+pub async fn metrics_perf_api(State(state): State<SharedState>) -> Json<PerfResponse> {
     let recent_raw = load_recent_perf_snapshots(24);
     let mut duration_total = 0u64;
     let mut papers_per_min_total = 0.0f64;
@@ -404,6 +419,7 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
         .collect();
 
     let n = recent.len().max(1) as f64;
+    let fallback_parse_hit_rate = estimate_parse_success_rate(&state).await;
     let summary = PerfSummaryView {
         avg_duration_ms: (duration_total as f64 / n).round() as u64,
         avg_papers_inserted_per_min: papers_per_min_total / n,
@@ -411,7 +427,7 @@ pub async fn metrics_perf_api(State(_state): State<SharedState>) -> Json<PerfRes
         avg_pdf_cache_hit_rate: if hit_total + miss_total > 0 {
             hit_total as f64 / (hit_total + miss_total) as f64
         } else {
-            0.0
+            fallback_parse_hit_rate
         },
         avg_unique_predicates: unique_pred_total as f64 / n,
         avg_predicate_generic_share: generic_share_total / n,
@@ -429,5 +445,67 @@ fn metric_meta(name: &str) -> (&'static str, &'static str, bool) {
         "evidence_density" => ("Evidence Density", "> 0.20", true),
         "kg_conflict_rate" => ("KG Conflict Rate", "< 0.20", false),
         _ => ("Unknown Metric", "—", true),
+    }
+}
+
+async fn estimate_parse_success_rate(state: &SharedState) -> f64 {
+    let repo = PaperRepository::new(state.db.clone());
+    let parsed = repo.count_by_parse_status("parsed").await.unwrap_or(0) as f64;
+    let parsed_fast = repo.count_by_parse_status("parsed_fast").await.unwrap_or(0) as f64;
+    let parsed_light = repo.count_by_parse_status("parsed_light").await.unwrap_or(0) as f64;
+    let failed = repo.count_by_parse_status("failed").await.unwrap_or(0) as f64;
+    let total = parsed + parsed_fast + parsed_light + failed;
+    if total <= 0.0 {
+        0.0
+    } else {
+        ((parsed + parsed_fast + parsed_light) / total).clamp(0.0, 1.0)
+    }
+}
+
+async fn estimate_conflict_rate_from_facts(fact_repo: &KgFactRepository) -> f64 {
+    let facts = fact_repo.list(0, 15_000).await.unwrap_or_default();
+    if facts.is_empty() {
+        return 0.0;
+    }
+
+    let mut predicates_by_pair: HashMap<(String, String), HashSet<String>> = HashMap::new();
+    for fact in facts {
+        let subject = fact.subject_name.trim().to_ascii_lowercase();
+        let object = fact.object_name.trim().to_ascii_lowercase();
+        let predicate = fact.predicate.trim().to_ascii_lowercase();
+        if subject.is_empty() || object.is_empty() || predicate.is_empty() {
+            continue;
+        }
+        predicates_by_pair
+            .entry((subject, object))
+            .or_default()
+            .insert(predicate);
+    }
+
+    let contradictions = [
+        ("upregulated_in", "downregulated_in"),
+        ("activates", "inhibits"),
+        ("confers_resistance", "sensitizes_to"),
+        (
+            "prognostic_for_poor_outcome",
+            "prognostic_for_better_outcome",
+        ),
+        ("promotes_proliferation", "inhibits"),
+    ];
+
+    let mut conflicting_pairs = 0usize;
+    for predicates in predicates_by_pair.values() {
+        if contradictions
+            .iter()
+            .any(|(a, b)| predicates.contains(*a) && predicates.contains(*b))
+        {
+            conflicting_pairs += 1;
+        }
+    }
+
+    if predicates_by_pair.is_empty() {
+        0.0
+    } else {
+        (conflicting_pairs as f64 / predicates_by_pair.len() as f64).clamp(0.0, 1.0)
     }
 }

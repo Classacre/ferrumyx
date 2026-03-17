@@ -96,23 +96,35 @@ pub async fn compute_target_scores(db: Arc<Database>) -> anyhow::Result<u32> {
         if fact.predicate.eq_ignore_ascii_case("mentions") {
             continue;
         }
-        if !is_gene_like(&fact.subject_name) {
-            continue;
-        }
-
-        let key = (fact.subject_id, fact.subject_name.clone());
-        let entry = by_gene.entry(key).or_default();
-        entry.total_evidence += 1;
-        entry.confidence_sum += fact.confidence as f64;
-
         let pred_lc = fact.predicate.to_lowercase();
-        if pred_lc.contains("mutation") || pred_lc == "has_mutation" {
-            entry.mutation_evidence += 1;
+
+        if is_gene_like(&fact.subject_name) {
+            let key = (fact.subject_id, fact.subject_name.clone());
+            let entry = by_gene.entry(key).or_default();
+            entry.total_evidence += 1;
+            entry.confidence_sum += fact.confidence as f64;
+            if pred_lc.contains("mutation") || pred_lc == "has_mutation" {
+                entry.mutation_evidence += 1;
+            }
+            if is_cancer_like(&fact.object_name) {
+                entry.cancer_evidence += 1;
+                entry.cancer_id = Some(fact.object_id);
+                entry.cancer_code = Some(fact.object_name.clone());
+            }
         }
-        if is_cancer_like(&fact.object_name) {
-            entry.cancer_evidence += 1;
-            entry.cancer_id = Some(fact.object_id);
-            entry.cancer_code = Some(fact.object_name.clone());
+
+        // Also score gene-like objects so alternative genes tied through
+        // mechanistic relations can surface in rankings.
+        if !fact.object_id.is_nil() && is_gene_like(&fact.object_name) {
+            let key = (fact.object_id, fact.object_name.clone());
+            let entry = by_gene.entry(key).or_default();
+            entry.total_evidence += 1;
+            entry.confidence_sum += fact.confidence as f64;
+            if is_cancer_like(&fact.subject_name) {
+                entry.cancer_evidence += 1;
+                entry.cancer_id = Some(fact.subject_id);
+                entry.cancer_code = Some(fact.subject_name.clone());
+            }
         }
     }
 

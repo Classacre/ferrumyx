@@ -16,7 +16,7 @@ use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
-use ferrumyx_db::papers::PaperRepository;
+use ferrumyx_db::papers::{PaperReference, PaperRepository};
 
 struct CachedHtml {
     html: String,
@@ -930,11 +930,10 @@ pub async fn kg_page(
     let mut paper_entries: Vec<(String, Vec<(String, String, String, Option<String>)>)> =
         paper_groups.into_iter().collect();
     paper_entries.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
-    let matched_paper_count = paper_entries.len();
+    let raw_matched_paper_count = paper_entries.len();
 
     let selected_paper_ids: Vec<uuid::Uuid> = paper_entries
         .iter()
-        .take(max_papers)
         .filter_map(|(paper, _)| {
             paper
                 .strip_prefix("paper-")
@@ -942,32 +941,81 @@ pub async fn kg_page(
         })
         .collect();
 
-    let paper_titles = paper_repo
-        .find_titles_by_ids(&selected_paper_ids)
+    let paper_refs = paper_repo
+        .find_references_by_ids(&selected_paper_ids)
         .await
         .unwrap_or_default();
 
-    let paper_html = if paper_entries.is_empty() {
+    #[derive(Default)]
+    struct GroupedPaper {
+        title: String,
+        url: Option<String>,
+        duplicate_count: usize,
+        rows: Vec<(String, String, String, Option<String>)>,
+    }
+
+    let mut title_grouped: HashMap<String, GroupedPaper> = HashMap::new();
+    for (paper, rows) in paper_entries.into_iter() {
+        let paper_id = paper
+            .strip_prefix("paper-")
+            .and_then(|id| uuid::Uuid::parse_str(id).ok())
+            .unwrap_or(uuid::Uuid::nil());
+        let paper_ref = if paper_id.is_nil() {
+            None
+        } else {
+            paper_refs.get(&paper_id)
+        };
+        let title = derive_paper_title(&paper, paper_ref);
+        let url = paper_ref.and_then(build_paper_external_url);
+        let bucket = canonical_text_bucket(&title);
+        let entry = title_grouped.entry(bucket).or_insert_with(|| GroupedPaper {
+            title: title.clone(),
+            url: None,
+            duplicate_count: 0usize,
+            rows: Vec::new(),
+        });
+        if entry.title.is_empty() {
+            entry.title = title;
+        }
+        if entry.url.is_none() {
+            entry.url = url;
+        }
+        entry.duplicate_count += 1;
+        entry.rows.extend(rows);
+    }
+    let mut grouped_entries: Vec<(String, Option<String>, usize, Vec<(String, String, String, Option<String>)>)> =
+        title_grouped
+            .into_values()
+            .map(|group| (group.title, group.url, group.duplicate_count, group.rows))
+            .collect();
+    grouped_entries.sort_by(|a, b| b.3.len().cmp(&a.3.len()));
+    let matched_paper_count = grouped_entries.len();
+
+    let paper_html = if grouped_entries.is_empty() {
         format!(
             r#"<div class="card-body text-muted">No KG evidence found for <strong class="text-main">{}</strong>.</div>"#,
             gene
         )
     } else {
-        paper_entries
+        grouped_entries
             .into_iter()
             .take(max_papers)
-            .map(|(paper, rows)| {
-                let open_attr = if !expanded_paper.is_empty() && expanded_paper == paper {
+            .map(|(title, paper_url, duplicate_count, rows)| {
+                let expanded_key = canonical_text_bucket(&title);
+                let open_attr = if !expanded_paper.is_empty() && expanded_paper == expanded_key {
                     "open"
                 } else {
                     ""
                 };
-
-                let title = paper
-                    .strip_prefix("paper-")
-                    .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                    .and_then(|id| paper_titles.get(&id).cloned())
-                    .unwrap_or_else(|| truncate(&paper, 56));
+                let title_html = if let Some(url) = paper_url {
+                    format!(
+                        r#"<a class="paper-title-link" href="{}" target="_blank" rel="noopener noreferrer">{}</a>"#,
+                        html_escape_attr(&url),
+                        html_escape(&title)
+                    )
+                } else {
+                    format!(r#"<span class="paper-title">{}</span>"#, html_escape(&title))
+                };
 
                 let chunk = rows
                     .iter()
@@ -994,7 +1042,9 @@ pub async fn kg_page(
                                     <td><span class="badge badge-outline">{}</span></td>
                                     <td class="text-main">{}</td>
                                 </tr>"#,
-                                subject, predicate, object
+                                html_escape(subject),
+                                html_escape(predicate),
+                                html_escape(object)
                             )
                         })
                         .collect()
@@ -1011,10 +1061,11 @@ pub async fn kg_page(
                     r#"<details class="paper-group" {}>
                         <summary>
                             <div class="d-flex align-center gap-2">
-                                <span class="paper-title">{}</span>
+                                {}
                                 <span class="info-tip">i
                                     <span class="tooltip-card">{}</span>
                                 </span>
+                                {}
                             </div>
                             <span class="badge badge-primary">{} relations</span>
                         </summary>
@@ -1032,8 +1083,16 @@ pub async fn kg_page(
                         </div>
                     </details>"#,
                     open_attr,
-                    title,
+                    title_html,
                     chunk_tooltip,
+                    if duplicate_count > 1 {
+                        format!(
+                            r#"<span class="badge badge-outline">{} papers merged</span>"#,
+                            duplicate_count
+                        )
+                    } else {
+                        String::new()
+                    },
                     rows.len(),
                     rows_html
                 )
@@ -1174,6 +1233,24 @@ pub async fn kg_page(
             text-overflow: ellipsis;
         }}
 
+        .paper-title-link {{
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.92rem;
+            line-height: 1.25;
+            max-width: 840px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-decoration: none;
+            border-bottom: 1px dashed rgba(122, 193, 255, 0.35);
+        }}
+
+        .paper-title-link:hover {{
+            color: var(--accent-blue);
+            border-bottom-color: rgba(122, 193, 255, 0.75);
+        }}
+
         @media (max-width: 1100px) {{
             .kg-filters {{
                 grid-template-columns: 1fr;
@@ -1276,6 +1353,7 @@ pub async fn kg_page(
                 <span class="badge badge-outline">{} papers in DB</span>
                 <span class="badge badge-outline">{} facts scanned</span>
                 <span class="badge badge-outline">{} papers matched</span>
+                <span class="badge badge-outline text-muted">{} raw paper ids</span>
                 <span class="badge badge-outline">lens: {}</span>
                 <span class="badge badge-outline">preset: {}</span>
                 <span class="badge badge-outline">confidence: {}</span>
@@ -1852,6 +1930,7 @@ pub async fn kg_page(
         total_papers,
         scanned_facts,
         matched_paper_count,
+        raw_matched_paper_count,
         lens_badge,
         preset_badge,
         confidence_badge,
@@ -2136,6 +2215,29 @@ fn truncate(s: &str, max_chars: usize) -> String {
     out
 }
 
+fn canonical_text_bucket(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut prev_space = false;
+    for ch in input.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            ' '
+        };
+        if mapped == ' ' {
+            if prev_space {
+                continue;
+            }
+            prev_space = true;
+            out.push(' ');
+        } else {
+            prev_space = false;
+            out.push(mapped);
+        }
+    }
+    out.trim().to_string()
+}
+
 fn is_virtual_predicate_filter(filter: &str) -> bool {
     matches!(filter, "" | "all" | "specific" | "mechanistic" | "clinical")
 }
@@ -2363,6 +2465,146 @@ fn html_escape(input: &str) -> String {
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+fn html_escape_attr(input: &str) -> String {
+    html_escape(input)
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn derive_paper_title(paper_key: &str, paper_ref: Option<&PaperReference>) -> String {
+    if let Some(reference) = paper_ref {
+        if let Some(title) = normalize_paper_title(&reference.title) {
+            return title;
+        }
+        if let Some(doi) = reference
+            .doi
+            .as_deref()
+            .and_then(normalize_doi_for_link)
+            .or_else(|| {
+                reference
+                    .published_version_doi
+                    .as_deref()
+                    .and_then(normalize_doi_for_link)
+            })
+        {
+            return format!("DOI {}", doi);
+        }
+        if let Some(pmid) = reference.pmid.as_deref().and_then(normalize_id_label) {
+            return format!("PMID {}", pmid);
+        }
+        if let Some(source_id) = reference.source_id.as_deref().and_then(normalize_id_label) {
+            let source = reference
+                .source
+                .as_deref()
+                .map(|v| v.trim().to_uppercase())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "PAPER".to_string());
+            return format!("{} {}", source, source_id);
+        }
+    }
+    if let Some(id) = paper_key.strip_prefix("paper-") {
+        let short = id.chars().take(8).collect::<String>();
+        if !short.is_empty() {
+            return format!("Paper {}", short);
+        }
+    }
+    normalize_paper_title(paper_key).unwrap_or_else(|| truncate(paper_key, 56))
+}
+
+fn normalize_paper_title(raw: &str) -> Option<String> {
+    let title = raw.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let lower = title.to_ascii_lowercase();
+    if lower == "unknown-paper"
+        || lower == "unknown"
+        || lower == "untitled"
+        || lower == "paper"
+        || uuid::Uuid::parse_str(title).is_ok()
+    {
+        return None;
+    }
+    if let Some(rest) = lower.strip_prefix("paper-") {
+        if uuid::Uuid::parse_str(rest).is_ok() {
+            return None;
+        }
+    }
+    Some(title.to_string())
+}
+
+fn normalize_id_label(raw: &str) -> Option<String> {
+    let v = raw.trim();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v.to_string())
+    }
+}
+
+fn normalize_doi_for_link(raw: &str) -> Option<String> {
+    let mut doi = raw.trim().to_string();
+    if doi.is_empty() {
+        return None;
+    }
+    doi = doi
+        .trim_start_matches("https://doi.org/")
+        .trim_start_matches("http://doi.org/")
+        .trim_start_matches("doi.org/")
+        .trim_start_matches("doi:")
+        .trim()
+        .to_string();
+    if doi.is_empty() {
+        None
+    } else {
+        Some(doi)
+    }
+}
+
+fn build_paper_external_url(reference: &PaperReference) -> Option<String> {
+    if let Some(doi) = reference
+        .doi
+        .as_deref()
+        .and_then(normalize_doi_for_link)
+        .or_else(|| {
+            reference
+                .published_version_doi
+                .as_deref()
+                .and_then(normalize_doi_for_link)
+        })
+    {
+        return Some(format!("https://doi.org/{}", doi));
+    }
+    if let Some(pmid) = reference.pmid.as_deref().and_then(normalize_id_label) {
+        return Some(format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid));
+    }
+
+    let source = reference.source.as_deref().unwrap_or("").trim().to_ascii_lowercase();
+    let source_id = match reference.source_id.as_deref().and_then(normalize_id_label) {
+        Some(v) => v,
+        None => return None,
+    };
+
+    match source.as_str() {
+        "semanticscholar" | "semantic_scholar" => {
+            Some(format!("https://www.semanticscholar.org/paper/{}", source_id))
+        }
+        "arxiv" => Some(format!("https://arxiv.org/abs/{}", source_id)),
+        "europepmc" => {
+            if source_id.to_ascii_uppercase().starts_with("PMC") {
+                Some(format!(
+                    "https://europepmc.org/articles/{}",
+                    source_id.to_ascii_uppercase()
+                ))
+            } else {
+                None
+            }
+        }
+        "biorxiv" => Some(format!("https://doi.org/{}", source_id)),
+        _ => None,
+    }
 }
 
 fn kg_cache_get(key: &str, ttl: Duration) -> Option<String> {

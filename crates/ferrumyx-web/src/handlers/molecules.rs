@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::SharedState;
@@ -72,29 +73,79 @@ pub async fn molecules_page(
 
     let total_docking = docking_facts.len() as u64;
 
-    let mut rows: Vec<(String, String, String, f32, String)> = docking_facts
-        .iter()
-        .map(|f| {
+    #[derive(Default)]
+    struct DockAggregate {
+        raw_conf_sum: f64,
+        evidence_count: usize,
+        paper_ids: HashSet<uuid::Uuid>,
+        latest_at: Option<chrono::DateTime<chrono::Utc>>,
+    }
+
+    let mut grouped: HashMap<(String, String, String), DockAggregate> = HashMap::new();
+    for fact in &docking_facts {
+        let key = (
+            fact.subject_name.clone(),
+            fact.object_name.clone(),
+            fact.predicate.clone(),
+        );
+        let entry = grouped.entry(key).or_default();
+        entry.raw_conf_sum += fact.confidence as f64;
+        entry.evidence_count += 1;
+        if !fact.paper_id.is_nil() {
+            entry.paper_ids.insert(fact.paper_id);
+        }
+        let is_newer = entry
+            .latest_at
+            .map(|ts| fact.created_at > ts)
+            .unwrap_or(true);
+        if is_newer {
+            entry.latest_at = Some(fact.created_at);
+        }
+    }
+
+    let mut rows: Vec<(String, String, String, f32, usize, usize, String)> = grouped
+        .into_iter()
+        .map(|((subject, object, predicate), agg)| {
+            let mean_raw = if agg.evidence_count > 0 {
+                (agg.raw_conf_sum / agg.evidence_count as f64) as f32
+            } else {
+                0.0
+            };
+            let calibrated = calibrated_confidence(
+                &predicate,
+                mean_raw,
+                agg.evidence_count,
+                agg.paper_ids.len(),
+            );
             (
-                f.subject_name.clone(),
-                f.object_name.clone(),
-                f.predicate.clone(),
-                f.confidence,
-                f.created_at.to_rfc3339(),
+                subject,
+                object,
+                predicate,
+                calibrated,
+                agg.evidence_count,
+                agg.paper_ids.len(),
+                agg.latest_at
+                    .map(|ts| ts.to_rfc3339())
+                    .unwrap_or_else(|| "n/a".to_string()),
             )
         })
         .collect();
-    rows.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+    rows.sort_by(|a, b| {
+        b.3.partial_cmp(&a.3)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.4.cmp(&a.4))
+            .then_with(|| b.5.cmp(&a.5))
+    });
     rows.truncate(250);
 
     let result_rows: String = if rows.is_empty() {
-        r#"<tr><td colspan="5" class="text-center text-muted py-4">
+        r#"<tr><td colspan="7" class="text-center text-muted py-4">
             No docking-style KG facts available yet. Populate molecule pipeline outputs to render this table.
         </td></tr>"#
             .to_string()
     } else {
         rows.iter()
-            .map(|(subject, object, predicate, confidence, ts)| {
+            .map(|(subject, object, predicate, confidence, support, papers, ts)| {
                 let class = if *confidence >= 0.8 {
                     "success"
                 } else if *confidence >= 0.5 {
@@ -108,6 +159,8 @@ pub async fn molecules_page(
                 <td style="font-weight:700; color:var(--text-main);">{}</td>
                 <td><span class="badge badge-outline">{}</span></td>
                 <td style="color:var(--{});">{:.3}</td>
+                <td class="text-muted">{}</td>
+                <td class="text-muted">{}</td>
                 <td class="text-muted small">{}</td>
             </tr>"#,
                     html_escape(subject),
@@ -115,6 +168,8 @@ pub async fn molecules_page(
                     html_escape(predicate),
                     class,
                     confidence,
+                    support,
+                    papers,
                     ts
                 )
             })
@@ -175,6 +230,8 @@ pub async fn molecules_page(
                             <th>Target/Compound</th>
                             <th>Relation</th>
                             <th>Confidence</th>
+                            <th>Support Facts</th>
+                            <th>Evidence Papers</th>
                             <th>Recorded At</th>
                         </tr>
                     </thead>
@@ -202,6 +259,22 @@ fn is_dockingish_predicate(predicate: &str) -> bool {
         || p.contains("dock")
         || p.contains("affinity")
         || p.contains("ligand")
+}
+
+fn calibrated_confidence(predicate: &str, raw: f32, evidence_count: usize, paper_count: usize) -> f32 {
+    let mut c = raw.clamp(0.0, 1.0);
+    let p = predicate.to_ascii_lowercase();
+    if p == "mentions" || p == "associated_with" {
+        c *= 0.62;
+    } else if p.contains("bind") || p.contains("dock") || p.contains("inhib") {
+        c *= 1.04;
+    } else {
+        c *= 0.86;
+    }
+    let support = ((evidence_count as f32).ln_1p() / 12.0_f32.ln_1p()).clamp(0.0, 1.0);
+    let paper_support = ((paper_count as f32).ln_1p() / 8.0_f32.ln_1p()).clamp(0.0, 1.0);
+    let blended = (c * 0.68) + (support * 0.20) + (paper_support * 0.12);
+    blended.clamp(0.05, 0.995)
 }
 
 fn html_escape(s: &str) -> String {

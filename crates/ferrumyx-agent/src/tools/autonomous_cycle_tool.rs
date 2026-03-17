@@ -29,6 +29,46 @@ impl AutonomousCycleTool {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TerminationReason {
+    MaxCycles,
+    Plateau,
+}
+
+impl TerminationReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::MaxCycles => "max_cycles_reached",
+            Self::Plateau => "dynamic_plateau",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NoveltyPressureMode {
+    Off,
+    Auto,
+    Aggressive,
+}
+
+impl NoveltyPressureMode {
+    fn from_str(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "off" | "disabled" | "none" => Self::Off,
+            "aggressive" | "high" => Self::Aggressive,
+            _ => Self::Auto,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Auto => "auto",
+            Self::Aggressive => "aggressive",
+        }
+    }
+}
+
 fn config_path() -> PathBuf {
     std::env::var("FERRUMYX_CONFIG")
         .map(PathBuf::from)
@@ -197,7 +237,11 @@ fn resolve_default_embedding_cfg() -> Option<IngestionEmbeddingConfig> {
     })
 }
 
-fn build_source_list(profile_name: &str, include_semantic: bool) -> Vec<IngestionSourceSpec> {
+fn build_source_list(
+    profile_name: &str,
+    include_semantic: bool,
+    include_crossref: bool,
+) -> Vec<IngestionSourceSpec> {
     if profile_name == "full" {
         let mut sources = vec![
             IngestionSourceSpec::PubMed,
@@ -210,11 +254,17 @@ fn build_source_list(profile_name: &str, include_semantic: bool) -> Vec<Ingestio
         if include_semantic {
             sources.push(IngestionSourceSpec::SemanticScholar);
         }
+        if include_crossref {
+            sources.push(IngestionSourceSpec::CrossRef);
+        }
         sources
     } else {
         let mut sources = vec![IngestionSourceSpec::PubMed, IngestionSourceSpec::EuropePmc];
         if include_semantic {
             sources.push(IngestionSourceSpec::SemanticScholar);
+        }
+        if include_crossref {
+            sources.push(IngestionSourceSpec::CrossRef);
         }
         sources
     }
@@ -244,10 +294,18 @@ impl Tool for AutonomousCycleTool {
                     "type": "string",
                     "description": "Ingestion source profile: auto|fast|full (default: auto)"
                 },
-                "max_cycles": { "type": "integer", "description": "Maximum autonomous loops (default: 3, max: 6)" },
+                "max_cycles": { "type": "integer", "description": "Runtime safety cap on autonomous loops (default: 8, max: 20)" },
                 "improvement_threshold": {
                     "type": "number",
-                    "description": "Minimum top-score increase required to continue (default: 0.02)"
+                    "description": "Optional absolute top-score gain floor override (otherwise dynamic trend-based stop is used)"
+                },
+                "adaptive_broadening": {
+                    "type": "boolean",
+                    "description": "Automatically broaden search when low-yield cycles are detected (default: true)"
+                },
+                "novelty_pressure_mode": {
+                    "type": "string",
+                    "description": "Adapts retrieval when DB duplicate pressure is high: off|auto|aggressive (default: auto)"
                 },
                 "cycle_timeout_secs": {
                     "type": "integer",
@@ -298,13 +356,22 @@ impl Tool for AutonomousCycleTool {
             .get("max_cycles")
             .and_then(|v| v.as_u64())
             .map(|n| n as usize)
-            .unwrap_or(3)
-            .clamp(1, 6);
-        let improvement_threshold = params
+            .unwrap_or(8)
+            .clamp(1, 20);
+        let user_improvement_floor = params
             .get("improvement_threshold")
             .and_then(|v| v.as_f64())
-            .unwrap_or(0.02)
-            .clamp(0.0, 0.5);
+            .map(|v| v.clamp(0.0, 0.5));
+        let adaptive_broadening = params
+            .get("adaptive_broadening")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let novelty_pressure_mode = NoveltyPressureMode::from_str(
+            params
+                .get("novelty_pressure_mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("auto"),
+        );
         let cycle_timeout = Duration::from_secs(
             params
                 .get("cycle_timeout_secs")
@@ -341,30 +408,54 @@ impl Tool for AutonomousCycleTool {
 
         let mut cycles = Vec::new();
         let mut previous_top_score = 0.0_f64;
-        let sources = build_source_list(&source_profile, has_semantic_key);
+        let mut total_papers_inserted = 0usize;
+        let mut total_chunks_inserted = 0usize;
+        let mut total_typed_relations = 0usize;
+        let mut stagnant_cycles = 0usize;
+        let mut dynamic_patience = 2usize;
+        let mut low_yield_streak = 0usize;
+        let mut adaptive_max_results = tuned_max_results;
+        let mut adaptive_mutation = mutation.clone();
+        let mut active_source_profile = source_profile.clone();
+        let mut adaptive_include_crossref = false;
+        let mut adaptive_source_cache_enabled = true;
+        let mut adaptive_source_cache_ttl_secs = Some(30 * 60);
+        let mut novelty_pressure_activations = 0usize;
+        let mut max_score_gain = 0.0_f64;
+        let mut max_evidence_gain = 0.0_f64;
+        let mut max_novelty_ratio = 0.0_f64;
+        let mut termination_reason = TerminationReason::MaxCycles;
 
         for cycle in 1..=max_cycles {
+            let cycle_sources = build_source_list(
+                &active_source_profile,
+                has_semantic_key,
+                adaptive_include_crossref,
+            );
+            let cycle_max_results = adaptive_max_results;
+            let cycle_mutation = adaptive_mutation.clone();
+            let cycle_source_cache_enabled = adaptive_source_cache_enabled;
+            let cycle_source_cache_ttl_secs = adaptive_source_cache_ttl_secs;
             let ingest = timeout(
                 cycle_timeout,
                 run_ingestion(
                     IngestionJob {
                         gene: gene.clone(),
-                        mutation: mutation.clone(),
+                        mutation: cycle_mutation.clone(),
                         cancer_type: cancer_type.clone(),
-                        max_results: tuned_max_results,
-                        sources: sources.clone(),
+                        max_results: cycle_max_results,
+                        sources: cycle_sources,
                         pubmed_api_key: pubmed_api_key.clone(),
                         semantic_scholar_api_key: semantic_scholar_api_key.clone(),
                         unpaywall_email: unpaywall_email.clone(),
                         embedding_cfg: embedding_cfg.clone(),
                         enable_scihub_fallback: false,
-                        full_text_enabled: source_profile == "full"
-                            && profile.use_full_text_default(),
+                        full_text_enabled: active_source_profile == "full",
                         source_timeout_secs: Some(profile.source_timeout_secs()),
                         full_text_step_timeout_secs: Some(15),
                         full_text_prefetch_workers: None,
-                        source_cache_enabled: true,
-                        source_cache_ttl_secs: Some(30 * 60),
+                        source_cache_enabled: cycle_source_cache_enabled,
+                        source_cache_ttl_secs: cycle_source_cache_ttl_secs,
                     },
                     repo.clone(),
                     None,
@@ -378,9 +469,11 @@ impl Tool for AutonomousCycleTool {
                 ))
             })?;
 
+            // Recompute across discovered genes so autonomous runs can surface
+            // alternatives beyond the initial seed gene.
             let recomputed = timeout(
                 cycle_timeout,
-                ferrumyx_kg::compute_target_scores_for_gene_names(self.db.clone(), &[gene.clone()]),
+                ferrumyx_kg::compute_target_scores(self.db.clone()),
             )
             .await
             .map_err(|_| {
@@ -418,7 +511,7 @@ impl Tool for AutonomousCycleTool {
             let query = QueryRequest {
                 query_text: query_text.clone(),
                 cancer_code: cancer_code.clone(),
-                gene_symbol: Some(gene.clone()),
+                gene_symbol: None,
                 mutation: mutation.clone(),
                 max_results: 10,
             };
@@ -435,15 +528,106 @@ impl Tool for AutonomousCycleTool {
                 })?;
             let top_score = ranked.first().map(|r| r.composite_score).unwrap_or(0.0);
             let improvement = top_score - previous_top_score;
+            let score_gain = improvement.max(0.0);
+            let typed_relations_this_cycle = ingest.perf_telemetry.typed_relation_fact_count;
+            let novelty_ratio = if ingest.papers_found > 0 {
+                ingest.papers_inserted as f64 / ingest.papers_found as f64
+            } else {
+                0.0
+            };
+            let duplicate_pressure = if ingest.papers_found > 0 {
+                ingest.papers_duplicate as f64 / ingest.papers_found as f64
+            } else {
+                0.0
+            };
+            let evidence_gain = ingest.papers_inserted as f64
+                + (ingest.chunks_inserted as f64 * 0.20)
+                + (typed_relations_this_cycle as f64 * 0.05);
+            total_papers_inserted += ingest.papers_inserted;
+            total_chunks_inserted += ingest.chunks_inserted;
+            total_typed_relations += typed_relations_this_cycle;
+
+            if score_gain > max_score_gain {
+                max_score_gain = score_gain;
+            }
+            if evidence_gain > max_evidence_gain {
+                max_evidence_gain = evidence_gain;
+            }
+            if novelty_ratio > max_novelty_ratio {
+                max_novelty_ratio = novelty_ratio;
+            }
+
+            dynamic_patience = if max_novelty_ratio > 0.30 || max_evidence_gain > 8.0 {
+                3
+            } else {
+                2
+            };
+            let score_floor = user_improvement_floor.unwrap_or_else(|| {
+                if max_score_gain > 0.0 {
+                    max_score_gain * 0.15
+                } else {
+                    0.0
+                }
+            });
+            let evidence_floor = if max_evidence_gain > 0.0 {
+                max_evidence_gain * 0.20
+            } else {
+                0.0
+            };
+            let novelty_floor = if max_novelty_ratio > 0.0 {
+                max_novelty_ratio * 0.20
+            } else {
+                0.0
+            };
+            let stagnating_cycle = cycle > 1
+                && score_gain <= score_floor
+                && evidence_gain <= evidence_floor
+                && novelty_ratio <= novelty_floor;
+            if cycle > 1 {
+                if stagnating_cycle {
+                    stagnant_cycles += 1;
+                } else {
+                    stagnant_cycles = 0;
+                }
+            }
+            let cross_source_dedup_dropped =
+                ingest.papers_found_raw.saturating_sub(ingest.papers_found);
+            let novelty_pressure_score =
+                (duplicate_pressure * 1.25 - novelty_ratio).clamp(0.0, 1.0);
+            let novelty_pressure_triggered = match novelty_pressure_mode {
+                NoveltyPressureMode::Off => false,
+                NoveltyPressureMode::Auto => {
+                    duplicate_pressure >= 0.65
+                        && novelty_ratio <= 0.25
+                        && novelty_pressure_score >= 0.30
+                }
+                NoveltyPressureMode::Aggressive => {
+                    duplicate_pressure >= 0.50 && novelty_pressure_score >= 0.20
+                }
+            };
+            if novelty_pressure_triggered {
+                novelty_pressure_activations += 1;
+            }
 
             cycles.push(json!({
                 "cycle": cycle,
+                "search_scope": {
+                    "source_profile": active_source_profile,
+                    "mutation": cycle_mutation,
+                    "max_results": cycle_max_results,
+                    "source_cache_enabled": cycle_source_cache_enabled,
+                    "source_cache_ttl_secs": cycle_source_cache_ttl_secs
+                },
                 "ingestion": {
+                    "papers_found_raw": ingest.papers_found_raw,
                     "papers_found": ingest.papers_found,
+                    "cross_source_dedup_dropped": cross_source_dedup_dropped,
                     "papers_inserted": ingest.papers_inserted,
                     "papers_duplicate": ingest.papers_duplicate,
                     "chunks_inserted": ingest.chunks_inserted,
-                    "duration_ms": ingest.duration_ms
+                    "duration_ms": ingest.duration_ms,
+                    "typed_relation_facts": typed_relations_this_cycle,
+                    "unique_predicate_count": ingest.perf_telemetry.unique_predicate_count
                 },
                 "scoring": {
                     "target_scores_upserted": recomputed
@@ -454,10 +638,82 @@ impl Tool for AutonomousCycleTool {
                     "top_gene": ranked.first().map(|r| r.gene_symbol.clone()),
                     "result_count": ranked.len()
                 },
-                "improvement": improvement
+                "improvement": improvement,
+                "dynamic_plateau": {
+                    "score_gain": score_gain,
+                    "score_gain_floor": score_floor,
+                    "evidence_gain": evidence_gain,
+                    "evidence_gain_floor": evidence_floor,
+                    "novelty_ratio": novelty_ratio,
+                    "novelty_floor": novelty_floor,
+                    "stagnating_cycle": stagnating_cycle,
+                    "stagnant_cycles": stagnant_cycles,
+                    "patience": dynamic_patience
+                },
+                "novelty_pressure": {
+                    "mode": novelty_pressure_mode.as_str(),
+                    "duplicate_pressure": duplicate_pressure,
+                    "novelty_ratio": novelty_ratio,
+                    "pressure_score": novelty_pressure_score,
+                    "triggered": novelty_pressure_triggered
+                },
+                "stagnant_cycles": stagnant_cycles,
+                "evidence_totals": {
+                    "papers_inserted": total_papers_inserted,
+                    "chunks_inserted": total_chunks_inserted,
+                    "typed_relations": total_typed_relations
+                }
             }));
 
-            if cycle > 1 && improvement < improvement_threshold {
+            let low_yield = ingest.papers_inserted <= 1 && ingest.chunks_inserted <= 4;
+            if low_yield {
+                low_yield_streak += 1;
+            } else {
+                low_yield_streak = 0;
+            }
+
+            if adaptive_broadening {
+                if low_yield {
+                    adaptive_max_results = ((adaptive_max_results as f64) * 1.5).ceil() as usize;
+                    adaptive_max_results = adaptive_max_results.clamp(1, 400);
+                    if adaptive_mutation.is_some() && cycle >= 2 {
+                        adaptive_mutation = None;
+                    }
+                }
+                if low_yield_streak >= 2 && active_source_profile == "fast" {
+                    active_source_profile = "full".to_string();
+                }
+            }
+            if novelty_pressure_triggered {
+                adaptive_max_results = match novelty_pressure_mode {
+                    NoveltyPressureMode::Aggressive => {
+                        ((adaptive_max_results as f64) * 2.2).ceil() as usize
+                    }
+                    NoveltyPressureMode::Auto => {
+                        ((adaptive_max_results as f64) * 1.8).ceil() as usize
+                    }
+                    NoveltyPressureMode::Off => adaptive_max_results,
+                }
+                .clamp(1, 700);
+                adaptive_include_crossref = true;
+                adaptive_source_cache_enabled = false;
+                adaptive_source_cache_ttl_secs = Some(5 * 60);
+                if adaptive_mutation.is_some() {
+                    adaptive_mutation = None;
+                }
+                if active_source_profile == "fast" {
+                    active_source_profile = "full".to_string();
+                }
+            } else if adaptive_source_cache_enabled {
+                adaptive_source_cache_ttl_secs = Some(30 * 60);
+            } else {
+                // Restore cache after one forced-uncached cycle.
+                adaptive_source_cache_enabled = true;
+                adaptive_source_cache_ttl_secs = Some(30 * 60);
+            }
+
+            if cycle > 1 && stagnant_cycles >= dynamic_patience {
+                termination_reason = TerminationReason::Plateau;
                 break;
             }
             previous_top_score = top_score;
@@ -469,13 +725,32 @@ impl Tool for AutonomousCycleTool {
                 "gene": gene,
                 "cancer_type": cancer_type,
                 "cycles": cycles,
+                "termination_reason": termination_reason.as_str(),
+                "evidence_summary": {
+                    "papers_inserted_total": total_papers_inserted,
+                    "chunks_inserted_total": total_chunks_inserted,
+                    "typed_relations_total": total_typed_relations,
+                    "peak_score_gain": max_score_gain,
+                    "peak_evidence_gain": max_evidence_gain,
+                    "peak_novelty_ratio": max_novelty_ratio,
+                    "final_dynamic_patience": dynamic_patience
+                },
+                "adaptive_strategy": {
+                    "enabled": adaptive_broadening,
+                    "source_profile_initial": source_profile,
+                    "source_profile_final": active_source_profile,
+                    "user_improvement_floor": user_improvement_floor,
+                    "novelty_pressure_mode": novelty_pressure_mode.as_str(),
+                    "novelty_pressure_activations": novelty_pressure_activations,
+                    "crossref_enabled_final": adaptive_include_crossref
+                },
                 "runtime_profile": {
                     "ram_gb": profile.ram_gb,
                     "logical_cpus": profile.logical_cpus,
                     "has_nvidia_gpu": profile.has_nvidia_gpu,
                     "has_cuda_toolkit": profile.has_cuda_toolkit,
                     "cuda_install_attempted": profile.cuda_install_attempted,
-                    "source_profile": source_profile,
+                    "source_profile": active_source_profile,
                     "max_results_tuned": tuned_max_results,
                     "source_timeout_secs": profile.source_timeout_secs()
                 }

@@ -24,6 +24,16 @@ pub struct PaperNoveltySignal {
     pub citation_count: Option<u32>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct PaperReference {
+    pub title: String,
+    pub doi: Option<String>,
+    pub pmid: Option<String>,
+    pub source: Option<String>,
+    pub source_id: Option<String>,
+    pub published_version_doi: Option<String>,
+}
+
 impl PaperRepository {
     pub fn new(db: Arc<Database>) -> Self {
         Self { db }
@@ -336,6 +346,149 @@ impl PaperRepository {
                 if let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(i)) {
                     out.insert(id, titles_arr.value(i).to_string());
                 }
+            }
+        }
+
+        Ok(out)
+    }
+
+    /// Resolve paper title + identifier metadata for a list of IDs in one query.
+    pub async fn find_references_by_ids(
+        &self,
+        ids: &[uuid::Uuid],
+    ) -> Result<HashMap<uuid::Uuid, PaperReference>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq: Vec<uuid::Uuid> = ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_PAPERS)
+            .execute()
+            .await?;
+
+        let in_clause = uniq
+            .iter()
+            .map(|id| format!("'{}'", id))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut stream = table
+            .query()
+            .only_if(&format!("id IN ({})", in_clause))
+            .select(lancedb::query::Select::columns(&[
+                "id",
+                "title",
+                "doi",
+                "pmid",
+                "source",
+                "source_id",
+                "published_version_doi",
+            ]))
+            .execute()
+            .await?;
+
+        let mut out = HashMap::new();
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            let schema = batch.schema();
+            let id_idx = match schema.index_of("id") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let title_idx = match schema.index_of("title") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let doi_idx = match schema.index_of("doi") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let pmid_idx = match schema.index_of("pmid") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let source_idx = match schema.index_of("source") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let source_id_idx = match schema.index_of("source_id") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            let published_version_doi_idx = match schema.index_of("published_version_doi") {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+
+            let ids_arr = match batch.column(id_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let titles_arr = match batch
+                .column(title_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let doi_arr = match batch.column(doi_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let pmid_arr = match batch.column(pmid_idx).as_any().downcast_ref::<StringArray>() {
+                Some(a) => a,
+                None => continue,
+            };
+            let source_arr = match batch
+                .column(source_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let source_id_arr = match batch
+                .column(source_id_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            let published_version_doi_arr = match batch
+                .column(published_version_doi_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+
+            for row in 0..batch.num_rows() {
+                if ids_arr.is_null(row) || titles_arr.is_null(row) {
+                    continue;
+                }
+                let Ok(id) = uuid::Uuid::parse_str(ids_arr.value(row)) else {
+                    continue;
+                };
+                out.insert(
+                    id,
+                    PaperReference {
+                        title: titles_arr.value(row).to_string(),
+                        doi: opt_string_at(doi_arr, row),
+                        pmid: opt_string_at(pmid_arr, row),
+                        source: opt_string_at(source_arr, row),
+                        source_id: opt_string_at(source_id_arr, row),
+                        published_version_doi: opt_string_at(published_version_doi_arr, row),
+                    },
+                );
             }
         }
 
@@ -708,6 +861,18 @@ fn extract_citation_count(raw_json: &str) -> Option<u32> {
         .or_else(|| as_u32(&parsed["metrics"]["citation_count"]))
         .or_else(|| as_u32(&parsed["metrics"]["citationCount"]))
         .or_else(|| as_u32(&parsed["external"]["semantic_scholar"]["citationCount"]))
+}
+
+fn opt_string_at(array: &StringArray, idx: usize) -> Option<String> {
+    if idx >= array.len() || array.is_null(idx) {
+        return None;
+    }
+    let value = array.value(idx).trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 #[cfg(test)]

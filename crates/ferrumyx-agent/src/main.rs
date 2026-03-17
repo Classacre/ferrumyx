@@ -9,6 +9,7 @@ use std::time::Duration;
 
 mod config;
 mod tools;
+use ironclaw::llm::{CooldownConfig, FailoverProvider};
 use rig::client::CompletionClient;
 use rig::providers::anthropic::Client as AnthropicClient;
 use rig::providers::gemini::Client as GeminiClient;
@@ -23,58 +24,132 @@ async fn build_completion_model(
     config: &config::Config,
 ) -> anyhow::Result<Arc<dyn ironclaw::llm::LlmProvider>> {
     let mode = config.llm.mode.to_lowercase();
-    let default_backend = config.llm.default_backend.to_lowercase();
+    let local_only = mode == "local_only";
+    let default_backend = normalize_backend_name(&config.llm.default_backend);
+    let failover_order = resolve_failover_backend_order(&default_backend, &mode);
 
+    let mut providers: Vec<Arc<dyn ironclaw::llm::LlmProvider>> = Vec::new();
+    let mut provider_names: Vec<String> = Vec::new();
+    let mut seen = HashSet::new();
+
+    for backend in failover_order {
+        let backend = normalize_backend_name(&backend);
+        if !seen.insert(backend.clone()) {
+            continue;
+        }
+        if local_only && !matches!(backend.as_str(), "ollama" | "openai_compatible") {
+            continue;
+        }
+
+        let maybe_provider = match backend.as_str() {
+            "openai" => try_build_openai(config)?,
+            "anthropic" => try_build_anthropic(config)?,
+            "gemini" => try_build_gemini(config)?,
+            "openai_compatible" => try_build_openai_compatible(config, local_only)?,
+            "ollama" => try_build_ollama(config).await?,
+            other => {
+                tracing::warn!("Unknown LLM backend in failover order: {}", other);
+                None
+            }
+        };
+
+        if let Some(provider) = maybe_provider {
+            provider_names.push(backend);
+            providers.push(provider);
+        }
+    }
+
+    if providers.is_empty() {
+        anyhow::bail!("No LLM providers were successfully configured in ferrumyx.toml");
+    }
+    if providers.len() == 1 {
+        tracing::info!("Using single LLM backend: {}", provider_names[0]);
+        return Ok(providers.remove(0));
+    }
+
+    let cooldown_secs = env_u64("FERRUMYX_LLM_FAILOVER_COOLDOWN_SECS", 120).clamp(15, 3600);
+    let failure_threshold =
+        env_u64("FERRUMYX_LLM_FAILOVER_FAILURE_THRESHOLD", 2).clamp(1, 10) as u32;
+    let failover = FailoverProvider::with_cooldown(
+        providers,
+        CooldownConfig {
+            cooldown_duration: Duration::from_secs(cooldown_secs),
+            failure_threshold,
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("failed to build LLM failover chain: {e}"))?;
+    tracing::info!(
+        "LLM failover chain active: {} (cooldown={}s, threshold={})",
+        provider_names.join(" -> "),
+        cooldown_secs,
+        failure_threshold
+    );
+    Ok(Arc::new(failover))
+}
+
+fn normalize_backend_name(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "openai-compatible" | "compat" => "openai_compatible".to_string(),
+        "local" => "ollama".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn resolve_failover_backend_order(default_backend: &str, mode: &str) -> Vec<String> {
+    if let Ok(raw) = std::env::var("FERRUMYX_LLM_FAILOVER_ORDER") {
+        let mut parsed = Vec::new();
+        let mut seen = HashSet::new();
+        for token in raw.split(',').map(normalize_backend_name) {
+            if token.trim().is_empty() {
+                continue;
+            }
+            if seen.insert(token.clone()) {
+                parsed.push(token);
+            }
+        }
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+
+    let mut order = Vec::new();
     if mode == "local_only" || mode == "prefer_local" || default_backend == "ollama" {
-        if let Some(provider) = try_build_ollama(config).await? {
-            return Ok(provider);
+        order.push("ollama".to_string());
+        order.push("openai_compatible".to_string());
+        if mode != "local_only" {
+            order.extend(
+                ["openai", "anthropic", "gemini"]
+                    .iter()
+                    .map(|v| v.to_string()),
+            );
         }
+    } else {
+        order.push(default_backend.to_string());
+        order.extend(
+            [
+                "openai_compatible",
+                "openai",
+                "anthropic",
+                "gemini",
+                "ollama",
+            ]
+            .iter()
+            .map(|v| v.to_string()),
+        );
+    }
+    if !order.iter().any(|b| b == default_backend) {
+        order.insert(0, default_backend.to_string());
     }
 
-    if default_backend == "openai" {
-        if let Some(provider) = try_build_openai(config)? {
-            return Ok(provider);
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for backend in order {
+        let name = normalize_backend_name(&backend);
+        if seen.insert(name.clone()) {
+            out.push(name);
         }
     }
-    if default_backend == "anthropic" {
-        if let Some(provider) = try_build_anthropic(config)? {
-            return Ok(provider);
-        }
-    }
-    if default_backend == "gemini" {
-        if let Some(provider) = try_build_gemini(config)? {
-            return Ok(provider);
-        }
-    }
-    if default_backend == "openai_compatible" {
-        if let Some(provider) = try_build_openai_compatible(config)? {
-            return Ok(provider);
-        }
-    }
-    if default_backend == "ollama" {
-        if let Some(provider) = try_build_ollama(config).await? {
-            return Ok(provider);
-        }
-    }
-
-    // Fallback order when selected backend is unavailable.
-    if let Some(provider) = try_build_openai(config)? {
-        return Ok(provider);
-    }
-    if let Some(provider) = try_build_anthropic(config)? {
-        return Ok(provider);
-    }
-    if let Some(provider) = try_build_gemini(config)? {
-        return Ok(provider);
-    }
-    if let Some(provider) = try_build_openai_compatible(config)? {
-        return Ok(provider);
-    }
-    if let Some(provider) = try_build_ollama(config).await? {
-        return Ok(provider);
-    }
-
-    anyhow::bail!("No LLM providers were successfully configured in ferrumyx.toml")
+    out
 }
 
 fn try_build_openai(
@@ -142,6 +217,7 @@ fn try_build_gemini(
 
 fn try_build_openai_compatible(
     config: &config::Config,
+    local_only: bool,
 ) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
     if let Some(ref compat) = config.llm.openai_compatible {
         let key = if compat.api_key.is_empty() {
@@ -149,6 +225,13 @@ fn try_build_openai_compatible(
         } else {
             compat.api_key.clone()
         };
+        if local_only && !is_local_base_url(&compat.base_url) {
+            tracing::warn!(
+                "Skipping OpenAI-compatible backend {} in local_only mode (non-local base URL)",
+                compat.base_url
+            );
+            return Ok(None);
+        }
         // Do not use remote OpenAI-compatible providers without a key.
         if key.is_empty() && !is_local_base_url(&compat.base_url) {
             tracing::warn!(
@@ -734,6 +817,17 @@ async fn async_main() -> anyhow::Result<()> {
     tool_registry.register_sync(Arc::new(
         tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone()),
     ));
+    tool_registry.register_sync(Arc::new(tools::lab_planner_tool::LabPlannerTool::new()));
+    tool_registry.register_sync(Arc::new(tools::lab_retriever_tool::LabRetrieverTool::new(
+        db.clone(),
+    )));
+    tool_registry.register_sync(Arc::new(tools::lab_validator_tool::LabValidatorTool::new(
+        db.clone(),
+    )));
+    tool_registry.register_sync(Arc::new(
+        tools::lab_autoresearch_tool::LabAutoresearchTool::new(db.clone()),
+    ));
+    tool_registry.register_sync(Arc::new(tools::lab_run_status_tool::LabRunStatusTool::new()));
     tool_registry.register_sync(Arc::new(
         tools::system_command_tool::SystemCommandTool::new(),
     ));

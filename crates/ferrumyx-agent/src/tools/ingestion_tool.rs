@@ -250,13 +250,11 @@ impl Default for IngestionRuntimeDefaults {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(4)
             .clamp(1, 16),
-            predicate_coverage_min_unique: std::env::var(
-                "FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE",
-            )
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(6)
-            .clamp(2, 64),
+            predicate_coverage_min_unique: std::env::var("FERRUMYX_INGESTION_PREDICATE_MIN_UNIQUE")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(6)
+                .clamp(2, 64),
             predicate_coverage_max_generic_share: std::env::var(
                 "FERRUMYX_INGESTION_PREDICATE_MAX_GENERIC_SHARE",
             )
@@ -589,10 +587,9 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         defaults.heavy_lane_max_inflight as u64,
     )
     .clamp(1, 64) as usize;
-    defaults.validation_mode =
-        toml_string(&root, &["ingestion", "performance", "validation_mode"])
-            .unwrap_or_else(|| defaults.validation_mode.clone())
-            .to_lowercase();
+    defaults.validation_mode = toml_string(&root, &["ingestion", "performance", "validation_mode"])
+        .unwrap_or_else(|| defaults.validation_mode.clone())
+        .to_lowercase();
     defaults.pdf_parse_fallback_enabled = toml_bool(
         &root,
         &["ingestion", "performance", "pdf_parse_fallback_enabled"],
@@ -640,7 +637,11 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
     .clamp(2, 64) as usize;
     defaults.predicate_coverage_max_generic_share = toml_f64(
         &root,
-        &["ingestion", "performance", "predicate_coverage_max_generic_share"],
+        &[
+            "ingestion",
+            "performance",
+            "predicate_coverage_max_generic_share",
+        ],
         defaults.predicate_coverage_max_generic_share,
     )
     .clamp(0.05, 0.95);

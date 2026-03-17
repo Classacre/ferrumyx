@@ -80,6 +80,29 @@ impl IngestionRepository {
             }
         }
 
+        // When identifier metadata is missing, use a normalized title-key
+        // guard to suppress repeated cross-source copies of the same paper.
+        if meta.doi.is_none() && meta.pmid.is_none() {
+            if let Some(incoming_title_key) = canonical_title_identity(&meta.title) {
+                let recent = paper_repo.list(0, 1_500).await.unwrap_or_default();
+                if let Some(existing) = recent.iter().find(|p| {
+                    canonical_title_identity(&p.title)
+                        .is_some_and(|key| title_identity_match(&incoming_title_key, &key))
+                }) {
+                    tracing::debug!(
+                        paper_id = %existing.id,
+                        title = %meta.title,
+                        "Paper deduplicated by canonical title identity"
+                    );
+                    return Ok(PaperUpsertResult {
+                        paper_id: existing.id,
+                        was_new: false,
+                        duplicate_of: Some(existing.id),
+                    });
+                }
+            }
+        }
+
         // Optional Stage 2/3 lexical fuzzy dedup. Disabled by default because
         // it can over-collapse distinct papers at large ingestion scale.
         let strict_fuzzy_dedup = std::env::var("FERRUMYX_STRICT_FUZZY_DEDUP")
@@ -444,4 +467,54 @@ fn paper_to_metadata(paper: &Paper) -> PaperMetadata {
         open_access: paper.open_access,
         full_text_url: None,
     }
+}
+
+fn canonical_title_identity(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut normalized = String::with_capacity(trimmed.len());
+    let mut prev_space = false;
+    for ch in trimmed.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            ch.to_ascii_lowercase()
+        } else {
+            ' '
+        };
+        if mapped == ' ' {
+            if prev_space {
+                continue;
+            }
+            prev_space = true;
+            normalized.push(' ');
+        } else {
+            prev_space = false;
+            normalized.push(mapped);
+        }
+    }
+    let stop_words = [
+        "a", "an", "and", "the", "of", "for", "to", "in", "on", "by", "with", "from", "against",
+        "at", "as", "into",
+    ];
+    let compact: Vec<&str> = normalized
+        .split_whitespace()
+        .filter(|t| t.len() > 1 && !stop_words.contains(t))
+        .take(36)
+        .collect();
+    if compact.is_empty() {
+        None
+    } else {
+        Some(compact.join(" "))
+    }
+}
+
+fn title_identity_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    if a.len() >= 42 && b.len() >= 42 && (a.starts_with(b) || b.starts_with(a)) {
+        return true;
+    }
+    strsim::jaro_winkler(a, b) >= 0.992
 }

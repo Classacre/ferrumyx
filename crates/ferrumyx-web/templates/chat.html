@@ -118,6 +118,111 @@
             gap: 10px;
         }
 
+        .chat-topbar-left,
+        .chat-topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .chat-topbar-right {
+            margin-left: auto;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .lab-run-hint {
+            font-size: 0.74rem;
+            letter-spacing: 0.03em;
+            color: #8db8ff;
+            background: rgba(44, 71, 117, 0.28);
+            border: 1px solid rgba(97, 143, 212, 0.4);
+            border-radius: 999px;
+            padding: 3px 10px;
+            white-space: nowrap;
+        }
+
+        .lab-monitor-shell {
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(13, 21, 34, 0.84);
+            padding: 10px 12px;
+            display: none;
+        }
+
+        .lab-monitor-shell.open {
+            display: block;
+        }
+
+        .lab-monitor-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .lab-monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin: 8px 0 10px;
+        }
+
+        .lab-kpi {
+            border: 1px solid rgba(96, 125, 170, 0.34);
+            background: rgba(18, 28, 45, 0.75);
+            border-radius: 9px;
+            padding: 8px;
+        }
+
+        .lab-kpi .kpi-label {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .lab-kpi .kpi-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.96rem;
+            margin-top: 3px;
+        }
+
+        .lab-monitor-log {
+            border: 1px solid rgba(93, 120, 161, 0.3);
+            background: rgba(9, 15, 26, 0.88);
+            border-radius: 9px;
+            padding: 8px;
+            max-height: 138px;
+            overflow-y: auto;
+        }
+
+        .lab-monitor-log div {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            margin-bottom: 4px;
+        }
+
+        .lab-monitor-log div:last-child {
+            margin-bottom: 0;
+        }
+
+        .lab-monitor-empty {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            padding: 6px 0;
+        }
+
+        .lab-run-select {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
         .chat-history {
             flex: 1;
             overflow-y: auto;
@@ -241,8 +346,25 @@
 
                 <div class="chat-main">
                     <div class="chat-topbar">
-                        <button id="threadToggleBtn" class="btn btn-secondary" type="button">Threads</button>
-                        <div class="text-muted" id="threadStatus">No active thread</div>
+                        <div class="chat-topbar-left">
+                            <button id="threadToggleBtn" class="btn btn-secondary" type="button">Threads</button>
+                            <button id="labMonitorToggleBtn" class="btn btn-secondary" type="button">Lab Monitor</button>
+                            <button id="labMonitorClearBtn" class="btn btn-secondary" type="button">Clear</button>
+                        </div>
+                        <div class="chat-topbar-right">
+                            <div class="text-muted" id="threadStatus">No active thread</div>
+                            <div class="lab-run-hint" id="labMonitorRunHint">No run selected</div>
+                        </div>
+                    </div>
+
+                    <div id="labMonitorShell" class="lab-monitor-shell">
+                        <div class="lab-monitor-head">
+                            <strong>Live Lab Run Monitor</strong>
+                            <div class="text-muted" id="labMonitorUpdated">Awaiting run detection</div>
+                        </div>
+                        <div id="labMonitorBody" class="lab-monitor-empty">
+                            Ask the agent to start an autonomous lab run, then this panel will auto-track it.
+                        </div>
                     </div>
 
                     <div class="chat-history" id="chatHistory">
@@ -270,11 +392,27 @@
         const threadDrawer = document.getElementById('threadDrawer');
         const threadListEl = document.getElementById('threadList');
         const threadStatusEl = document.getElementById('threadStatus');
+        const labMonitorShell = document.getElementById('labMonitorShell');
+        const labMonitorBody = document.getElementById('labMonitorBody');
+        const labMonitorUpdated = document.getElementById('labMonitorUpdated');
+        const labMonitorRunHint = document.getElementById('labMonitorRunHint');
 
         let currentThreadId = null;
         let chatEventSource = null;
         let activeReply = null;
         let assistantThreadId = null;
+        let autoThreadBootstrapAttempted = false;
+        let autoThreadBootstrapInFlight = false;
+        let historyPollTimer = null;
+        let historyPollBusy = false;
+        let historyPollMarker = null;
+        let historyPollThreadId = null;
+        let historyPollDeadlineMs = 0;
+        let labMonitorOpen = false;
+        let labMonitorPollTimer = null;
+        let labMonitorBusy = false;
+        let labMonitorRunId = localStorage.getItem('ferrumyx_lab_monitor_run_id') || null;
+        const labMonitorEvents = [];
 
         const hiddenThreadsKey = 'ferrumyx_hidden_threads_v1';
         const hiddenThreads = new Set(JSON.parse(localStorage.getItem(hiddenThreadsKey) || '[]'));
@@ -331,7 +469,224 @@
         function setMessageContent(messageEl, text, { markdown = false } = {}) {
             if (!messageEl) return;
             messageEl.innerHTML = markdown ? renderMarkdown(text) : escapeHtml(text).replace(/\n/g, '<br>');
+            const detected = extractLabRunId(text);
+            if (detected) setLabMonitorRun(detected, { silent: true });
             chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function extractLabRunId(text) {
+            const match = String(text || '').match(/\blab-[a-f0-9]{32}\b/i);
+            return match ? match[0] : null;
+        }
+
+        function formatMaybeNumber(value, digits = 3) {
+            if (value === null || value === undefined || value === '') return 'n/a';
+            const n = Number(value);
+            if (!Number.isFinite(n)) return String(value);
+            return n.toFixed(digits).replace(/\.?0+$/, '');
+        }
+
+        function formatPct(value) {
+            if (value === null || value === undefined) return 'n/a';
+            const n = Number(value);
+            if (!Number.isFinite(n)) return 'n/a';
+            return `${(n * 100).toFixed(1)}%`;
+        }
+
+        function monitorRelativeTime(iso) {
+            if (!iso) return 'n/a';
+            const ms = Date.now() - new Date(iso).getTime();
+            if (!Number.isFinite(ms)) return 'n/a';
+            const secs = Math.max(0, Math.floor(ms / 1000));
+            if (secs < 60) return `${secs}s ago`;
+            const mins = Math.floor(secs / 60);
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            return `${Math.floor(hrs / 24)}d ago`;
+        }
+
+        function pushLabMonitorEvent(text) {
+            if (!text) return;
+            labMonitorEvents.unshift({
+                at: new Date().toISOString(),
+                text: String(text)
+            });
+            if (labMonitorEvents.length > 18) labMonitorEvents.length = 18;
+        }
+
+        function setLabMonitorRun(runId, options = {}) {
+            const trimmed = String(runId || '').trim();
+            if (!trimmed) return;
+            const changed = trimmed !== labMonitorRunId;
+            labMonitorRunId = trimmed;
+            localStorage.setItem('ferrumyx_lab_monitor_run_id', trimmed);
+            labMonitorRunHint.textContent = `Tracking ${trimmed.slice(0, 12)}...`;
+            if (changed && !options.silent) {
+                pushLabMonitorEvent(`Tracking run ${trimmed}`);
+            }
+            if (labMonitorOpen) startLabMonitorPolling();
+        }
+
+        function clearLabMonitorRun() {
+            labMonitorRunId = null;
+            localStorage.removeItem('ferrumyx_lab_monitor_run_id');
+            labMonitorRunHint.textContent = 'No run selected';
+            labMonitorUpdated.textContent = 'Awaiting run detection';
+            labMonitorBody.innerHTML = '<div class="lab-monitor-empty">No active run selected. The monitor can still show recent runs below.</div>';
+        }
+
+        function collectRunSummary(run) {
+            const retrieval = Array.isArray(run.retrieval_history) ? run.retrieval_history : [];
+            const validation = Array.isArray(run.validation_history) ? run.validation_history : [];
+            const lastRetrieval = retrieval.length ? retrieval[retrieval.length - 1] : null;
+            const lastValidation = validation.length ? validation[validation.length - 1] : null;
+            const totals = retrieval.reduce((acc, r) => {
+                acc.papers += Number(r.papers_inserted || 0);
+                acc.chunks += Number(r.chunks_inserted || 0);
+                acc.duplicates += Number(r.papers_duplicate || 0);
+                return acc;
+            }, { papers: 0, chunks: 0, duplicates: 0 });
+            return { retrieval, validation, lastRetrieval, lastValidation, totals };
+        }
+
+        function renderRecentRunSelector(runs) {
+            if (!Array.isArray(runs) || !runs.length) return '';
+            const items = runs.slice(0, 8).map((run) => {
+                const id = String(run.run_id || '');
+                const stage = escapeHtml(run.stage || 'unknown');
+                const label = escapeHtml(id.slice(0, 12) || 'run');
+                return `<button class="btn btn-secondary monitor-run-btn" type="button" data-run-id="${escapeHtml(id)}">${label} (${stage})</button>`;
+            }).join('');
+            return `<div class="lab-run-select">${items}</div>`;
+        }
+
+        function attachRunSelectorHandlers() {
+            labMonitorBody.querySelectorAll('.monitor-run-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const runId = btn.getAttribute('data-run-id');
+                    if (runId) setLabMonitorRun(runId);
+                    if (!labMonitorOpen) {
+                        labMonitorOpen = true;
+                        labMonitorShell.classList.add('open');
+                    }
+                    startLabMonitorPolling();
+                });
+            });
+        }
+
+        function renderLabMonitorRun(run, payloadUpdatedAt = null) {
+            if (!run) {
+                labMonitorBody.innerHTML = '<div class="lab-monitor-empty">Run not found yet. It may still be initializing.</div>';
+                return;
+            }
+            const summary = collectRunSummary(run);
+            const topTarget = summary.lastValidation && summary.lastValidation.top_target
+                ? String(summary.lastValidation.top_target)
+                : 'n/a';
+            const topScore = summary.lastValidation ? formatMaybeNumber(summary.lastValidation.top_score, 4) : 'n/a';
+            const nextAction = run.next_action || 'n/a';
+            const stage = run.stage || 'unknown';
+            const lastUpdated = run.updated_at || payloadUpdatedAt;
+            labMonitorUpdated.textContent = `Updated ${monitorRelativeTime(lastUpdated)}`;
+            labMonitorRunHint.textContent = `Tracking ${String(run.run_id || '').slice(0, 12)}...`;
+
+            const eventsHtml = labMonitorEvents.length
+                ? labMonitorEvents.slice(0, 10).map((ev) => `<div>[${escapeHtml(monitorRelativeTime(ev.at))}] ${escapeHtml(ev.text)}</div>`).join('')
+                : '<div>No monitor events yet.</div>';
+
+            labMonitorBody.innerHTML = `
+                <div class="text-muted">Run: <code>${escapeHtml(run.run_id || 'n/a')}</code> | Stage: <strong>${escapeHtml(stage)}</strong> | Next: <strong>${escapeHtml(String(nextAction))}</strong></div>
+                <div class="lab-monitor-grid">
+                    <div class="lab-kpi"><div class="kpi-label">Retrieval Cycles</div><div class="kpi-value">${summary.retrieval.length}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Validation Cycles</div><div class="kpi-value">${summary.validation.length}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Papers Added</div><div class="kpi-value">${summary.totals.papers}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Chunks Added</div><div class="kpi-value">${summary.totals.chunks}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Duplicates</div><div class="kpi-value">${summary.totals.duplicates}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Top Target</div><div class="kpi-value">${escapeHtml(topTarget)}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Top Score</div><div class="kpi-value">${topScore}</div></div>
+                    <div class="lab-kpi"><div class="kpi-label">Novelty Ratio</div><div class="kpi-value">${formatPct(summary.lastRetrieval ? summary.lastRetrieval.novelty_ratio : null)}</div></div>
+                </div>
+                <div class="lab-monitor-log">${eventsHtml}</div>
+            `;
+            attachRunSelectorHandlers();
+        }
+
+        function renderLabMonitorList(payload) {
+            const runs = Array.isArray(payload.runs) ? payload.runs : [];
+            labMonitorUpdated.textContent = payload.updated_at ? `Updated ${monitorRelativeTime(payload.updated_at)}` : 'No state file yet';
+            if (!runs.length) {
+                labMonitorBody.innerHTML = '<div class="lab-monitor-empty">No lab runs tracked yet.</div>';
+                return;
+            }
+            const top = runs[0];
+            const listHtml = runs.slice(0, 6).map((run) => {
+                const id = escapeHtml(String(run.run_id || '').slice(0, 14));
+                const stage = escapeHtml(run.stage || 'unknown');
+                const updated = escapeHtml(monitorRelativeTime(run.updated_at));
+                return `<div>${id} | stage=${stage} | ${updated}</div>`;
+            }).join('');
+            labMonitorBody.innerHTML = `
+                <div class="text-muted">Recent runs:</div>
+                <div class="lab-monitor-log">${listHtml}</div>
+                ${renderRecentRunSelector(runs)}
+            `;
+            attachRunSelectorHandlers();
+            if (!labMonitorRunId && top && top.run_id) {
+                labMonitorRunHint.textContent = `Recent: ${String(top.run_id).slice(0, 12)}...`;
+            }
+        }
+
+        async function fetchLabMonitorPayload() {
+            const url = labMonitorRunId
+                ? '/api/chat/lab-monitor?run_id=' + encodeURIComponent(labMonitorRunId)
+                : '/api/chat/lab-monitor?limit=8';
+            return await fetchJson(url);
+        }
+
+        function stopLabMonitorPolling() {
+            if (labMonitorPollTimer) {
+                clearInterval(labMonitorPollTimer);
+                labMonitorPollTimer = null;
+            }
+            labMonitorBusy = false;
+        }
+
+        async function pollLabMonitorOnce() {
+            if (labMonitorBusy) return;
+            labMonitorBusy = true;
+            try {
+                const payload = await fetchLabMonitorPayload();
+                if (labMonitorRunId && payload && payload.found) {
+                    renderLabMonitorRun(payload.run, payload.updated_at);
+                } else if (labMonitorRunId && payload && !payload.found) {
+                    renderLabMonitorList(await fetchJson('/api/chat/lab-monitor?limit=8'));
+                } else {
+                    renderLabMonitorList(payload || {});
+                }
+            } catch (_) {
+                labMonitorBody.innerHTML = '<div class="lab-monitor-empty">Unable to read lab run monitor state.</div>';
+            } finally {
+                labMonitorBusy = false;
+            }
+        }
+
+        function startLabMonitorPolling() {
+            stopLabMonitorPolling();
+            pollLabMonitorOnce();
+            labMonitorPollTimer = setInterval(pollLabMonitorOnce, 3500);
+        }
+
+        function detectRunIdFromPayload(payload) {
+            if (!payload || typeof payload !== 'object') return;
+            const candidates = [payload.run_id, payload.content, payload.preview, payload.message, payload.output];
+            for (const candidate of candidates) {
+                const detected = extractLabRunId(candidate);
+                if (detected) {
+                    setLabMonitorRun(detected, { silent: true });
+                    return;
+                }
+            }
         }
 
         function stopEventStream() {
@@ -339,6 +694,68 @@
                 chatEventSource.close();
                 chatEventSource = null;
             }
+        }
+
+        function stopHistoryPoll() {
+            if (historyPollTimer) {
+                clearInterval(historyPollTimer);
+                historyPollTimer = null;
+            }
+            historyPollBusy = false;
+            historyPollMarker = null;
+            historyPollThreadId = null;
+            historyPollDeadlineMs = 0;
+        }
+
+        function startHistoryPoll(threadId, marker, targetBodyEl) {
+            stopHistoryPoll();
+            if (!threadId || !targetBodyEl) return;
+            historyPollThreadId = threadId;
+            historyPollMarker = Number.isFinite(Number(marker)) ? Number(marker) : null;
+            historyPollDeadlineMs = Date.now() + (75 * 60 * 1000);
+
+            historyPollTimer = setInterval(async () => {
+                if (historyPollBusy) return;
+                if (!activeReply || activeReply.done) {
+                    stopHistoryPoll();
+                    return;
+                }
+                if (Date.now() > historyPollDeadlineMs) {
+                    appendActivity('Run still executing. Continue monitoring this thread for updates.');
+                    sendBtn.disabled = false;
+                    stopHistoryPoll();
+                    return;
+                }
+
+                historyPollBusy = true;
+                try {
+                    const data = await fetchJson('/api/chat/history?thread_id=' + encodeURIComponent(threadId) + '&limit=80');
+                    const turns = Array.isArray(data.turns) ? data.turns : [];
+                    let match = null;
+                    if (Number.isFinite(historyPollMarker)) {
+                        match = [...turns].reverse().find(t =>
+                            Number(t.turn_number || 0) > historyPollMarker &&
+                            t.response && String(t.response).trim().length > 0
+                        );
+                    }
+                    if (!match && !Number.isFinite(historyPollMarker)) {
+                        match = [...turns].reverse().find(t => t.response && String(t.response).trim().length > 0);
+                    }
+
+                    if (match && match.response) {
+                        setMessageContent(targetBodyEl, String(match.response), { markdown: true });
+                        activeReply.done = true;
+                        sendBtn.disabled = false;
+                        stopEventStream();
+                        stopHistoryPoll();
+                        loadThreads();
+                    }
+                } catch (_) {
+                    // Ignore transient polling errors while async runs are active.
+                } finally {
+                    historyPollBusy = false;
+                }
+            }, 2500);
         }
 
         function toolLink(name) {
@@ -360,6 +777,10 @@
                 ? `${escapeHtml(text)} <a href="${link}">Open page</a>`
                 : escapeHtml(text);
             appendMessage('activity', html, { rawHtml: true });
+            const detected = extractLabRunId(text);
+            if (detected) setLabMonitorRun(detected, { silent: true });
+            pushLabMonitorEvent(toolName ? `${toolName}: ${text}` : text);
+            if (labMonitorOpen) pollLabMonitorOnce();
         }
 
         async function fetchJson(url, options = {}) {
@@ -384,6 +805,17 @@
             return String(t.id || '').slice(0, 8) || 'New thread';
         }
 
+        async function ensureThreadBootstrap() {
+            if (currentThreadId || autoThreadBootstrapInFlight || autoThreadBootstrapAttempted) return;
+            autoThreadBootstrapInFlight = true;
+            autoThreadBootstrapAttempted = true;
+            try {
+                await createThread({ silent: true });
+            } finally {
+                autoThreadBootstrapInFlight = false;
+            }
+        }
+
         async function loadThreads() {
             try {
                 const data = await fetchJson('/api/chat/threads');
@@ -396,8 +828,10 @@
                 for (const t of regular) all.push(t);
 
                 threadListEl.innerHTML = '';
+                const visibleThreadIds = [];
                 for (const thread of all) {
                     if (hiddenThreads.has(thread.id)) continue;
+                    visibleThreadIds.push(thread.id);
                     const item = document.createElement('div');
                     item.className = 'thread-item' + (thread.id === currentThreadId ? ' active' : '');
 
@@ -438,8 +872,13 @@
                 }
 
                 if (!currentThreadId) {
-                    currentThreadId = assistantThreadId || regular[0]?.id || null;
+                    const assistantVisible = assistantThreadId && !hiddenThreads.has(assistantThreadId);
+                    currentThreadId = assistantVisible ? assistantThreadId : (visibleThreadIds[0] || null);
                     if (currentThreadId) loadHistory(currentThreadId);
+                }
+
+                if (!currentThreadId) {
+                    await ensureThreadBootstrap();
                 }
                 threadStatusEl.textContent = currentThreadId ? `Thread: ${String(currentThreadId).slice(0, 8)}` : 'No active thread';
             } catch (_) {
@@ -447,15 +886,21 @@
             }
         }
 
-        async function createThread() {
+        async function createThread(options = {}) {
+            const silent = !!options.silent;
             try {
                 const created = await fetchJson('/api/chat/thread/new', { method: 'POST' });
                 currentThreadId = created.id || null;
-                chatHistory.innerHTML = '';
-                appendMessage('agent', 'New thread ready. What should we run next?');
+                if (currentThreadId) autoThreadBootstrapAttempted = true;
+                if (!silent) {
+                    chatHistory.innerHTML = '';
+                    appendMessage('agent', 'New thread ready. What should we run next?');
+                }
                 await loadThreads();
             } catch (err) {
-                appendActivity(`Failed to create thread: ${err.message || 'unknown error'}`);
+                if (!silent) {
+                    appendActivity(`Failed to create thread: ${err.message || 'unknown error'}`);
+                }
             }
         }
 
@@ -497,6 +942,7 @@
             chatEventSource.addEventListener('stream_chunk', (evt) => {
                 const payload = parse(evt);
                 if (!activeReply || !isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 activeReply.buffer += String(payload.content || '');
                 setMessageContent(activeReply.bodyEl, activeReply.buffer, { markdown: true });
             });
@@ -504,7 +950,9 @@
             chatEventSource.addEventListener('response', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                if (historyPollTimer) return;
                 const finalText = String(payload?.content || activeReply?.buffer || '');
+                detectRunIdFromPayload(payload);
                 if (activeReply) {
                     setMessageContent(activeReply.bodyEl, finalText, { markdown: true });
                     activeReply.done = true;
@@ -519,12 +967,14 @@
             chatEventSource.addEventListener('thinking', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 appendActivity(payload?.message || 'Thinking...');
             });
 
             chatEventSource.addEventListener('status', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 if (payload?.message) appendActivity(`Status: ${payload.message}`);
                 if (payload?.message === 'Done' || payload?.message === 'Awaiting approval') sendBtn.disabled = false;
             });
@@ -532,6 +982,7 @@
             chatEventSource.addEventListener('tool_started', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 const tool = payload?.name || 'tool';
                 appendActivity(`Running tool: ${tool}`, tool);
             });
@@ -539,6 +990,7 @@
             chatEventSource.addEventListener('tool_completed', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 const tool = payload?.name || 'tool';
                 if (payload?.success) appendActivity(`Tool completed: ${tool}`, tool);
                 else appendActivity(`Tool failed: ${tool}${payload?.error ? ` — ${payload.error}` : ''}`, tool);
@@ -547,6 +999,7 @@
             chatEventSource.addEventListener('tool_result', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 const tool = payload?.name || 'tool';
                 const preview = payload?.preview ? ` (${String(payload.preview).slice(0, 140)})` : '';
                 appendActivity(`Tool output: ${tool}${preview}`, tool);
@@ -555,6 +1008,7 @@
             chatEventSource.addEventListener('error', (evt) => {
                 const payload = parse(evt);
                 if (!isCurrent(payload)) return;
+                detectRunIdFromPayload(payload);
                 const msg = payload?.message || 'Agent stream error.';
                 appendActivity(msg);
                 sendBtn.disabled = false;
@@ -573,6 +1027,13 @@
         async function sendMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
+            if (!currentThreadId) {
+                await ensureThreadBootstrap();
+                if (!currentThreadId) {
+                    appendActivity('No active thread available. Please create a thread and retry.');
+                    return;
+                }
+            }
 
             startEventStream();
             appendMessage('user', text);
@@ -605,17 +1066,26 @@
                     setMessageContent(agentMessage.body, data.response, { markdown: true });
                     activeReply.done = true;
                     sendBtn.disabled = false;
+                    stopHistoryPoll();
                     setTimeout(stopEventStream, 350);
                 } else if (data.status !== 'accepted' && !data.thread_id) {
                     setMessageContent(agentMessage.body, data.response || 'No response from agent.');
                     activeReply.done = true;
                     sendBtn.disabled = false;
+                    stopHistoryPoll();
                     setTimeout(stopEventStream, 350);
+                } else if (data.status === 'accepted') {
+                    startHistoryPoll(
+                        data.thread_id || currentThreadId,
+                        data.before_turn_marker,
+                        agentMessage.body
+                    );
                 }
             } catch (_) {
                 setMessageContent(agentMessage.body, 'Network error.');
                 activeReply.done = true;
                 sendBtn.disabled = false;
+                stopHistoryPoll();
                 setTimeout(stopEventStream, 350);
             }
             chatInput.focus();
@@ -625,6 +1095,22 @@
             threadDrawer.classList.toggle('open');
         });
         document.getElementById('newThreadBtn').addEventListener('click', createThread);
+        document.getElementById('labMonitorToggleBtn').addEventListener('click', () => {
+            labMonitorOpen = !labMonitorOpen;
+            labMonitorShell.classList.toggle('open', labMonitorOpen);
+            if (labMonitorOpen) {
+                startLabMonitorPolling();
+            } else {
+                stopLabMonitorPolling();
+            }
+        });
+        document.getElementById('labMonitorClearBtn').addEventListener('click', () => {
+            labMonitorEvents.length = 0;
+            clearLabMonitorRun();
+            if (labMonitorOpen) {
+                pollLabMonitorOnce();
+            }
+        });
 
         sendBtn.addEventListener('click', sendMessage);
         chatInput.addEventListener('keydown', function (event) {
@@ -634,6 +1120,11 @@
             }
         });
 
+        if (labMonitorRunId) {
+            labMonitorRunHint.textContent = `Tracking ${String(labMonitorRunId).slice(0, 12)}...`;
+        } else {
+            clearLabMonitorRun();
+        }
         loadThreads();
     </script>
 </body>

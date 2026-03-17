@@ -4,9 +4,11 @@
 //! loop (LLM call -> tool calls -> repeat) in its own focused module.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
+use tokio::time::MissedTickBehavior;
 use uuid::Uuid;
 
 use crate::agent::Agent;
@@ -540,9 +542,32 @@ impl Agent {
                                 )
                                 .await;
 
-                            let result = self
-                                .execute_chat_tool(&tc.name, &tc.arguments, &job_ctx)
-                                .await;
+                            let mut exec_fut =
+                                Box::pin(self.execute_chat_tool(&tc.name, &tc.arguments, &job_ctx));
+                            let mut heartbeat = tokio::time::interval(Duration::from_secs(12));
+                            heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                            // Skip immediate tick; start reporting after first interval.
+                            heartbeat.tick().await;
+                            let mut elapsed_secs = 0u64;
+                            let result = loop {
+                                tokio::select! {
+                                    res = &mut exec_fut => break res,
+                                    _ = heartbeat.tick() => {
+                                        elapsed_secs += 12;
+                                        let _ = self
+                                            .channels
+                                            .send_status(
+                                                &message.channel,
+                                                StatusUpdate::Status(format!(
+                                                    "Tool '{}' still running ({}s). Live stats: /ingestion, /targets, /kg",
+                                                    tc.name, elapsed_secs
+                                                )),
+                                                &message.metadata,
+                                            )
+                                            .await;
+                                    }
+                                }
+                            };
 
                             let disp_tool = self.tools().get(&tc.name).await;
                             let _ = self
@@ -586,14 +611,35 @@ impl Agent {
                                     )
                                     .await;
 
-                                let result = execute_chat_tool_standalone(
+                                let mut exec_fut = Box::pin(execute_chat_tool_standalone(
                                     &tools,
                                     &safety,
                                     &tc.name,
                                     &tc.arguments,
                                     &job_ctx,
-                                )
-                                .await;
+                                ));
+                                let mut heartbeat = tokio::time::interval(Duration::from_secs(12));
+                                heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                                heartbeat.tick().await;
+                                let mut elapsed_secs = 0u64;
+                                let result = loop {
+                                    tokio::select! {
+                                        res = &mut exec_fut => break res,
+                                        _ = heartbeat.tick() => {
+                                            elapsed_secs += 12;
+                                            let _ = channels
+                                                .send_status(
+                                                    &channel,
+                                                    StatusUpdate::Status(format!(
+                                                        "Tool '{}' still running ({}s). Live stats: /ingestion, /targets, /kg",
+                                                        tc.name, elapsed_secs
+                                                    )),
+                                                    &metadata,
+                                                )
+                                                .await;
+                                        }
+                                    }
+                                };
 
                                 let par_tool = tools.get(&tc.name).await;
                                 let _ = channels
