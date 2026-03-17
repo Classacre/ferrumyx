@@ -4,8 +4,8 @@
 **Built on IronClaw (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening complete; Phase 5+ in progress)  
-**Date:** 2026-03-15
+**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in active iteration; Phase 5+ in progress)  
+**Date:** 2026-03-17
 
 ---
 
@@ -28,10 +28,12 @@
 
 ---
 
-## Current Implementation Snapshot (2026-03-15)
+## Current Implementation Snapshot (2026-03-17)
 
 - Phase 1-3 functionality is operational end-to-end with IronClaw as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
 - Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
+- Autonomous lab-team role tooling is now implemented (`lab_planner`, `lab_retriever`, `lab_validator`) with coordinator/status tools (`run_lab_autoresearch`, `lab_run_status`) for dynamic multi-cycle research execution.
+- Lab run-state is persisted to disk (`output/lab_runs.json`, override via `FERRUMYX_LAB_STATE_PATH`) for cross-process monitoring and resilient status views.
 - Settings are tab-organized and now drive secure API configuration for active providers (Ollama, OpenAI, Anthropic, Gemini, OpenAI-compatible), including cached-chat toggle support for compatible providers.
 - Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, canonical DOI/PMID/PMCID/title identity dedupe during source fan-in, early source-abort on unique-target saturation, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
 - Sci-Hub fallback now includes settings-driven mirror parallelism/cooldown and adaptive fallback controls (deferred launch, failure-streak backoff, probe cadence, and adaptive step budgets) to keep full-text retrieval fast under mirror instability.
@@ -42,13 +44,15 @@
 - Sci-Hub support is multi-domain and settings-driven (domain list + timeout), aligned to currently active mirrors.
 - Ranker/DepMap web APIs are now dynamic-input driven (no hardcoded cancer defaults) and hardened for web latency via bounded read paths and reduced fanout in hot endpoints.
 - Web UI information architecture now follows progressive disclosure: dense tables/details are collapsed by default across KG/Query/Targets/DepMap/Molecules, with lightweight summaries first and drill-down evidence on demand.
+- Chat includes a dedicated Live Lab Run Monitor panel backed by `/api/chat/lab-monitor`, with auto run-ID detection from streaming/tool events, KPI snapshots, and recent-run selection.
 
-## UI Information Architecture Snapshot (2026-03-15)
+## UI Information Architecture Snapshot (2026-03-17)
 
 - Default views prioritize concise summaries (scores, counts, top-level state) before raw evidence rows.
 - High-volume artifacts (paper evidence, provider cache rows, relation breakdowns, dependency tables) are hidden behind `<details>` disclosures by default.
 - Query and KG controls are split into primary vs advanced controls to reduce cognitive load while preserving full operator control.
 - Entity-level drill-down remains one-click accessible (e.g., `Insights`, collapsed evidence groups, provider health/history panels).
+- Chat operations now include run-level telemetry views (monitor panel) so autonomous workflow progress is inspectable without leaving the chat surface.
 
 ---
 
@@ -2233,6 +2237,29 @@ ferrumyx_ranker.execute(query):
 Every factual claim must link to ≥1 of: PMID, DOI, or database record ID (DepMap, ChEMBL, COSMIC, etc.).
 
 Claims without traceable source → labelled `"source": "INFERRED"`, confidence ≤ 0.3.
+
+## 6.8 Lab Team Orchestration + Live Monitor (2026-03-17)
+
+Ferrumyx now exposes a role-oriented autonomous lab loop on top of IronClaw:
+
+- `lab_planner`: creates hypotheses and run context.
+- `lab_retriever`: executes ingestion with adaptive retrieval sizing based on novelty/duplicate pressure.
+- `lab_validator`: evaluates ranking progress and recommends next action.
+- `run_lab_autoresearch`: coordinator that executes dynamic planner→retriever→validator cycles with plateau-aware stopping.
+- `lab_run_status`: returns single-run or recent-run status snapshots.
+
+To make this observable in the web UI, run-state is persisted as JSON (`output/lab_runs.json` by default), and `ferrumyx-web` exposes:
+
+- `GET /api/chat/lab-monitor?run_id=<id>` for one run.
+- `GET /api/chat/lab-monitor?limit=<n>` for recent runs.
+
+The `/chat` page includes a **Live Lab Run Monitor** panel that:
+
+- auto-detects `lab-<uuid>` IDs from stream/tool/output events,
+- polls monitor state independently of chat message completion,
+- renders cycle KPIs (papers/chunks/duplicates/top score/novelty),
+- lets users switch between recent runs quickly.
+
 # Phase 7: Autonomous Self-Optimization Framework
 
 Ferrumyx leverages IronClaw agents to monitor its own performance and autonomously optimize parameters, tool configurations, and orchestration logic.
@@ -2439,7 +2466,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 - [ ] DeepPurpose binding affinity prediction
 - [ ] Feedback metrics collection activated (weights NOT yet auto-updated)
 - [ ] Deduplication pipeline hardened (preprint→published pairing)
-- [x] Web Gateway query interface with async/streaming chat and thread management
+- [x] Web Gateway query interface with async/streaming chat, thread management, and Live Lab Run Monitor (`/api/chat/lab-monitor`)
 
 **Validation strategy:** For each new cancer subtype, run retrospective Recall@20 vs DrugBank before declaring that domain operational.
 

@@ -18,19 +18,28 @@ By leveraging IronClaw's robust event loop, reasoning capabilities, and Tool Reg
 
 For a detailed technical breakdown of the engine's layers, reasoning loop, and state management, please refer directly to the [Architecture Document (ARCHITECTURE.md)](ARCHITECTURE.md).
 
-## Current Status (Phase 3: Verification & Autonomy)
+## Current Status (Phase 4 Hardening + Autonomous Lab Ops)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Ingestion** | ✅ Working | Unified pipeline (PubMed, PMC, BioRxiv) |
+| **Ingestion** | ✅ Working | Multi-source pipeline + full-text fallback + performance caches |
 | **NER & KG** | ✅ Working | Consolidated into `ferrumyx-kg` (Aho-Corasick) |
 | **Embedding** | ✅ Working | Pure Rust BiomedBERT (768-dim, Candle) |
 | **Ranker** | ✅ Working | Multi-factor scoring + DepMap integration |
 | **Molecular** | ✅ Working | Structural analysis & Ligand generation |
-| **Agent Loop** | ✅ Working | IronClaw-driven autonomous orchestration |
-| **Web GUI** | ✅ Working | Interactive Dashboard & KG Visualization |
+| **Agent Loop** | ✅ Working | IronClaw-driven autonomous orchestration + lab role tools |
+| **Web GUI** | ✅ Working | Unified dashboard theme + live chat telemetry |
+| **Lab Run Monitor** | ✅ Working | Chat-integrated live monitor for autonomous runs |
 
 **100% Rust.** No Python dependencies. All components are Rust-native. No external database required (LanceDB/libSQL embedded).
+
+## What Is New (2026-03-17)
+
+- Added autonomous lab role tools: `lab_planner`, `lab_retriever`, `lab_validator`.
+- Added coordinator and status tools: `run_lab_autoresearch`, `lab_run_status`.
+- Added persistent lab run-state snapshots (`output/lab_runs.json`) for cross-process monitoring.
+- Added **Live Lab Run Monitor** in `/chat` with auto run-id detection, KPIs, and recent-run selector.
+- Improved autonomous prompt routing so chat prefers the lab orchestration toolchain.
 
 ## Architecture
 
@@ -107,8 +116,11 @@ $env:PROTOC = "C:\protoc\bin\protoc.exe"
 # Easy start (Installs Rust, selects models, and runs)
 .\start.ps1
 
-# Manual run
+# Manual run (agent runtime)
 cargo run --release --bin ferrumyx
+
+# Web UI (in a second terminal)
+cargo run -p ferrumyx-web
 ```
 
 ## License
