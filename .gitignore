@@ -1,5 +1,8 @@
 /target/
 data/
+logs/
+output/
+runtime_test_no_run.log
 *.tsv
 !.gitkeep
 *.tsv
