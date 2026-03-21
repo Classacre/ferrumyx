@@ -182,7 +182,7 @@ fn render_dashboard(
                     Molecular Docking Engine
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-4">Run IronClaw inference to isolate target pockets and generate ADMET-verified ligand conformations.</p>
+                    <p class="text-muted mb-4">Run Ferrumyx Runtime Core inference to isolate target pockets and generate ADMET-verified ligand conformations.</p>
                     <a href="/molecules" class="btn btn-outline">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 2v4.07C7.38 6.55 4.55 9.38 4.07 13H2v-2c0-3.86 3.14-7 7-7zm.3 6V2.3A9.975 9.975 0 0 1 20.3 11H16.3c-.45-1.92-2-3.47-3.92-3.92zM15 11v2h5.7c-.42 3.86-3.42 6.86-7.28 7.28V15h-2v5.7C5.56 20.28 2 16.56 2 12V6.3c.42-3.86 3.42-6.86 7.28-7.28v2h2v-2C16.44 2.72 20 6.44 20 11h-5z"/></svg>
                         Run Vina Module
@@ -233,3 +233,4 @@ async fn load_top_targets(state: &SharedState) -> Vec<(String, String, f64)> {
     }
     out
 }
+

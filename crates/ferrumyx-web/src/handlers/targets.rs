@@ -15,8 +15,7 @@ use crate::state::SharedState;
 use ferrumyx_common::error::ApiError;
 use ferrumyx_db::{
     entities::EntityRepository, kg_facts::KgFactRepository, papers::PaperRepository,
-    phase4_signals::Phase4SignalRepository,
-    target_scores::TargetScoreRepository,
+    phase4_signals::Phase4SignalRepository, target_scores::TargetScoreRepository,
 };
 use ferrumyx_ranker::{
     depmap_provider::{DepMapClientAdapter, DepMapProvider},
@@ -156,7 +155,11 @@ pub async fn api_target_detail(
     let detail = load_target_detail_for_page(
         &state,
         &gene,
-        filter.cancer.as_deref().map(str::trim).filter(|c| !c.is_empty()),
+        filter
+            .cancer
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty()),
     )
     .await
     .ok_or_else(|| ApiError::NotFound(format!("Target {gene} not found")))?;
@@ -972,18 +975,20 @@ async fn load_provider_cache_data(
                 row.provider.to_ascii_lowercase(),
                 format!(
                     "Last run: {} | success={} failed={} skipped={} attempted={} | error={:.2}",
-                    row.finished_at, row.success, row.failed, row.skipped, row.attempted, row.error_rate
+                    row.finished_at,
+                    row.success,
+                    row.failed,
+                    row.skipped,
+                    row.attempted,
+                    row.error_rate
                 ),
             )
         })
         .collect();
 
     for row in &mut provider_cache {
-        row.provider_url = provider_external_url(
-            &row.provider,
-            &gene_symbol,
-            provider_cancer.as_deref(),
-        );
+        row.provider_url =
+            provider_external_url(&row.provider, &gene_symbol, provider_cancer.as_deref());
         row.refresh_hint = refresh_hint_by_provider
             .get(&row.provider.to_ascii_lowercase())
             .cloned();
@@ -1075,7 +1080,10 @@ fn provider_external_url(provider: &str, gene: &str, cancer: Option<&str>) -> Op
             "https://portal.gdc.cancer.gov/exploration?searchTableTab=genes&geneSymbol={}",
             g
         ),
-        "chembl" => format!("https://www.ebi.ac.uk/chembl/g/#search_results/all/query={}", g),
+        "chembl" => format!(
+            "https://www.ebi.ac.uk/chembl/g/#search_results/all/query={}",
+            g
+        ),
         "reactome" => format!("https://reactome.org/content/query?q={}", g),
         _ => return None,
     };
@@ -1134,11 +1142,7 @@ fn maybe_spawn_provider_cache_warmup(
             })
             .await
             .map_err(|e| {
-                tracing::debug!(
-                    "provider cache warmup trigger='{}' failed: {}",
-                    trigger,
-                    e
-                );
+                tracing::debug!("provider cache warmup trigger='{}' failed: {}", trigger, e);
                 e
             });
     });

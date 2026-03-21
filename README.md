@@ -12,9 +12,9 @@
 
 **Open-Source Autonomous Oncology Drug Discovery Engine**
 
-Ferrumyx is an autonomous R&D engine built natively in Rust on the [IronClaw](https://github.com/nearai/ironclaw) autonomous agent framework. Designed as a fully self-improving scientific system, Ferrumyx orchestrates end-to-end therapeutic target discovery and molecular design without human intervention. 
+Ferrumyx is an autonomous R&D engine built natively in Rust on the first-party `ferrumyx-runtime-core` autonomous agent framework. Designed as a fully self-improving scientific system, Ferrumyx orchestrates end-to-end therapeutic target discovery and molecular design without human intervention.
 
-By leveraging IronClaw's robust event loop, reasoning capabilities, and Tool Registry, Ferrumyx operates as a persistent agent. It autonomously queries the latest biomedical literature, constructs and updates a dense Knowledge Graph within a local embedded LanceDB, and iteratively refines its multi-parametric scoring heuristics based on continuous evaluation of generated targets. This closed-loop learning architecture ensures that the system's predictive accuracy scales with its ingestion volume.
+By leveraging Ferrumyx Runtime Core's robust event loop, reasoning capabilities, and Tool Registry, Ferrumyx operates as a persistent agent. It autonomously queries the latest biomedical literature, constructs and updates a dense Knowledge Graph within a local embedded LanceDB, and iteratively refines its multi-parametric scoring heuristics based on continuous evaluation of generated targets. This closed-loop learning architecture ensures that the system's predictive accuracy scales with its ingestion volume.
 
 For a detailed technical breakdown of the engine's layers, reasoning loop, and state management, please refer directly to the [Architecture Document (ARCHITECTURE.md)](ARCHITECTURE.md).
 
@@ -27,7 +27,7 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 | **Embedding** | ✅ Working | Pure Rust BiomedBERT (768-dim, Candle) |
 | **Ranker** | ✅ Working | Multi-factor scoring + DepMap integration |
 | **Molecular** | ✅ Working | Structural analysis & Ligand generation |
-| **Agent Loop** | ✅ Working | IronClaw-driven autonomous orchestration + lab role tools |
+| **Agent Loop** | ✅ Working | Ferrumyx Runtime Core-driven autonomous orchestration + lab role tools |
 | **Web GUI** | ✅ Working | Unified dashboard theme + live chat telemetry |
 | **Lab Run Monitor** | ✅ Working | Chat-integrated live monitor for autonomous runs |
 
@@ -43,11 +43,11 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 
 ## Architecture
 
-The system follows a reactive Agentic Architecture, where the IronClaw agent serves as the central brain, orchestrating specialized tools for literature ingestion, Knowledge Graph (KG) management, and molecular modeling.
+The system follows a reactive Agentic Architecture, where the Ferrumyx Runtime Core agent serves as the central brain, orchestrating specialized tools for literature ingestion, Knowledge Graph (KG) management, and molecular modeling.
 
 ```mermaid
 graph TD
-    User([User Intent]) --> Agent[IronClaw Agent]
+    User([User Intent]) --> Agent[Ferrumyx Runtime Core Agent]
     
     subgraph "Core Agent Loop"
         Agent <--> Tools[Tool Registry]
@@ -90,15 +90,15 @@ Ferrumyx leverages a defense-in-depth architecture to mitigate performance bottl
    - Survival correlates & Expression data
    - Proteomic pocket detectability
 
-4. **IronClaw Autonomous Orchestration**
-   The system is non-human gated. Results are fed back to the IronClaw agent, which can autonomously modify parameters, create new search tools, or refine molecular optimization strategies until a viable "solution" is found.
+4. **Ferrumyx Runtime Core Autonomous Orchestration**
+   The system is non-human gated. Results are fed back to the Ferrumyx Runtime Core agent, which can autonomously modify parameters, create new search tools, or refine molecular optimization strategies until a viable "solution" is found.
 
 ## Project Structure (Crates)
 
 | Crate | Description | Status |
 |-------|-------------|--------|
-| `ferrumyx-agent` | IronClaw-powered Primary Event Loop & Tool Registry | ✅ Working |
-| `ironclaw` | Core autonomous agent framework & reasoning engine | ✅ Working |
+| `ferrumyx-agent` | Ferrumyx Runtime Core-powered Primary Event Loop & Tool Registry | ✅ Working |
+| `ferrumyx-runtime-core` | Core autonomous agent framework & reasoning engine | ✅ Working |
 | `ferrumyx-ingestion` | Unified literature pipeline (PubMed, PDF, Embedding) | ✅ Working |
 | `ferrumyx-kg` | Knowledge Graph, NER, & Target Scoring logic | ✅ Working |
 | `ferrumyx-ranker` | Multi-factor prioritization (DepMap integration) | ✅ Working |
@@ -126,3 +126,4 @@ cargo run -p ferrumyx-web
 ## License
 
 Apache-2.0 OR MIT
+

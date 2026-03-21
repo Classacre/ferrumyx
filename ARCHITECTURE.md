@@ -1,11 +1,11 @@
 # Ferrumyx Architecture
 
 **Autonomous Oncology Drug Discovery Engine**  
-**Built on IronClaw (Rust AI Agent Framework)**  
+**Built on Ferrumyx Runtime Core (Rust AI Agent Framework)**  
 **Version:** 1.0.0-mvp  
 **Repository:** https://github.com/Classacre/ferrumyx  
-**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in active iteration; Phase 5+ in progress)  
-**Date:** 2026-03-17
+**Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in active iteration; Phase 5+ in progress; Phase 10 federation bootstrap started)  
+**Date:** 2026-03-21
 
 ---
 
@@ -24,13 +24,14 @@
 7. [Phase 7: Self-Improvement Framework](#phase-7-self-improvement-framework)
 8. [Phase 8: Security & LLM Strategy](#phase-8-security--llm-strategy)
 9. [Phase 9: Roadmap](#phase-9-roadmap)
-10. [Deliverables](#deliverables)
+10. [Phase 10: Federated Knowledge Base Distribution](#phase-10-federated-knowledge-base-distribution)
+11. [Deliverables](#deliverables)
 
 ---
 
 ## Current Implementation Snapshot (2026-03-17)
 
-- Phase 1-3 functionality is operational end-to-end with IronClaw as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
+- Phase 1-3 functionality is operational end-to-end with Ferrumyx Runtime Core as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
 - Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
 - Autonomous lab-team role tooling is now implemented (`lab_planner`, `lab_retriever`, `lab_validator`) with coordinator/status tools (`run_lab_autoresearch`, `lab_run_status`) for dynamic multi-cycle research execution.
 - Lab run-state is persisted to disk (`output/lab_runs.json`, override via `FERRUMYX_LAB_STATE_PATH`) for cross-process monitoring and resilient status views.
@@ -45,6 +46,7 @@
 - Ranker/DepMap web APIs are now dynamic-input driven (no hardcoded cancer defaults) and hardened for web latency via bounded read paths and reduced fanout in hot endpoints.
 - Web UI information architecture now follows progressive disclosure: dense tables/details are collapsed by default across KG/Query/Targets/DepMap/Molecules, with lightweight summaries first and drill-down evidence on demand.
 - Chat includes a dedicated Live Lab Run Monitor panel backed by `/api/chat/lab-monitor`, with auto run-ID detection from streaming/tool events, KPI snapshots, and recent-run selection.
+- Federated KB bootstrap is implemented: shared contribution manifest schema (`ferrumyx.federation.v1`), DB-side draft generation/validation, JSONL package export + digest verification, and web APIs (`/api/federation/schema`, `/api/federation/manifest/*`, `/api/federation/package/*`).
 
 ## UI Information Architecture Snapshot (2026-03-17)
 
@@ -76,7 +78,7 @@ flowchart TD
     end
     class ChannelLayer layerBox
 
-    subgraph IronClawCore [IronClaw Agent Core]
+    subgraph Ferrumyx Runtime CoreCore [Ferrumyx Runtime Core Agent Core]
         IC1[Intent Router<br/>query parsing]
         IC2{Agent Loop<br/>plan/act/obs}
         IC3[Routines Engine<br/>cron/event/webhook]
@@ -91,7 +93,7 @@ flowchart TD
         IC2 <--> ToolRegistry
         IC3 --> IC2
     end
-    class IronClawCore coreBox
+    class Ferrumyx Runtime CoreCore coreBox
 
     subgraph FerrumyxExt [Ferrumyx Extension Layer]
         direction TB
@@ -115,7 +117,7 @@ flowchart TD
 
     subgraph StorageLayer [Storage Layer]
         DB1[(LanceDB Embedded Vector DB<br/>papers, chunks, embeddings, kg_facts)]
-        DB2[(Workspace FS<br/>IronClaw mem.)]
+        DB2[(Workspace FS<br/>Ferrumyx Runtime Core mem.)]
         DB3[(Secrets Store<br/>AES-256-GCM)]
     end
     class StorageLayer dbBox
@@ -128,18 +130,18 @@ flowchart TD
     class LLMLayer layerBox
 
     %% Connections
-    ChannelLayer --> IronClawCore
-    IronClawCore <--> FerrumyxExt
+    ChannelLayer --> Ferrumyx Runtime CoreCore
+    Ferrumyx Runtime CoreCore <--> FerrumyxExt
     FerrumyxExt --> SandboxLayer
     FerrumyxExt <--> StorageLayer
-    IronClawCore <--> LLMLayer
+    Ferrumyx Runtime CoreCore <--> LLMLayer
 ```
 
 ## 1.2 Modular Breakdown
 
-### Orchestration Layer (Rust, IronClaw extension)
+### Orchestration Layer (Rust, Ferrumyx Runtime Core extension)
 
-| Crate | Description | Extends IronClaw? |
+| Crate | Description | Extends Ferrumyx Runtime Core? |
 |---|---|---|
 | `ferrumyx-agent` | Top-level agent loop, intent routing | Yes — registers custom intents |
 | `ferrumyx-common` | Shared types, utilities, and query definitions | No |
@@ -149,7 +151,7 @@ flowchart TD
 | `ferrumyx-molecules` | Molecular structure and docking logic | No |
 | `ferrumyx-ranker` | Target scoring, query execution, and shortlisting | Pure Rust scoring logic |
 | `ferrumyx-web` | Web UI and API Gateway | No |
-| `ironclaw` | Core AI agent framework dependency | Yes |
+| `Ferrumyx Runtime Core` | Core AI agent framework dependency | Yes |
 
 ### Tool Layer (100% Rust-native)
 
@@ -169,7 +171,7 @@ flowchart TD
 ### Storage Layer
 
 - **LanceDB** (Embedded Vector DB)
-- **Workspace filesystem** (IronClaw native): intermediate files, job artifacts
+- **Workspace filesystem** (Ferrumyx Runtime Core native): intermediate files, job artifacts
 - **AES-256-GCM keychain**: API keys, DB credentials
 
 ## 1.3 Data Flow
@@ -509,7 +511,7 @@ pub struct LlmRouter {
 - `DataClass::Confidential` → local only; remote call = hard block + alert
 
 ### Default Configuration (Phase 3 Completed)
-In Phase 3, we transitioned from a scaffolded LLM backend to leveraging **Ollama** natively as the engine. The system includes an automated hardware detection routine embedded within startup scripts to dynamically optimize the chosen Ollama model (e.g., `llama3.2`, `qwen2.5-coder`, `mistral`) depending on available system RAM and resources. The agent runs transparently via the `rig-core` integration within `ferrumyx-agent`. The primary node of the entire application architecture is the IronClaw event loop hosted inside `ferrumyx-agent::main.rs`.
+In Phase 3, we transitioned from a scaffolded LLM backend to leveraging **Ollama** natively as the engine. The system includes an automated hardware detection routine embedded within startup scripts to dynamically optimize the chosen Ollama model (e.g., `llama3.2`, `qwen2.5-coder`, `mistral`) depending on available system RAM and resources. The agent runs transparently via the `rig-core` integration within `ferrumyx-agent`. The primary node of the entire application architecture is the Ferrumyx Runtime Core event loop hosted inside `ferrumyx-agent::main.rs`.
 
 ## 1.6 Self-Improvement Feedback Loop Architecture
 
@@ -576,46 +578,46 @@ Current runtime policy is autonomy-first: parameter updates are applied automati
 
 | Boundary | Description | Enforcement |
 |---|---|---|
-| Host ↔ WASM | WASM tools cannot access filesystem, network, or secrets directly | WASM capability model (IronClaw) |
-| Host ↔ Docker | Docker containers network-isolated; no direct DB access | Docker network policy + IronClaw orchestrator |
+| Host ↔ WASM | WASM tools cannot access filesystem, network, or secrets directly | WASM capability model (Ferrumyx Runtime Core) |
+| Host ↔ Docker | Docker containers network-isolated; no direct DB access | Docker network policy + Ferrumyx Runtime Core orchestrator |
 | Ferrumyx ↔ Remote LLM | Data classification gate blocks INTERNAL/CONFIDENTIAL | Rust middleware in LlmRouter |
-| DB credentials | Never passed to tool layer; only accessed by host process | IronClaw AES-256-GCM keychain |
-| API keys | Injected at host boundary; WASM tools receive only scoped tokens | IronClaw credential injection |
+| DB credentials | Never passed to tool layer; only accessed by host process | Ferrumyx Runtime Core AES-256-GCM keychain |
+| API keys | Injected at host boundary; WASM tools receive only scoped tokens | Ferrumyx Runtime Core credential injection |
 | Public API calls | All outbound calls logged with endpoint + response hash | Ingestion audit log |
 
-## 1.8 How Ferrumyx Extends IronClaw Without Forking
+## 1.8 How Ferrumyx Extends Ferrumyx Runtime Core Without Forking
 
 **Decision: Extension, not fork.**
 
-Rationale: Forking IronClaw means carrying the maintenance burden of diverging from upstream improvements to the agent loop, WASM sandbox, and security layer — areas where Ferrumyx has no domain-specific requirements. The extension model preserves upgradability.
+Rationale: Forking Ferrumyx Runtime Core means carrying the maintenance burden of diverging from upstream improvements to the agent loop, WASM sandbox, and security layer — areas where Ferrumyx has no domain-specific requirements. The extension model preserves upgradability.
 
 **Extension mechanisms used:**
 
-1.  **Custom tool registration:** Ferrumyx registers its specialized domain tools (`IngestPubmedTool`, `KgQueryTool`, `DockMoleculeTool`, etc.) via IronClaw's tool registry.
-2.  **Autonomous Tool Creation (framework capability):** IronClaw exposes primitives for dynamic routines/tooling, but current Ferrumyx runtime primarily uses a fixed registered tool surface plus guarded host-command execution (`run_system_command`) for autonomous remediation.
+1.  **Custom tool registration:** Ferrumyx registers its specialized domain tools (`IngestPubmedTool`, `KgQueryTool`, `DockMoleculeTool`, etc.) via Ferrumyx Runtime Core's tool registry.
+2.  **Autonomous Tool Creation (framework capability):** Ferrumyx Runtime Core exposes primitives for dynamic routines/tooling, but current Ferrumyx runtime primarily uses a fixed registered tool surface plus guarded host-command execution (`run_system_command`) for autonomous remediation.
 3.  **Core Agent Loop Orchestration:** Ferrumyx embeds the `Agent` runtime within `ferrumyx-agent`. The agent is the primary decision-maker, autonomously interpreting results, adjusting parameters, and executing complex multi-step workflows without human intervention.
-4.  **Custom routines:** Ferrumyx leverages the IronClaw routines engine for continuous background optimization, with agents deciding when to re-score or re-prioritize based on incoming data streams.
-5.  **LLM execution:** IronClaw's native LLM abstraction handles routing to local (Ollama) or remote (OpenAI/Anthropic) backends based on data classification and agent needs.
+4.  **Custom routines:** Ferrumyx leverages the Ferrumyx Runtime Core routines engine for continuous background optimization, with agents deciding when to re-score or re-prioritize based on incoming data streams.
+5.  **LLM execution:** Ferrumyx Runtime Core's native LLM abstraction handles routing to local (Ollama) or remote (OpenAI/Anthropic) backends based on data classification and agent needs.
 
-**What requires direct IronClaw code changes (minimal, tracked):**
+**What requires direct Ferrumyx Runtime Core code changes (minimal, tracked):**
 - Potentially: exposing Docker sandbox orchestration as a stable API if not already public. This would be contributed back upstream rather than forked.
 
 ---
 
 ## 1.9 Phase 1 Implementation Audit (2026-03-14)
 
-Reality check against current codebase (`crates/ferrumyx-*` + vendored `ironclaw`):
+Reality check against current codebase (`crates/ferrumyx-*` + vendored `Ferrumyx Runtime Core`):
 
-- [x] Workspace/crate topology matches Phase 1 modular design (`ferrumyx-agent`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-ranker`, `ferrumyx-web`, `ironclaw`).
+- [x] Workspace/crate topology matches Phase 1 modular design (`ferrumyx-agent`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-ranker`, `ferrumyx-web`, `Ferrumyx Runtime Core`).
 - [x] LanceDB core tables are present and initialized (`papers`, `chunks`, `entities`, `entity_mentions`, `kg_facts`, `kg_conflicts`, `target_scores`, `ingestion_audit`).
 - [x] Target score history semantics are implemented (`score_version`, `is_current`) with backward-compatible handling for legacy tables.
-- [x] IronClaw extension model is in active use (custom Ferrumyx tools are registered into IronClaw tool registry; no fork-only orchestration path).
+- [x] Ferrumyx Runtime Core extension model is in active use (custom Ferrumyx tools are registered into Ferrumyx Runtime Core tool registry; no fork-only orchestration path).
 - [x] Web gateway + live event streaming are implemented (`/api/events` SSE), including chat-thread endpoints and history-backed async chat UX.
-- [x] Secrets/security primitives are available through IronClaw (`SecretsStore`, crypto/keychain-backed paths, sandbox/WASM runtime support).
-- [~] Earlier text in this document labels most connectors as “WASM tools”; current runtime implementation is predominantly native Rust modules exposed through Ferrumyx/IronClaw handlers.
+- [x] Secrets/security primitives are available through Ferrumyx Runtime Core (`SecretsStore`, crypto/keychain-backed paths, sandbox/WASM runtime support).
+- [~] Earlier text in this document labels most connectors as “WASM tools”; current runtime implementation is predominantly native Rust modules exposed through Ferrumyx/Ferrumyx Runtime Core handlers.
 
 Added capabilities now present in code:
-- Settings-driven provider/env sync into IronClaw runtime (OpenAI/Anthropic/Gemini/OpenAI-compatible/Ollama).
+- Settings-driven provider/env sync into Ferrumyx Runtime Core runtime (OpenAI/Anthropic/Gemini/OpenAI-compatible/Ollama).
 - OpenAI-compatible cached-chat toggle persisted in settings and synced to runtime env.
 - Secure key save behavior in web settings (keys are not returned to browser after save).
 - Streaming chat delivery and markdown-safe rendering in the web chat surface.
@@ -720,7 +722,7 @@ Added capabilities now present in code:
 
 ## 2.2 Paper Discovery Tool
 
-The paper discovery path is implemented as native Rust Ferrumyx/IronClaw tooling that translates a structured `DiscoveryRequest` (gene symbol, mutation, cancer type, date range, optional keyword modifiers) into source-specific query strings and fans out to all enabled sources in parallel.
+The paper discovery path is implemented as native Rust Ferrumyx/Ferrumyx Runtime Core tooling that translates a structured `DiscoveryRequest` (gene symbol, mutation, cancer type, date range, optional keyword modifiers) into source-specific query strings and fans out to all enabled sources in parallel.
 
 ### Query Construction Logic
 
@@ -1207,7 +1209,7 @@ Overlap is computed at the token level, not character level, to ensure consisten
 ### Embedding Service
 
 ```yaml
-[IronClaw Tool "embed_chunks"]
+[Ferrumyx Runtime Core Tool "embed_chunks"]
   Crate: ferrumyx-ingestion
   Tech: Rust + Candle Framework
 
@@ -1233,7 +1235,7 @@ Output (Rust struct):
 // PQ subvectors = 96 (for 768-dim) or 128 (for 1024-dim)
 ```
 
-**Hybrid search (RRF):** IronClaw's built-in hybrid search combines vector similarity (ANN via LanceDB) with BM25/FTS full-text search on `paper_chunks.content`. Reciprocal Rank Fusion weight: `rrf_k = 60` (default). Vector search weight 0.7, keyword weight 0.3 for domain-specific biomedical queries.
+**Hybrid search (RRF):** Ferrumyx Runtime Core's built-in hybrid search combines vector similarity (ANN via LanceDB) with BM25/FTS full-text search on `paper_chunks.content`. Reciprocal Rank Fusion weight: `rrf_k = 60` (default). Vector search weight 0.7, keyword weight 0.3 for domain-specific biomedical queries.
 
 ```rust
 // Hybrid search query pattern via LanceDB
@@ -1422,7 +1424,7 @@ Partially implemented / pending:
 - [x] Semantic Scholar SPECTER2 embedding fetch support is implemented in the source client (`embedding.specter_v2` field path).
 
 Implementation note:
-- Several Phase 2 tables describe connectors as “WASM tools.” Current Ferrumyx implementation runs these connectors as native Rust modules in the ingestion crate and exposes them through Ferrumyx/IronClaw tools and web handlers.
+- Several Phase 2 tables describe connectors as “WASM tools.” Current Ferrumyx implementation runs these connectors as native Rust modules in the ingestion crate and exposes them through Ferrumyx/Ferrumyx Runtime Core tools and web handlers.
 
 # Phase 3: Knowledge Graph & Target Intelligence
 
@@ -1641,7 +1643,7 @@ CREATE TABLE kg_conflicts (
 Update pipeline is **event-driven**, not batch-scheduled:
 
 ```text
-[IronClaw routines event:
+[Ferrumyx Runtime Core routines event:
  "kg_fact_changed" → triggers
  "score_recompute" routine
  for affected (gene, cancer) pairs]
@@ -1735,7 +1737,7 @@ LIMIT 20;
 | Native graph traversal | Moderate (JOINs, CTEs) | Excellent (Cypher, native graph) |
 | >3-hop path queries | Slow above 5M facts | Fast |
 | Vector search | Native (LanceDB) | Not supported natively |
-| IronClaw integration | Already integrated | Requires new adapter |
+| Ferrumyx Runtime Core integration | Already integrated | Requires new adapter |
 | Licensing | Open source | Community edition free; Enterprise: $$ |
 | Sync complexity | N/A | CDC pipeline required (Debezium) |
 
@@ -1762,7 +1764,7 @@ Phase 3 is now treated as complete for the current codebase baseline.
   - `run_molecule_pipeline`
   - `run_autonomous_cycle`
   - `run_system_command` (guarded host command execution for autonomous diagnostics/remediation)
-- [x] Settings-driven provider/env sync into IronClaw is live (including OpenAI-compatible cached-chat toggle).
+- [x] Settings-driven provider/env sync into Ferrumyx Runtime Core is live (including OpenAI-compatible cached-chat toggle).
 
 These changes satisfy the Phase 3 target for autonomous KG-driven operation and transition readiness into Phase 4 scoring/quality work.
 
@@ -1996,7 +1998,7 @@ Reality check against code:
 **Rust Native wrappers:**
 - The MVP relies on fast native Rust wrappers executing trusted local binaries (`fpocket` and `vina`). This limits overhead compared to Docker isolation and fits the local processing paradigm of Ferrumyx.
 
-## 5.2 IronClaw Tool Orchestration Sequence
+## 5.2 Ferrumyx Runtime Core Tool Orchestration Sequence
 
 ```mermaid
 flowchart TD
@@ -2060,7 +2062,7 @@ CONVERGENCE: mean(multi_obj) improvement < 0.02
 
 ## 5.5 Intermediate Result Storage
 
-All intermediate files in IronClaw workspace:
+All intermediate files in Ferrumyx Runtime Core workspace:
 ```text
 /workspace/structural/{gene_symbol}/{job_id}/
   ├── structures/     # .pdb, .pdbqt
@@ -2094,7 +2096,7 @@ Database: `molecules` and `docking_results` (Phase 1 schema). Each job UUID link
 
 ## 6.2 LLM-Driven Intent Parsing
 
-The NL query is autonomously parsed by an IronClaw agent into a structured `ScientificQuery` object. The agent leverages the LLM's reasoning capabilities to identify implicit filters and map them to the system's scoring components.
+The NL query is autonomously parsed by an Ferrumyx Runtime Core agent into a structured `ScientificQuery` object. The agent leverages the LLM's reasoning capabilities to identify implicit filters and map them to the system's scoring components.
 
 ```json
 {
@@ -2240,7 +2242,7 @@ Claims without traceable source → labelled `"source": "INFERRED"`, confidence 
 
 ## 6.8 Lab Team Orchestration + Live Monitor (2026-03-17)
 
-Ferrumyx now exposes a role-oriented autonomous lab loop on top of IronClaw:
+Ferrumyx now exposes a role-oriented autonomous lab loop on top of Ferrumyx Runtime Core:
 
 - `lab_planner`: creates hypotheses and run context.
 - `lab_retriever`: executes ingestion with adaptive retrieval sizing based on novelty/duplicate pressure.
@@ -2262,7 +2264,7 @@ The `/chat` page includes a **Live Lab Run Monitor** panel that:
 
 # Phase 7: Autonomous Self-Optimization Framework
 
-Ferrumyx leverages IronClaw agents to monitor its own performance and autonomously optimize parameters, tool configurations, and orchestration logic.
+Ferrumyx leverages Ferrumyx Runtime Core agents to monitor its own performance and autonomously optimize parameters, tool configurations, and orchestration logic.
 
 ## 7.1 Feedback Metrics
 
@@ -2316,41 +2318,41 @@ flowchart TD
 
 **Algorithm: Agent-Mediated Bayesian Update**
 
-The IronClaw agent evaluates the Bayesian proposals (§7.3) and decides whether to apply them based on the correlation strength and ranking stability.
+The Ferrumyx Runtime Core agent evaluates the Bayesian proposals (§7.3) and decides whether to apply them based on the correlation strength and ranking stability.
 - **Automatic Updates:** By default, the agent applies updates atomically if the `ranking_volatility` is within safe bounds.
 - **Safety Gate:** This can be disabled in `ferrumyx.toml` to require human approval, but the system is designed for high-autonomy operation.
 
 ## 7.4 Agent-Driven Tool Creation
 
-When a specific ingestion or parsing bottleneck is identified (e.g., a new data format from a high-signal source), the IronClaw agent can autonomously:
+When a specific ingestion or parsing bottleneck is identified (e.g., a new data format from a high-signal source), the Ferrumyx Runtime Core agent can autonomously:
 1.  Draft a new Rust/WASM tool implementation.
 2.  Register it within a temporary sandbox for validation.
 3.  Propose its integration into the main pipeline if it improves `literature_recall` metrics.
 
 ## 7.5 Audit Trail & Transparency
 
-Transparency is preserved through the `weight_update_log` and IronClaw's internal agent logs. Every autonomous decision is documented with its underlying evidence (metrics, LLM reasoning trace, and projected impact) in the `weight_update_log` table.
+Transparency is preserved through the `weight_update_log` and Ferrumyx Runtime Core's internal agent logs. Every autonomous decision is documented with its underlying evidence (metrics, LLM reasoning trace, and projected impact) in the `weight_update_log` table.
 
 ---
 
 # Phase 8: Security & LLM Strategy
 
-Ferrumyx leverages IronClaw's built-in security and LLM orchestration layers, extending them with domain-specific data classification rules.
+Ferrumyx leverages Ferrumyx Runtime Core's built-in security and LLM orchestration layers, extending them with domain-specific data classification rules.
 
-## 8.1 Autonomous LLM Orchestration (IronClaw)
+## 8.1 Autonomous LLM Orchestration (Ferrumyx Runtime Core)
 
-The system uses IronClaw's native multi-backend support to securely route requests to:
+The system uses Ferrumyx Runtime Core's native multi-backend support to securely route requests to:
 - **Local:** Ollama (default for INTERNAL/CONFIDENTIAL data).
 - **Remote:** OpenAI, Anthropic, or custom HTTP backends (preferred for high-reasoning PUBLIC analysis).
 
-IronClaw agents autonomously select the model based on:
+Ferrumyx Runtime Core agents autonomously select the model based on:
 1.  **Data Class:** Redaction policies enforced before any remote call.
 2.  **Context Needs:** Large context models chosen for multi-paper synthesis.
 3.  **Hardware State:** Optimized Ollama model selection based on detected RAM/GPU.
 
 ## 8.2 Agent-Driven Data Classification
 
-IronClaw agents autonomously classify data at the prompt-construction stage:
+Ferrumyx Runtime Core agents autonomously classify data at the prompt-construction stage:
 - `PUBLIC`: Literature, database records.
 - `INTERNAL`: Scores, fact triples, molecule candidates.
 - `CONFIDENTIAL`: Proprietary partner data.
@@ -2362,14 +2364,14 @@ The agent loop enforces strict routing:
 - **Public:** Routed based on performance/cost optimization.
 - **Redaction:** Sensitive identifiers (UUIDs, specific SMILES) are stripped or hashed by the agent before external transmission.
 
-## 8.4 Security Boundary Definitions (IronClaw Native)
+## 8.4 Security Boundary Definitions (Ferrumyx Runtime Core Native)
 
 | Boundary | Description | Enforcement |
 |---|---|---|
-| Agent ↔ Tool | Tools run in capability-based sandboxes | IronClaw WASM Sandbox |
-| Data ↔ Network | Endpoint allowlisting for literature APIs | IronClaw Firewall |
-| Host ↔ LLM | Data classification gated routing | IronClaw Redaction Layer |
-| Secrets | AES-256-GCM encrypted retrieval | IronClaw Keychain |
+| Agent ↔ Tool | Tools run in capability-based sandboxes | Ferrumyx Runtime Core WASM Sandbox |
+| Data ↔ Network | Endpoint allowlisting for literature APIs | Ferrumyx Runtime Core Firewall |
+| Host ↔ LLM | Data classification gated routing | Ferrumyx Runtime Core Redaction Layer |
+| Secrets | AES-256-GCM encrypted retrieval | Ferrumyx Runtime Core Keychain |
 
 All agent activities, tool executions, and LLM calls are tracked in the **Audit Log** for full traceability of autonomous decisions.
 
@@ -2401,7 +2403,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 ### Month 1: Foundation
 **Deliverable:** Full pipeline operational for KRAS G12D PAAD. Literature → KG → target scores → structural analysis → ranked output with citations. Retrospective validation: top-10 vs DrugBank known PDAC targets.
-- [x] Initialise Cargo workspace: `ferrumyx-agent`, `ferrumyx-common`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-molecules`, `ferrumyx-ranker`, `ferrumyx-web`, `ironclaw`
+- [x] Initialise Cargo workspace: `ferrumyx-agent`, `ferrumyx-common`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-molecules`, `ferrumyx-ranker`, `ferrumyx-web`, `Ferrumyx Runtime Core`
 - [x] LanceDB deployed; Phase 1 schema migrations run
 - [x] PubMed E-utilities WASM tool (esearch + efetch XML) (Implemented in `pubmed.rs`)
 - [x] Europe PMC WASM tool (Implemented in `europepmc.rs`)
@@ -2492,6 +2494,87 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 ---
 
+# Phase 10: Federated Knowledge Base Distribution
+
+## 10.1 Objective
+
+Enable Ferrumyx nodes to publish and consume shared knowledge-base snapshots so users can bootstrap from a large global corpus instead of rebuilding from scratch, while preserving provenance, integrity, and merge safety.
+
+## 10.2 Canonical Storage Strategy
+
+- **Canonical write path:** object-storage-backed, immutable snapshot lineage (append-only).
+- **Distribution mirrors:** Hugging Face/GitHub release artifacts are read-only mirrors for download convenience.
+- **Merge control:** contributions are validated against manifest + quality gates before entering canonical lineage.
+- **Tamper model:** manifest-level integrity checks, signature envelope support, and rejection of malformed/low-quality snapshots.
+
+This keeps distribution simple for users while preventing mirror drift from becoming source-of-truth drift.
+
+## 10.3 Contribution Manifest Schema (`ferrumyx.federation.v1`)
+
+Shared schema now lives in `crates/ferrumyx-common/src/federation.rs` and is exposed via `/api/federation/schema`.
+
+| Field | Type | Required | Purpose |
+|---|---|---|---|
+| `schema_version` | string | yes | Strict schema gate (`ferrumyx.federation.v1`) |
+| `manifest_id` | UUID | yes | Unique manifest identity |
+| `dataset_id` | string | yes | Logical dataset namespace |
+| `snapshot_id` | string | yes | Immutable snapshot identifier |
+| `parent_snapshot_id` | string \| null | no | Lineage parent for merge graph |
+| `created_at` | RFC3339 datetime | yes | Snapshot creation timestamp |
+| `contributor` | object | yes | Node identity (`instance_id`, `display_name`, contact, key id) |
+| `provenance` | object | yes | App/runtime context used to generate snapshot |
+| `stats` | object | yes | Table counts + relation cardinality metrics |
+| `artifacts` | array | no | Exported file digests (path/hash/rows/bytes) |
+| `quality` | object | yes | Parse success, duplicate identity rate, generic predicate share |
+| `signature` | object \| null | no | Cryptographic signature envelope |
+| `annotations` | map | no | Extensible metadata tags |
+
+## 10.4 Validation Rules (v1)
+
+Validation now checks:
+
+- schema version exact match
+- non-empty dataset/snapshot identifiers
+- no parent-snapshot self-cycle
+- quality metrics finite and bounded to `[0,1]`
+- artifact path uniqueness and SHA-256 format checks (if artifacts provided)
+- signature envelope completeness (if provided)
+- future timestamp skew warning
+
+Endpoint: `/api/federation/manifest/validate`
+
+## 10.5 Current Implementation Status (2026-03-21)
+
+Implemented:
+
+- shared manifest schema and validation report types in `ferrumyx-common`
+- DB-side draft manifest generation from live tables (`build_contribution_manifest_draft`)
+- draft quality signal extraction (parse success, DOI duplicate estimate, generic predicate share)
+- JSONL package export with SHA-256 + byte/row digests (`export_contribution_package`)
+- package integrity verification against manifest digests (`validate_contribution_package`)
+- local Ed25519 manifest signing with trust-registry key resolution (`sign_contribution_package`)
+- web APIs for schema inspection, manifest draft/validation, and package export/validation
+
+Not yet implemented (next pass):
+
+- Parquet export mode for high-volume snapshots (JSONL is implemented first)
+- remote trust bootstrap and key governance policy (local trust-registry signing/verification is implemented)
+- canonical cloud merge gate service and moderation queue
+- differential snapshot sync and resumable pull/push transport
+
+## 10.6 API Surface (Bootstrap)
+
+- `GET /api/federation/schema`
+- `POST /api/federation/manifest/draft`
+- `POST /api/federation/manifest/validate`
+- `POST /api/federation/package/export`
+- `POST /api/federation/package/validate`
+- `POST /api/federation/package/sign`
+
+These endpoints intentionally ship as a bootstrap layer so the federation contract can be tested before enabling cross-node write paths.
+
+---
+
 # Deliverables
 
 ## Tool Inventory
@@ -2515,7 +2598,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 | fpocket wrapper | Implemented | Rust | Native | BSD | Pocket detection runtime execution |
 | AutoDock Vina wrapper| Implemented | Rust | Native | Apache 2.0 | Molecular docking runtime execution |
 | LanceDB | Implemented | Rust / C++ | Embedded | Apache 2.0 | Vector similarity search + FTS |
-| IronClaw | Implemented | Rust | Native | Open | Agent loop, Web UI, routines |
+| Ferrumyx Runtime Core | Implemented | Rust | Native | Open | Agent loop, Web UI, routines |
 
 ---
 
@@ -2550,7 +2633,7 @@ Chosen because: highest unmet clinical need, well-characterised mutation, rich p
 
 6. **LLM context window for complex queries.** Assembling a 10-target evidence bundle with full citations can exceed 32K tokens. Evidence prioritisation logic is needed to trim context without dropping key citations.
 
-7. **IronClaw WASM toolchain constraints.** The wasm32-wasip1 target has no threading and limited system calls. Tools requiring parallelism or native crypto must be Docker containers. This limits how many Ferrumyx tools can run in the lightweight WASM sandbox.
+7. **Ferrumyx Runtime Core WASM toolchain constraints.** The wasm32-wasip1 target has no threading and limited system calls. Tools requiring parallelism or native crypto must be Docker containers. This limits how many Ferrumyx tools can run in the lightweight WASM sandbox.
 
 ---
 
@@ -2577,7 +2660,7 @@ Ferrumyx provides a specialized research infrastructure for target discovery wit
 - **Full auditability:** every hypothesis traces to a specific PMID, DOI, or DB record. No black box decisions.
 - **Privacy-preserving by default:** local LLM mode ensures that sensitivity-classified data does not leave the local environment unless explicitly configured.
 - **Researcher-controlled:** scoring weights are transparent, inspectable, and modifiable, allowing for domain-specific tuning.
-- **IronClaw-native:** inherits a production-grade agent loop, WASM sandbox, routines engine, and hybrid search.
+- **Ferrumyx Runtime Core-native:** inherits a production-grade agent loop, WASM sandbox, routines engine, and hybrid search.
 - **Integrated hypothesis-to-molecule pipeline:** single autonomous system from literature ingestion to ranked docking candidates.
 
 Target user: a computational biology research group wanting an auditable, privacy-respecting, continuously-learning literature mining and target prioritisation system.
@@ -2598,3 +2681,4 @@ Target user: a computational biology research group wanting an auditable, privac
 | 8 | Build entity normalisation (HGNC + HGVS) | L | HGNC REST bulk download; HGVS regex; edge cases numerous |
 | 9 | Populate kg_facts from NER + external DB pulls (COSMIC, DepMap, ChEMBL) | L | Most complex ingestion step; each source needs separate parser |
 | 10 | Implement target_scores computation (9 components + composite formula + versioning) | L | Rank normalisation; penalties; confidence adjustment; atomic versioning |
+

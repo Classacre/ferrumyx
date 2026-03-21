@@ -9,12 +9,12 @@ This audit compares the system design documented in `ARCHITECTURE.md` with the c
 | **Query Engine** | `ferrumyx-query` (Crate) | Module within `ferrumyx-web` | ⚠️ Consolidated |
 | **Feedback Loop** | `ferrumyx-feedback` (Crate) | Mostly missing / Partial modules | ❌ Out of Sync |
 | **Routines** | `ferrumyx-routines` (Crate) | Module within `ferrumyx-kg` / `ferrumyx-agent` | ⚠️ Consolidated |
-| **Tool Registry** | IronClaw Tool Registry integration | Unified Rust Pipeline (web-triggered) | ❌ Inconsistent |
+| **Tool Registry** | Ferrumyx Runtime Core Tool Registry integration | Unified Rust Pipeline (web-triggered) | ❌ Inconsistent |
 
 ## 2. Ingestion & Tool Layer
 
 > [!IMPORTANT]
-> `ARCHITECTURE.md` Section 1.2 and 1.8 claim that tools like `IngestPubmedTool` are implemented as IronClaw tools (WASM or Native) and registered via the registry.
+> `ARCHITECTURE.md` Section 1.2 and 1.8 claim that tools like `IngestPubmedTool` are implemented as Ferrumyx Runtime Core tools (WASM or Native) and registered via the registry.
 
 - **Current Implementation**: The ingestion pipeline is a linear Rust function (`run_ingestion`) in `ferrumyx-ingestion`. It is triggered directly by the web UI or agent loop, bypassing the "Tool" trait abstraction described in the docs.
 - **WASM Sandbox**: There is no evidence of the WASM sandbox for ingestion tools being active or used; all ingestion logic is native Rust.
@@ -38,7 +38,7 @@ Several tables and fields described in Section 1.4, 3.1, and 3.5 are either simp
 
 ## 5. Security & Isolation
 
-- **Docker/WASM**: Section 5.1/5.2 describes strict enforcement between Ferrumyx and Remote LLMs/Sandbox. Current code uses direct HTTP calls (`reqwest`) to Ollama/OpenAI without the intermediate IronClaw security proxying described in the conceptual diagrams.
+- **Docker/WASM**: Section 5.1/5.2 describes strict enforcement between Ferrumyx and Remote LLMs/Sandbox. Current code uses direct HTTP calls (`reqwest`) to Ollama/OpenAI without the intermediate Ferrumyx Runtime Core security proxying described in the conceptual diagrams.
 
 ## Summary
 
@@ -46,3 +46,4 @@ The codebase implements the **core functionality** (PDF parsing, NER, Vector Sea
 
 > [!TIP]
 > Recommendation: Synchronize `ARCHITECTURE.md` to reflect the current unified Rust architecture, or prioritize the implementation of the "Tool" layer and expanded DB schema to match the documented vision.
+

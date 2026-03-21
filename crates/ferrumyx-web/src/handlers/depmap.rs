@@ -64,43 +64,43 @@ pub async fn api_depmap_gene(
 
     if !gene.is_empty() && !cancer_type.is_empty() {
         if let Ok(depmap) = DepMapClientAdapter::init().await {
-        let scores = depmap.client().get_gene_scores(gene, cancer_type);
-        if !scores.is_empty() {
-            let mut sorted = scores.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let mean = scores.iter().sum::<f64>() / scores.len() as f64;
-            let mid = sorted.len() / 2;
-            let median = if sorted.len() % 2 == 0 {
-                (sorted[mid - 1] + sorted[mid]) / 2.0
-            } else {
-                sorted[mid]
-            };
-            let min = *sorted.first().unwrap_or(&0.0);
-            let max = *sorted.last().unwrap_or(&0.0);
-
-            let mut essential = 0i64;
-            let mut selective = 0i64;
-            let mut non_essential = 0i64;
-            for s in &scores {
-                if *s < -1.0 {
-                    essential += 1;
-                } else if *s < -0.5 {
-                    selective += 1;
+            let scores = depmap.client().get_gene_scores(gene, cancer_type);
+            if !scores.is_empty() {
+                let mut sorted = scores.clone();
+                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                let mean = scores.iter().sum::<f64>() / scores.len() as f64;
+                let mid = sorted.len() / 2;
+                let median = if sorted.len() % 2 == 0 {
+                    (sorted[mid - 1] + sorted[mid]) / 2.0
                 } else {
-                    non_essential += 1;
-                }
-            }
+                    sorted[mid]
+                };
+                let min = *sorted.first().unwrap_or(&0.0);
+                let max = *sorted.last().unwrap_or(&0.0);
 
-            stats.mean_ceres = mean;
-            stats.median_ceres = median;
-            stats.min_ceres = min;
-            stats.max_ceres = max;
-            stats.cell_lines_count = scores.len() as i64;
-            stats.essential_count = essential;
-            stats.selective_count = selective;
-            stats.non_essential_count = non_essential;
+                let mut essential = 0i64;
+                let mut selective = 0i64;
+                let mut non_essential = 0i64;
+                for s in &scores {
+                    if *s < -1.0 {
+                        essential += 1;
+                    } else if *s < -0.5 {
+                        selective += 1;
+                    } else {
+                        non_essential += 1;
+                    }
+                }
+
+                stats.mean_ceres = mean;
+                stats.median_ceres = median;
+                stats.min_ceres = min;
+                stats.max_ceres = max;
+                stats.cell_lines_count = scores.len() as i64;
+                stats.essential_count = essential;
+                stats.selective_count = selective;
+                stats.non_essential_count = non_essential;
+            }
         }
-    }
     }
 
     Json(stats)

@@ -34,6 +34,7 @@ pub mod ent_stage;
 pub mod entities;
 pub mod entity_mentions;
 pub mod error;
+pub mod federation;
 pub mod kg_conflicts;
 pub mod kg_facts;
 pub mod papers;
@@ -48,6 +49,13 @@ pub use ent_stage::{EntEnrichment, EntStageRepository};
 pub use entities::EntityRepository;
 pub use entity_mentions::EntityMentionRepository;
 pub use error::{DbError, Result};
+pub use federation::{
+    build_contribution_manifest_draft, export_contribution_package, validate_contribution_manifest,
+    validate_contribution_package, sign_contribution_package, ArtifactValidationResult,
+    ManifestDraftRequest, PackageExportRequest, PackageExportResult, PackageSignRequest,
+    PackageSignResult, PackageValidationReport, PackageValidationRequest,
+    SignatureValidationResult,
+};
 pub use kg_conflicts::KgConflictRepository;
 pub use kg_facts::KgFactRepository;
 pub use papers::PaperRepository;

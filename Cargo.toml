@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/ferrumyx-runtime",
     "crates/ferrumyx-agent",
     "crates/ferrumyx-ingestion",
     "crates/ferrumyx-kg",
@@ -9,7 +10,7 @@ members = [
     "crates/ferrumyx-web",
     "crates/ferrumyx-db",
     "crates/ferrumyx-molecules",
-    "crates/ironclaw"
+    "crates/ferrumyx-runtime-core"
 ]
 
 [workspace.package]

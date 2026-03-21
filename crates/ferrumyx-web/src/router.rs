@@ -7,6 +7,11 @@ use crate::handlers::{
     },
     dashboard::dashboard,
     depmap::{api_depmap_celllines, api_depmap_gene, depmap_page},
+    federation::{
+        api_federation_manifest_draft, api_federation_manifest_validate,
+        api_federation_package_export, api_federation_package_sign,
+        api_federation_package_validate, api_federation_schema,
+    },
     ingestion::{ingestion_page, ingestion_run},
     kg::{api_entity_suggest, api_kg_facts, api_kg_stats, kg_page},
     metrics::{metrics_page, metrics_perf_api},
@@ -74,6 +79,27 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ranker/top", get(api_ranker_top))
         .route("/api/ranker/stats", get(api_ranker_stats))
         .route("/api/metrics/perf", get(metrics_perf_api))
+        .route("/api/federation/schema", get(api_federation_schema))
+        .route(
+            "/api/federation/manifest/draft",
+            post(api_federation_manifest_draft),
+        )
+        .route(
+            "/api/federation/manifest/validate",
+            post(api_federation_manifest_validate),
+        )
+        .route(
+            "/api/federation/package/export",
+            post(api_federation_package_export),
+        )
+        .route(
+            "/api/federation/package/validate",
+            post(api_federation_package_validate),
+        )
+        .route(
+            "/api/federation/package/sign",
+            post(api_federation_package_sign),
+        )
         .route("/api/chat", post(chat_submit))
         .route("/api/chat/history", get(chat_history))
         .route("/api/chat/threads", get(chat_threads))

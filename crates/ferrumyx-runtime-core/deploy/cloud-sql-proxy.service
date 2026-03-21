@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloud SQL Auth Proxy
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/local/bin/cloud-sql-proxy ferrumyx-runtime-core-prod:us-central1:ferrumyx-runtime-core-db --port=5432
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

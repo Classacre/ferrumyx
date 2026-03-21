@@ -179,7 +179,10 @@ async fn load_stats(state: &SharedState) -> PageStats {
     let total = repo.paper_count().await.unwrap_or(0);
     let parsed = repo.paper_count_by_status("parsed").await.unwrap_or(0)
         + repo.paper_count_by_status("parsed_fast").await.unwrap_or(0)
-        + repo.paper_count_by_status("parsed_light").await.unwrap_or(0);
+        + repo
+            .paper_count_by_status("parsed_light")
+            .await
+            .unwrap_or(0);
     let pending = repo.paper_count_by_status("pending").await.unwrap_or(0)
         + repo.paper_count_by_status("processing").await.unwrap_or(0);
     let failed = repo.paper_count_by_status("failed").await.unwrap_or(0);

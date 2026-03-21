@@ -174,7 +174,11 @@ impl SemanticScholarClient {
             }
         }
         let norm = doi.trim().trim_matches('/').to_ascii_lowercase();
-        if norm.is_empty() { None } else { Some(norm) }
+        if norm.is_empty() {
+            None
+        } else {
+            Some(norm)
+        }
     }
 
     fn canonical_id(raw: &str) -> Option<String> {
@@ -184,7 +188,11 @@ impl SemanticScholarClient {
             .filter(|c| c.is_ascii_alphanumeric())
             .collect::<String>()
             .to_ascii_lowercase();
-        if norm.is_empty() { None } else { Some(norm) }
+        if norm.is_empty() {
+            None
+        } else {
+            Some(norm)
+        }
     }
 
     fn canonical_title(raw: &str) -> Option<String> {
@@ -373,9 +381,7 @@ impl LiteratureSource for SemanticScholarClient {
 
         // final canonical de-dup to suppress citation/search overlap quickly
         let mut seen = std::collections::HashSet::new();
-        papers.retain(|p| {
-            seen.insert(Self::paper_identity_key(p))
-        });
+        papers.retain(|p| seen.insert(Self::paper_identity_key(p)));
         papers.truncate(max_results);
         Ok(papers)
     }

@@ -145,16 +145,17 @@ pub async fn molecules_page(
             .to_string()
     } else {
         rows.iter()
-            .map(|(subject, object, predicate, confidence, support, papers, ts)| {
-                let class = if *confidence >= 0.8 {
-                    "success"
-                } else if *confidence >= 0.5 {
-                    "warning"
-                } else {
-                    "danger"
-                };
-                format!(
-                    r#"<tr>
+            .map(
+                |(subject, object, predicate, confidence, support, papers, ts)| {
+                    let class = if *confidence >= 0.8 {
+                        "success"
+                    } else if *confidence >= 0.5 {
+                        "warning"
+                    } else {
+                        "danger"
+                    };
+                    format!(
+                        r#"<tr>
                 <td style="font-family: monospace; font-size: 0.9rem;">{}</td>
                 <td style="font-weight:700; color:var(--text-main);">{}</td>
                 <td><span class="badge badge-outline">{}</span></td>
@@ -163,16 +164,17 @@ pub async fn molecules_page(
                 <td class="text-muted">{}</td>
                 <td class="text-muted small">{}</td>
             </tr>"#,
-                    html_escape(subject),
-                    html_escape(object),
-                    html_escape(predicate),
-                    class,
-                    confidence,
-                    support,
-                    papers,
-                    ts
-                )
-            })
+                        html_escape(subject),
+                        html_escape(object),
+                        html_escape(predicate),
+                        class,
+                        confidence,
+                        support,
+                        papers,
+                        ts
+                    )
+                },
+            )
             .collect()
     };
 
@@ -261,7 +263,12 @@ fn is_dockingish_predicate(predicate: &str) -> bool {
         || p.contains("ligand")
 }
 
-fn calibrated_confidence(predicate: &str, raw: f32, evidence_count: usize, paper_count: usize) -> f32 {
+fn calibrated_confidence(
+    predicate: &str,
+    raw: f32,
+    evidence_count: usize,
+    paper_count: usize,
+) -> f32 {
     let mut c = raw.clamp(0.0, 1.0);
     let p = predicate.to_ascii_lowercase();
     if p == "mentions" || p == "associated_with" {

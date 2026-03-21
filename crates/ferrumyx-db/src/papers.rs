@@ -442,7 +442,11 @@ impl PaperRepository {
                 Some(a) => a,
                 None => continue,
             };
-            let pmid_arr = match batch.column(pmid_idx).as_any().downcast_ref::<StringArray>() {
+            let pmid_arr = match batch
+                .column(pmid_idx)
+                .as_any()
+                .downcast_ref::<StringArray>()
+            {
                 Some(a) => a,
                 None => continue,
             };

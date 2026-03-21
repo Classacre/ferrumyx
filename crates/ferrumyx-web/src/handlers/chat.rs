@@ -1,4 +1,4 @@
-//! Chat endpoint handler proxying requests to the IronClaw GatewayChannel.
+//! Chat endpoint handler proxying requests to the Ferrumyx Runtime Core GatewayChannel.
 
 use crate::state::SharedState;
 use axum::{
@@ -399,7 +399,7 @@ pub async fn chat_submit(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to contact IronClaw Agent: {}", e);
+            tracing::error!("Failed to contact Ferrumyx Runtime Core Agent: {}", e);
             let fallback_thread = if let Some(existing) = payload.thread_id.clone() {
                 existing
             } else {
@@ -705,7 +705,7 @@ pub async fn chat_history(
         },
         Ok(_) => axum::Json(local_thread_history(&query.thread_id, limit)).into_response(),
         Err(e) => {
-            tracing::error!("Failed to contact IronClaw Agent history endpoint: {}", e);
+            tracing::error!("Failed to contact Ferrumyx Runtime Core Agent history endpoint: {}", e);
             axum::Json(local_thread_history(&query.thread_id, limit)).into_response()
         }
     }
@@ -742,7 +742,7 @@ pub async fn chat_thread_new(State(_state): State<SharedState>) -> impl IntoResp
         Ok(_) => axum::Json(json!(local_create_thread())).into_response(),
         Err(e) => {
             tracing::error!(
-                "Failed to contact IronClaw Agent new-thread endpoint: {}",
+                "Failed to contact Ferrumyx Runtime Core Agent new-thread endpoint: {}",
                 e
             );
             axum::Json(json!(local_create_thread())).into_response()
@@ -806,7 +806,7 @@ pub async fn chat_events_proxy(State(_state): State<SharedState>) -> impl IntoRe
         }
         Ok(_) => offline_sse_response("Agent gateway returned error status"),
         Err(e) => {
-            tracing::error!("Failed to proxy IronClaw SSE events: {}", e);
+            tracing::error!("Failed to proxy Ferrumyx Runtime Core SSE events: {}", e);
             offline_sse_response("Agent offline")
         }
     }
@@ -882,3 +882,4 @@ pub async fn chat_lab_monitor(
     }))
     .into_response()
 }
+

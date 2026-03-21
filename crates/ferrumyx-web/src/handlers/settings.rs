@@ -157,14 +157,14 @@ async function loadSettings() {
   setProviderState('cosmic_state', data.has_cosmic_key);
   setProviderState('embedding_state', data.has_embedding_key);
 
-  byId('sync_backend').textContent = data.ironclaw_sync.llm_backend;
-  byId('sync_base_url').textContent = data.ironclaw_sync.llm_base_url || 'n/a';
-  byId('sync_model').textContent = data.ironclaw_sync.llm_model || 'n/a';
-  setSyncState('sync_llm_api_key', data.ironclaw_sync.has_llm_api_key);
-  setSyncState('sync_openai', data.ironclaw_sync.has_openai_key);
-  setSyncState('sync_anthropic', data.ironclaw_sync.has_anthropic_key);
-  setSyncState('sync_gemini', data.ironclaw_sync.has_gemini_key);
-  setSyncState('sync_cached_chat', data.ironclaw_sync.compat_cached_chat_enabled);
+  byId('sync_backend').textContent = data.runtime_sync.llm_backend;
+  byId('sync_base_url').textContent = data.runtime_sync.llm_base_url || 'n/a';
+  byId('sync_model').textContent = data.runtime_sync.llm_model || 'n/a';
+  setSyncState('sync_llm_api_key', data.runtime_sync.has_llm_api_key);
+  setSyncState('sync_openai', data.runtime_sync.has_openai_key);
+  setSyncState('sync_anthropic', data.runtime_sync.has_anthropic_key);
+  setSyncState('sync_gemini', data.runtime_sync.has_gemini_key);
+  setSyncState('sync_cached_chat', data.runtime_sync.compat_cached_chat_enabled);
 }
 
 async function saveSettings() {
@@ -381,6 +381,10 @@ __NAV__
     <div>
       <section id="tab-llm" class="tab-panel active card p-4">
         <h3 class="settings-section-title">Language Model Providers</h3>
+        <div class="security-note" style="margin-bottom:0.9rem; border-color:rgba(251,191,36,0.35); background:rgba(120,53,15,0.18);">
+          <strong style="color:#fbbf24;">Agent Restart Required for LLM Changes</strong>
+          <div style="margin-top:0.35rem;">Changes to backend, base URL, model, and API keys are saved immediately but take effect after restarting the Ferrumyx agent process.</div>
+        </div>
         <div class="form-grid">
           <div class="form-group"><label for="llm_mode">Mode</label><select id="llm_mode" class="form-control"><option value="local_only">local_only</option><option value="prefer_local">prefer_local</option><option value="any">any</option></select></div>
           <div class="form-group"><label for="llm_default_backend">Default Backend</label><select id="llm_default_backend" class="form-control"><option value="openai">openai</option><option value="anthropic">anthropic</option><option value="gemini">gemini</option><option value="openai_compatible">openai_compatible</option><option value="ollama">ollama</option></select></div>
@@ -848,7 +852,8 @@ __NAV__
         </div>
         <div class="security-note">API keys are never returned to the browser once saved. Empty password fields keep existing keys unchanged. Settings are persisted to your Ferrumyx config file and applied on next agent restart.</div>
         <div class="security-note" style="margin-top:0.8rem;">
-          <strong style="color:var(--text-main);">IronClaw Sync Status</strong>
+          <strong style="color:var(--text-main);">Runtime Sync Status</strong>
+          <div class="help-text" style="margin-top:0.35rem;">If these values do not reflect recent LLM changes, restart the Ferrumyx agent.</div>
           <div style="margin-top:0.55rem; display:grid; grid-template-columns: 230px 1fr; row-gap:0.35rem; column-gap:0.9rem;">
             <div>LLM Backend</div><div id="sync_backend">n/a</div>
             <div>LLM Base URL</div><div id="sync_base_url">n/a</div>
@@ -1192,11 +1197,11 @@ pub struct SettingsView {
     has_cbioportal_key: bool,
     has_cosmic_key: bool,
     has_embedding_key: bool,
-    ironclaw_sync: IronclawSyncView,
+    runtime_sync: RuntimeSyncView,
 }
 
 #[derive(Debug, Serialize)]
-pub struct IronclawSyncView {
+pub struct RuntimeSyncView {
     llm_backend: String,
     llm_base_url: String,
     llm_model: String,
@@ -2572,7 +2577,7 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
             || has_nonempty(&root, &["ranker", "providers", "cosmic", "api_key_secret"])
             || std::env::var("FERRUMYX_COSMIC_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
-        ironclaw_sync: IronclawSyncView {
+        runtime_sync: RuntimeSyncView {
             llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
             llm_base_url: std::env::var("LLM_BASE_URL").unwrap_or_default(),
             llm_model: std::env::var("LLM_MODEL").unwrap_or_default(),
@@ -3258,7 +3263,10 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         default_graph_atlas_max_clusters(),
     )
     .clamp(5, 300);
-    std::env::set_var("FERRUMYX_KG_HUB_SUPPRESSION", format!("{graph_hub_suppression:.4}"));
+    std::env::set_var(
+        "FERRUMYX_KG_HUB_SUPPRESSION",
+        format!("{graph_hub_suppression:.4}"),
+    );
     std::env::set_var(
         "FERRUMYX_KG_PER_NODE_EDGE_CAP",
         graph_per_node_edge_cap.to_string(),
@@ -3545,7 +3553,11 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     );
     std::env::set_var(
         "FERRUMYX_CHUNK_FINGERPRINT_SCOPE",
-        match ingestion_chunk_fingerprint_scope.trim().to_ascii_lowercase().as_str() {
+        match ingestion_chunk_fingerprint_scope
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "global" => "global",
             "off" | "disabled" => "off",
             _ => "paper",
@@ -3580,7 +3592,11 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     );
     std::env::set_var(
         "FERRUMYX_INGESTION_VALIDATION_MODE",
-        match ingestion_validation_mode.trim().to_ascii_lowercase().as_str() {
+        match ingestion_validation_mode
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "strict" => "strict",
             "off" | "disabled" => "off",
             _ => "audit",
@@ -3619,7 +3635,11 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
     );
     let ingestion_pdf_parse_negative_revalidate_secs = int_at(
         root,
-        &["ingestion", "performance", "pdf_parse_negative_revalidate_secs"],
+        &[
+            "ingestion",
+            "performance",
+            "pdf_parse_negative_revalidate_secs",
+        ],
         1800,
     );
     std::env::set_var(
@@ -3773,8 +3793,7 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
             .clamp(1, 128)
             .to_string(),
     );
-    let phase4_query_cache_only =
-        bool_at(root, &["ranker", "phase4", "query_cache_only"], false);
+    let phase4_query_cache_only = bool_at(root, &["ranker", "phase4", "query_cache_only"], false);
     std::env::set_var(
         "FERRUMYX_PHASE4_QUERY_CACHE_ONLY",
         if phase4_query_cache_only { "1" } else { "0" },
@@ -4232,3 +4251,4 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         std::env::set_var("SEMANTIC_SCHOLAR_API_KEY", &semanticscholar_key);
     }
 }
+

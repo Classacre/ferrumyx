@@ -79,7 +79,16 @@ const PATHWAY_HINTS: &[&str] = &[
 
 /// Built-in short lexicon for common cell lines.
 const CELL_LINE_HINTS: &[&str] = &[
-    "hela", "hek293", "a549", "h1975", "pc9", "panc1", "mia paca 2", "bxpc3", "ht29", "hct116",
+    "hela",
+    "hek293",
+    "a549",
+    "h1975",
+    "pc9",
+    "panc1",
+    "mia paca 2",
+    "bxpc3",
+    "ht29",
+    "hct116",
 ];
 
 /// Extract cancer type from text.
@@ -672,7 +681,8 @@ pub fn build_facts_batch(gene_symbols: &[String], text: &str) -> Vec<ExtractedFa
     for sentence in split_into_sentences(text) {
         let sentence_lower = sentence.to_lowercase();
         let matched_predicates = extractor.matched_predicates(&sentence);
-        let sentence_cancer = extract_cancer_type_from_lower(&sentence_lower).or(global_cancer.clone());
+        let sentence_cancer =
+            extract_cancer_type_from_lower(&sentence_lower).or(global_cancer.clone());
         let sentence_mutations: Vec<String> = extract_mutations(&sentence)
             .into_iter()
             .filter_map(|m| m.protein_change)
@@ -706,7 +716,11 @@ pub fn build_facts_batch(gene_symbols: &[String], text: &str) -> Vec<ExtractedFa
             }
 
             for mutation in &sentence_mutations {
-                let key = ("has_mutation".to_string(), gene_up.clone(), mutation.to_uppercase());
+                let key = (
+                    "has_mutation".to_string(),
+                    gene_up.clone(),
+                    mutation.to_uppercase(),
+                );
                 if seen_rel.insert(key.clone()) {
                     out.push(ExtractedFact {
                         fact_type: key.0,
@@ -803,7 +817,11 @@ pub fn build_facts_batch(gene_symbols: &[String], text: &str) -> Vec<ExtractedFa
         // Safety fallback for sparse text: at least preserve mutation observations.
         for (gene_up, _) in normalized_genes {
             for mutation in &global_mutations {
-                let key = ("has_mutation".to_string(), gene_up.clone(), mutation.to_uppercase());
+                let key = (
+                    "has_mutation".to_string(),
+                    gene_up.clone(),
+                    mutation.to_uppercase(),
+                );
                 if seen_rel.insert(key.clone()) {
                     out.push(ExtractedFact {
                         fact_type: key.0,
@@ -846,10 +864,13 @@ mod tests {
 
     #[test]
     fn test_build_facts_typed_edges() {
-        let text = "KRAS activates MAPK pathway in pancreatic cancer. KRAS is sensitive to sotorasib.";
+        let text =
+            "KRAS activates MAPK pathway in pancreatic cancer. KRAS is sensitive to sotorasib.";
         let facts = build_facts_batch(&["KRAS".to_string()], text);
         assert!(facts.iter().any(|f| f.fact_type == "activates_pathway"));
-        assert!(facts.iter().any(|f| f.fact_type == "targeted_by" || f.fact_type == "sensitized_by"));
+        assert!(facts
+            .iter()
+            .any(|f| f.fact_type == "targeted_by" || f.fact_type == "sensitized_by"));
         assert!(facts.iter().any(|f| f.object == "PAAD"));
     }
 }

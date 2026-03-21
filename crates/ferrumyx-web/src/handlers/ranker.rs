@@ -8,13 +8,8 @@ use axum::{
     Json,
 };
 use ferrumyx_common::error::ApiError;
-use ferrumyx_db::{
-    entities::EntityRepository, target_scores::TargetScoreRepository,
-};
-use ferrumyx_ranker::{
-    scorer::ComponentScoresNormed,
-    weights::WeightVector,
-};
+use ferrumyx_db::{entities::EntityRepository, target_scores::TargetScoreRepository};
+use ferrumyx_ranker::{scorer::ComponentScoresNormed, weights::WeightVector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

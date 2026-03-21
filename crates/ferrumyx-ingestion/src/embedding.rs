@@ -505,7 +505,7 @@ fn l2_norm(v: &[f32]) -> f32 {
     s.sqrt().max(1e-10)
 }
 
-// ── Hybrid search (FTS + vector RRF) — IronClaw-aligned ──────────────────────
+// ── Hybrid search (FTS + vector RRF) — Ferrumyx Runtime Core-aligned ──────────────────────
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -671,3 +671,4 @@ mod tests {
         assert_eq!(cfg.backend, EmbeddingBackend::RustNative);
     }
 }
+

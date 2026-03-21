@@ -9,7 +9,7 @@ use std::time::Duration;
 
 mod config;
 mod tools;
-use ironclaw::llm::{CooldownConfig, FailoverProvider};
+use ferrumyx_runtime::llm::{CooldownConfig, FailoverProvider};
 use rig::client::CompletionClient;
 use rig::providers::anthropic::Client as AnthropicClient;
 use rig::providers::gemini::Client as GeminiClient;
@@ -22,13 +22,14 @@ use tokio::process::Command;
 /// It natively maps the Ferrumyx config directly to `rig-core` LLM clients.
 async fn build_completion_model(
     config: &config::Config,
-) -> anyhow::Result<Arc<dyn ironclaw::llm::LlmProvider>> {
+) -> anyhow::Result<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> {
     let mode = config.llm.mode.to_lowercase();
     let local_only = mode == "local_only";
     let default_backend = normalize_backend_name(&config.llm.default_backend);
-    let failover_order = resolve_failover_backend_order(&default_backend, &mode);
+    let local_backend = normalize_backend_name(&config.llm.local_backend);
+    let failover_order = resolve_failover_backend_order(&default_backend, &local_backend, &mode);
 
-    let mut providers: Vec<Arc<dyn ironclaw::llm::LlmProvider>> = Vec::new();
+    let mut providers: Vec<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> = Vec::new();
     let mut provider_names: Vec<String> = Vec::new();
     let mut seen = HashSet::new();
 
@@ -95,7 +96,11 @@ fn normalize_backend_name(raw: &str) -> String {
     }
 }
 
-fn resolve_failover_backend_order(default_backend: &str, mode: &str) -> Vec<String> {
+fn resolve_failover_backend_order(
+    default_backend: &str,
+    local_backend: &str,
+    mode: &str,
+) -> Vec<String> {
     if let Ok(raw) = std::env::var("FERRUMYX_LLM_FAILOVER_ORDER") {
         let mut parsed = Vec::new();
         let mut seen = HashSet::new();
@@ -112,10 +117,20 @@ fn resolve_failover_backend_order(default_backend: &str, mode: &str) -> Vec<Stri
         }
     }
 
+    let local_primary = match local_backend {
+        "openai_compatible" => "openai_compatible",
+        _ => "ollama",
+    };
+    let local_secondary = if local_primary == "ollama" {
+        "openai_compatible"
+    } else {
+        "ollama"
+    };
+
     let mut order = Vec::new();
     if mode == "local_only" || mode == "prefer_local" || default_backend == "ollama" {
-        order.push("ollama".to_string());
-        order.push("openai_compatible".to_string());
+        order.push(local_primary.to_string());
+        order.push(local_secondary.to_string());
         if mode != "local_only" {
             order.extend(
                 ["openai", "anthropic", "gemini"]
@@ -154,7 +169,7 @@ fn resolve_failover_backend_order(default_backend: &str, mode: &str) -> Vec<Stri
 
 fn try_build_openai(
     config: &config::Config,
-) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+) -> anyhow::Result<Option<Arc<dyn ferrumyx_runtime::llm::LlmProvider>>> {
     if let Some(ref openai) = config.llm.openai {
         let key = if openai.api_key.is_empty() {
             std::env::var("FERRUMYX_OPENAI_API_KEY").unwrap_or_default()
@@ -164,7 +179,7 @@ fn try_build_openai(
         if !key.is_empty() {
             tracing::info!("Using OpenAI: {}", openai.model);
             let client: OpenAiClient = OpenAiClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+            return Ok(Some(Arc::new(ferrumyx_runtime::llm::RigAdapter::new(
                 client.completion_model(&openai.model),
                 &openai.model,
             ))));
@@ -175,7 +190,7 @@ fn try_build_openai(
 
 fn try_build_anthropic(
     config: &config::Config,
-) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+) -> anyhow::Result<Option<Arc<dyn ferrumyx_runtime::llm::LlmProvider>>> {
     if let Some(ref anthropic) = config.llm.anthropic {
         let key = if anthropic.api_key.is_empty() {
             std::env::var("FERRUMYX_ANTHROPIC_API_KEY").unwrap_or_default()
@@ -185,7 +200,7 @@ fn try_build_anthropic(
         if !key.is_empty() {
             tracing::info!("Using Anthropic: {}", anthropic.model);
             let client: AnthropicClient = AnthropicClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+            return Ok(Some(Arc::new(ferrumyx_runtime::llm::RigAdapter::new(
                 client.completion_model(&anthropic.model),
                 &anthropic.model,
             ))));
@@ -196,7 +211,7 @@ fn try_build_anthropic(
 
 fn try_build_gemini(
     config: &config::Config,
-) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+) -> anyhow::Result<Option<Arc<dyn ferrumyx_runtime::llm::LlmProvider>>> {
     if let Some(ref gemini) = config.llm.gemini {
         let key = if gemini.api_key.is_empty() {
             std::env::var("FERRUMYX_GEMINI_API_KEY").unwrap_or_default()
@@ -206,7 +221,7 @@ fn try_build_gemini(
         if !key.is_empty() {
             tracing::info!("Using Gemini: {}", gemini.model);
             let client: GeminiClient = GeminiClient::new(&key)?;
-            return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+            return Ok(Some(Arc::new(ferrumyx_runtime::llm::RigAdapter::new(
                 client.completion_model(&gemini.model),
                 &gemini.model,
             ))));
@@ -218,7 +233,7 @@ fn try_build_gemini(
 fn try_build_openai_compatible(
     config: &config::Config,
     local_only: bool,
-) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+) -> anyhow::Result<Option<Arc<dyn ferrumyx_runtime::llm::LlmProvider>>> {
     if let Some(ref compat) = config.llm.openai_compatible {
         let key = if compat.api_key.is_empty() {
             std::env::var("FERRUMYX_COMPAT_API_KEY").unwrap_or_default()
@@ -257,7 +272,7 @@ fn try_build_openai_compatible(
             .base_url(&compat.base_url)
             .api_key(&api_key)
             .build()?;
-        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+        return Ok(Some(Arc::new(ferrumyx_runtime::llm::RigAdapter::new(
             client.completion_model(&compat.model),
             &compat.model,
         ))));
@@ -267,7 +282,7 @@ fn try_build_openai_compatible(
 
 async fn try_build_ollama(
     config: &config::Config,
-) -> anyhow::Result<Option<Arc<dyn ironclaw::llm::LlmProvider>>> {
+) -> anyhow::Result<Option<Arc<dyn ferrumyx_runtime::llm::LlmProvider>>> {
     if let Some(ref ollama) = config.llm.ollama {
         let model = ensure_ollama_ready(&ollama.base_url, &ollama.model).await;
         let tags_url = format!("{}/api/tags", ollama.base_url.trim_end_matches('/'));
@@ -285,7 +300,7 @@ async fn try_build_ollama(
             .base_url(&format!("{}/v1", ollama.base_url))
             .api_key("ollama")
             .build()?;
-        return Ok(Some(Arc::new(ironclaw::llm::RigAdapter::new(
+        return Ok(Some(Arc::new(ferrumyx_runtime::llm::RigAdapter::new(
             client.completion_model(&model),
             &model,
         ))));
@@ -397,7 +412,7 @@ fn pick_ollama_model_for_hardware() -> String {
     model.to_string()
 }
 
-fn sync_ironclaw_env_from_config(config: &config::Config) {
+fn sync_runtime_env_from_config(config: &config::Config) {
     std::env::set_var("LLM_BACKEND", config.llm.default_backend.clone());
 
     if let Some(ref ollama) = config.llm.ollama {
@@ -734,7 +749,7 @@ fn spawn_background_provider_refresh_scheduler(db: Arc<ferrumyx_db::Database>) {
     });
 }
 
-use ironclaw::agent::SessionManager;
+use ferrumyx_runtime::agent::SessionManager;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -776,8 +791,8 @@ async fn async_main() -> anyhow::Result<()> {
         }
     };
 
-    // Bridge Ferrumyx settings into IronClaw env-style configuration.
-    sync_ironclaw_env_from_config(&config);
+    // Bridge Ferrumyx settings into runtime core env-style configuration.
+    sync_runtime_env_from_config(&config);
 
     // Connect to LanceDB
     info!("Connecting to LanceDB...");
@@ -792,58 +807,63 @@ async fn async_main() -> anyhow::Result<()> {
     spawn_background_provider_refresh_scheduler(db.clone());
 
     // Build LLM client
-    let ironclaw_llm = build_completion_model(&config).await?;
+    let runtime_llm = build_completion_model(&config).await?;
+    let runtime_core_llm = ferrumyx_runtime::llm::to_core_provider(runtime_llm.clone());
 
     // Build Tool Registry
-    let tool_registry = Arc::new(ironclaw::tools::ToolRegistry::new());
-    tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(
+    let runtime_tool_registry = Arc::new(ferrumyx_runtime::tools::ToolRegistry::new());
+    runtime_tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(
         db.clone(),
     )));
-    tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(
+    runtime_tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(
         db.clone(),
     )));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(
         tools::workflow_status_tool::WorkflowStatusTool::new(db.clone()),
     ));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(
         tools::scoring_tool::RecomputeTargetScoresTool::new(db.clone()),
     ));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(
         tools::provider_refresh_tool::RefreshProviderSignalsTool::new(db.clone()),
     ));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(
         tools::molecule_tool::RunMoleculePipelineTool::new(),
     ));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(
         tools::autonomous_cycle_tool::AutonomousCycleTool::new(db.clone()),
     ));
-    tool_registry.register_sync(Arc::new(tools::lab_planner_tool::LabPlannerTool::new()));
-    tool_registry.register_sync(Arc::new(tools::lab_retriever_tool::LabRetrieverTool::new(
-        db.clone(),
-    )));
-    tool_registry.register_sync(Arc::new(tools::lab_validator_tool::LabValidatorTool::new(
-        db.clone(),
-    )));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry.register_sync(Arc::new(tools::lab_planner_tool::LabPlannerTool::new()));
+    runtime_tool_registry.register_sync(Arc::new(
+        tools::lab_retriever_tool::LabRetrieverTool::new(db.clone()),
+    ));
+    runtime_tool_registry.register_sync(Arc::new(
+        tools::lab_validator_tool::LabValidatorTool::new(db.clone()),
+    ));
+    runtime_tool_registry.register_sync(Arc::new(
         tools::lab_autoresearch_tool::LabAutoresearchTool::new(db.clone()),
     ));
-    tool_registry.register_sync(Arc::new(tools::lab_run_status_tool::LabRunStatusTool::new()));
-    tool_registry.register_sync(Arc::new(
+    runtime_tool_registry
+        .register_sync(Arc::new(tools::lab_run_status_tool::LabRunStatusTool::new()));
+    runtime_tool_registry.register_sync(Arc::new(
         tools::system_command_tool::SystemCommandTool::new(),
     ));
+    let tool_registry = runtime_tool_registry.to_core_registry();
 
     // Build Skill Registry
     let skill_registry = std::sync::Arc::new(std::sync::RwLock::new(
-        ironclaw::skills::registry::SkillRegistry::new(std::path::PathBuf::from("./data/skills")),
+        ferrumyx_runtime::skills::registry::SkillRegistry::new(std::path::PathBuf::from(
+            "./data/skills",
+        )),
     ));
-    let skill_catalog = std::sync::Arc::new(ironclaw::skills::catalog::SkillCatalog::new());
+    let skill_catalog = std::sync::Arc::new(ferrumyx_runtime::skills::catalog::SkillCatalog::new());
 
-    let deps = ironclaw::agent::AgentDeps {
+    let deps = ferrumyx_runtime::agent::AgentDeps {
         store: None,
-        llm: ironclaw_llm.clone(),
+        llm: runtime_core_llm.clone(),
         cheap_llm: None,
-        safety: std::sync::Arc::new(ironclaw::safety::SafetyLayer::new(
-            &ironclaw::config::SafetyConfig {
+        safety: std::sync::Arc::new(ferrumyx_runtime::safety::SafetyLayer::new(
+            &ferrumyx_runtime::config::SafetyConfig {
                 max_output_length: 100_000,
                 injection_check_enabled: true,
             },
@@ -853,10 +873,10 @@ async fn async_main() -> anyhow::Result<()> {
         extension_manager: None,
         skill_registry: Some(skill_registry.clone()),
         skill_catalog: Some(skill_catalog.clone()),
-        skills_config: ironclaw::config::SkillsConfig::default(),
-        hooks: std::sync::Arc::new(ironclaw::hooks::HookRegistry::new()),
-        cost_guard: std::sync::Arc::new(ironclaw::agent::cost_guard::CostGuard::new(
-            ironclaw::agent::cost_guard::CostGuardConfig::default(),
+        skills_config: ferrumyx_runtime::config::SkillsConfig::default(),
+        hooks: std::sync::Arc::new(ferrumyx_runtime::hooks::HookRegistry::new()),
+        cost_guard: std::sync::Arc::new(ferrumyx_runtime::agent::cost_guard::CostGuard::new(
+            ferrumyx_runtime::agent::cost_guard::CostGuardConfig::default(),
         )),
         sse_tx: None,
         http_interceptor: None,
@@ -865,30 +885,30 @@ async fn async_main() -> anyhow::Result<()> {
     };
 
     let session_manager = Arc::new(SessionManager::new());
-    let channels = ironclaw::channels::ChannelManager::new();
+    let channels = ferrumyx_runtime::channels::ChannelManager::new();
     let disable_repl = std::env::var("FERRUMYX_DISABLE_REPL")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     if !disable_repl && std::io::stdin().is_terminal() {
         channels
-            .add(Box::new(ironclaw::channels::ReplChannel::new()))
+            .add(Box::new(ferrumyx_runtime::channels::ReplChannel::new()))
             .await;
     } else {
         tracing::info!("Non-interactive runtime detected; skipping REPL channel.");
     }
 
-    let gw_config = ironclaw::config::GatewayConfig {
+    let gw_config = ferrumyx_runtime::config::GatewayConfig {
         host: "127.0.0.1".to_string(),
         port: 3002,
         user_id: "User".to_string(),
         auth_token: Some("ferrumyx-local-dev-token".to_string()),
     };
-    let gateway = ironclaw::channels::GatewayChannel::new(gw_config)
+    let gateway = ferrumyx_runtime::channels::GatewayChannel::new(gw_config)
         .with_session_manager(session_manager.clone())
-        .with_llm_provider(ironclaw_llm.clone());
+        .with_llm_provider(runtime_core_llm.clone());
     channels.add(Box::new(gateway)).await;
 
-    let agent_config = ironclaw::config::AgentConfig {
+    let agent_config = ferrumyx_runtime::config::AgentConfig {
         name: "Ferrumyx Drug Discovery Agent".to_string(),
         max_parallel_jobs: 1,
         job_timeout: std::time::Duration::from_secs(3600),
@@ -905,7 +925,7 @@ async fn async_main() -> anyhow::Result<()> {
         default_timezone: "UTC".to_string(),
     };
 
-    let agent = ironclaw::agent::Agent::new(
+    let agent = ferrumyx_runtime::agent::Agent::new(
         agent_config,
         deps,
         Arc::new(channels),
@@ -944,3 +964,4 @@ async fn async_main() -> anyhow::Result<()> {
 
     Ok(())
 }
+

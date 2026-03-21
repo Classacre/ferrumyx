@@ -160,7 +160,7 @@ User Config (YAML/Web)
     TargetConfig
         ↓
 ┌───────────────────────────────────┐
-│         IronClaw Agent            │
+│         Ferrumyx Runtime Core Agent            │
 │  ┌─────────────────────────────┐  │
 │  │ Dynamic Tool Selection      │  │
 │  │ - Enabled sources only      │  │
@@ -207,3 +207,4 @@ let query = table
 5. Build web GUI form
 
 This makes Ferrumyx a **configurable research engine** rather than a single-target tool.
+

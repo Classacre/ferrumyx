@@ -1,0 +1,22 @@
+[Unit]
+Description=Ferrumyx Runtime Core AI Assistant
+After=cloud-sql-proxy.service docker.service
+Requires=cloud-sql-proxy.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/docker pull us-central1-docker.pkg.dev/ferrumyx-runtime-core-prod/ferrumyx-runtime-core/agent:latest
+ExecStart=/usr/bin/docker run --rm \
+  --name ferrumyx-runtime-core \
+  --env-file /opt/ferrumyx-runtime-core/.env \
+  --network=host \
+  us-central1-docker.pkg.dev/ferrumyx-runtime-core-prod/ferrumyx-runtime-core/agent:latest \
+  --no-onboard
+ExecStop=/usr/bin/docker stop ferrumyx-runtime-core
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+

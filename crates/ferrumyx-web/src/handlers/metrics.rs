@@ -452,7 +452,10 @@ async fn estimate_parse_success_rate(state: &SharedState) -> f64 {
     let repo = PaperRepository::new(state.db.clone());
     let parsed = repo.count_by_parse_status("parsed").await.unwrap_or(0) as f64;
     let parsed_fast = repo.count_by_parse_status("parsed_fast").await.unwrap_or(0) as f64;
-    let parsed_light = repo.count_by_parse_status("parsed_light").await.unwrap_or(0) as f64;
+    let parsed_light = repo
+        .count_by_parse_status("parsed_light")
+        .await
+        .unwrap_or(0) as f64;
     let failed = repo.count_by_parse_status("failed").await.unwrap_or(0) as f64;
     let total = parsed + parsed_fast + parsed_light + failed;
     if total <= 0.0 {

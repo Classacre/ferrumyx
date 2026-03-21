@@ -3,6 +3,7 @@
 pub mod confidence;
 pub mod entities;
 pub mod error;
+pub mod federation;
 pub mod query;
 pub mod target_config;
 

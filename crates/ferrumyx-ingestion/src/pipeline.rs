@@ -12,7 +12,7 @@
 //!   9. Embed chunks if configured
 //!   10. Emit progress events via broadcast channel
 //!
-//! The pipeline is designed to be called from both the IronClaw tool
+//! The pipeline is designed to be called from both the Ferrumyx Runtime Core tool
 //! (`ferrumyx-agent/src/tools/ingestion_tool.rs`) and the web API.
 
 use serde::{Deserialize, Serialize};
@@ -504,7 +504,10 @@ pub async fn run_ingestion(
                     fetched: papers.len(),
                     error: None,
                 });
-                if abort_on_unique_target && !aborted_for_unique_target && all_papers.len() >= unique_target {
+                if abort_on_unique_target
+                    && !aborted_for_unique_target
+                    && all_papers.len() >= unique_target
+                {
                     aborted_for_unique_target = true;
                     source_tasks.abort_all();
                     info!(
@@ -541,9 +544,7 @@ pub async fn run_ingestion(
     let t_dedup = std::time::Instant::now();
     result.papers_found_raw = papers_found_raw_total;
     let mut seen = HashSet::new();
-    all_papers.retain(|paper| {
-        seen.insert(canonical_paper_identity_key(paper))
-    });
+    all_papers.retain(|paper| seen.insert(canonical_paper_identity_key(paper)));
 
     result.papers_found = all_papers.len();
     result.perf_telemetry.dedup_ms = t_dedup.elapsed().as_millis() as u64;
@@ -719,7 +720,11 @@ pub async fn run_ingestion(
     let mut predicate_hist: HashMap<String, usize> = HashMap::new();
     let query_gene_hint = {
         let g = job.gene.trim().to_uppercase();
-        if g.is_empty() { None } else { Some(g) }
+        if g.is_empty() {
+            None
+        } else {
+            Some(g)
+        }
     };
     while prefetch_rx.is_closed() == false || !processing_set.is_empty() {
         while processing_set.len() < adaptive_process_limit {
@@ -814,9 +819,9 @@ pub async fn run_ingestion(
             .clamp(0.0, 1.0);
     let min_unique = resolve_predicate_coverage_min_unique();
     let max_generic_share = resolve_predicate_coverage_max_generic_share();
-    result.perf_telemetry.predicate_coverage_flagged =
-        result.perf_telemetry.unique_predicate_count < min_unique
-            || result.perf_telemetry.predicate_generic_share > max_generic_share;
+    result.perf_telemetry.predicate_coverage_flagged = result.perf_telemetry.unique_predicate_count
+        < min_unique
+        || result.perf_telemetry.predicate_generic_share > max_generic_share;
     if resolve_heavy_lane_async_enabled() && result.perf_telemetry.relation_fact_count == 0 {
         // Heavy enrichment can complete after run_ingestion returns; avoid false negatives.
         result.perf_telemetry.predicate_coverage_flagged = false;
@@ -2735,7 +2740,10 @@ fn section_char_count(sections: &[DocumentSection]) -> usize {
 }
 
 fn parse_quality_ok(sections: &[DocumentSection]) -> bool {
-    let section_count = sections.iter().filter(|s| !s.text.trim().is_empty()).count();
+    let section_count = sections
+        .iter()
+        .filter(|s| !s.text.trim().is_empty())
+        .count();
     let char_count = section_char_count(sections);
     section_count >= resolve_pdf_parse_min_sections() && char_count >= resolve_pdf_parse_min_chars()
 }
@@ -3115,3 +3123,4 @@ mod tests {
             .any(|s| s.heading.as_deref() == Some("Results")));
     }
 }
+

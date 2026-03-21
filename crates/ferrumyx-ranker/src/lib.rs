@@ -14,7 +14,9 @@ use ferrumyx_db::entities::EntityRepository;
 use ferrumyx_db::kg_conflicts::KgConflictRepository;
 use ferrumyx_db::kg_facts::KgFactRepository;
 use ferrumyx_db::papers::{PaperNoveltySignal, PaperRepository};
-use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType, EntDruggability, EntStructure, KgFact};
+use ferrumyx_db::schema::{
+    EntDruggability, EntStructure, Entity as DbEntity, EntityType as DbEntityType, KgFact,
+};
 use ferrumyx_db::Database;
 use ferrumyx_db::{
     EntCbioMutationFrequency, EntChemblTarget, EntCosmicMutationFrequency, EntGtexExpression,
@@ -267,7 +269,8 @@ impl TargetQueryEngine {
             let provenance = classify_fact_provenance(&f);
             let tier = classify_confidence_tier(&f, provenance);
             let signal_weight = fact_signal_weight(provenance, tier, &f.predicate);
-            let weighted_confidence = (confidence_adj.clamp(0.0, 1.0) * signal_weight).clamp(0.0, 1.0);
+            let weighted_confidence =
+                (confidence_adj.clamp(0.0, 1.0) * signal_weight).clamp(0.0, 1.0);
 
             if disputed {
                 entry.flags.insert("DISPUTED".to_string());
@@ -1195,9 +1198,13 @@ async fn materialize_provider_cache_facts_to_kg(
             continue;
         }
 
-        let Some(gene_id) =
-            ensure_entity_id(&entity_repo, DbEntityType::Gene, &gene_symbol, "provider_cache")
-                .await?
+        let Some(gene_id) = ensure_entity_id(
+            &entity_repo,
+            DbEntityType::Gene,
+            &gene_symbol,
+            "provider_cache",
+        )
+        .await?
         else {
             continue;
         };
@@ -1364,9 +1371,13 @@ async fn materialize_provider_cache_facts_to_kg(
             .ok()
             .flatten()
         {
-            if let Some(obj_id) =
-                ensure_entity_id(&entity_repo, DbEntityType::Chemical, "CHEMBL_TARGET", "chembl")
-                    .await?
+            if let Some(obj_id) = ensure_entity_id(
+                &entity_repo,
+                DbEntityType::Chemical,
+                "CHEMBL_TARGET",
+                "chembl",
+            )
+            .await?
             {
                 let mut fact = KgFact::new(
                     uuid::Uuid::nil(),
@@ -2658,10 +2669,18 @@ impl GeneCandidate {
 
     fn mean_confidence(&self) -> f64 {
         if self.weighted_confidence_weight > 0.0 {
-            let weighted = (self.weighted_confidence_sum / self.weighted_confidence_weight)
-                .clamp(0.0, 1.0);
-            let provider_bonus = if self.provider_fact_count > 0 { 0.02 } else { 0.0 };
-            let tier_bonus = if self.high_tier_fact_count > 0 { 0.02 } else { 0.0 };
+            let weighted =
+                (self.weighted_confidence_sum / self.weighted_confidence_weight).clamp(0.0, 1.0);
+            let provider_bonus = if self.provider_fact_count > 0 {
+                0.02
+            } else {
+                0.0
+            };
+            let tier_bonus = if self.high_tier_fact_count > 0 {
+                0.02
+            } else {
+                0.0
+            };
             return (weighted + provider_bonus + tier_bonus).clamp(0.0, 1.0);
         }
         if self.confidence_n == 0 {

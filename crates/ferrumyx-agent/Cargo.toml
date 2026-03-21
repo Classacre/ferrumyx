@@ -16,7 +16,7 @@ ferrumyx-kg = { path = "../ferrumyx-kg" }
 ferrumyx-ranker = { path = "../ferrumyx-ranker" }
 ferrumyx-molecules = { path = "../ferrumyx-molecules" }
 ferrumyx-web        = { path = "../ferrumyx-web" }
-ironclaw            = { path = "../ironclaw", default-features = false }
+ferrumyx-runtime = { path = "../ferrumyx-runtime" }
 rig-core            = "0.30"
 axum                = { version = "0.8", features = ["ws", "macros"] }
 anyhow.workspace = true

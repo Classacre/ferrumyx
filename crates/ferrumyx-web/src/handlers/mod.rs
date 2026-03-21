@@ -3,6 +3,7 @@
 pub mod chat;
 pub mod dashboard;
 pub mod depmap;
+pub mod federation;
 pub mod ingestion;
 pub mod kg;
 pub mod metrics;

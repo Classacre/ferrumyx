@@ -1,0 +1,21 @@
+# Local development only — do NOT use these credentials in production.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: ferrumyx-runtime-core
+      POSTGRES_USER: ferrumyx-runtime-core
+      POSTGRES_PASSWORD: ferrumyx-runtime-core  # dev-only, change for any non-local deployment
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ferrumyx-runtime-core"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+

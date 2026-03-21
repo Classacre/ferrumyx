@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+ferrumyx-common = { path = "../ferrumyx-common" }
 # LanceDB for embedded vector database
 lancedb = "0.26"
 arrow = "57"
@@ -19,6 +20,11 @@ futures = "0.3"
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+base64 = "0.22"
+ed25519-dalek = { version = "2.2", features = ["rand_core"] }
+rand = "0.8"
+hex = "0.4"
 
 # Error handling
 anyhow.workspace = true

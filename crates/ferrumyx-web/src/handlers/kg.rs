@@ -220,10 +220,7 @@ pub async fn kg_page(
 
     let gene = filter.gene.clone().unwrap_or_default().trim().to_string();
     let q = filter.q.clone().unwrap_or_default();
-    let requested_lens = filter
-        .lens
-        .clone()
-        .unwrap_or_else(kg_default_lens_mode);
+    let requested_lens = filter.lens.clone().unwrap_or_else(kg_default_lens_mode);
     let lens_mode = normalize_lens_mode(&requested_lens);
     let requested_preset = filter
         .preset
@@ -446,9 +443,15 @@ pub async fn kg_page(
             } else {
                 0.5
             };
-            let confidence_tier =
-                dominant_label(&[("high", acc.high_count), ("medium", acc.medium_count), ("low", acc.low_count)], "medium")
-                    .to_string();
+            let confidence_tier = dominant_label(
+                &[
+                    ("high", acc.high_count),
+                    ("medium", acc.medium_count),
+                    ("low", acc.low_count),
+                ],
+                "medium",
+            )
+            .to_string();
             let provenance = dominant_label(
                 &[
                     ("provider", acc.provider_count),
@@ -513,58 +516,55 @@ pub async fn kg_page(
     let mut lens_status = String::new();
     let mut working_edges = capped_edges;
 
-    let collect_nodes_within_hops = |edges: &[ScoredEdge],
-                                     seed: &str,
-                                     hops: usize,
-                                     max_nodes: usize|
-     -> HashSet<String> {
-        if seed.trim().is_empty() {
-            return HashSet::new();
-        }
-        let seed_lc = seed.trim().to_lowercase();
-        let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
-        for e in edges {
-            adjacency
-                .entry(e.source.clone())
-                .or_default()
-                .push(e.target.clone());
-            adjacency
-                .entry(e.target.clone())
-                .or_default()
-                .push(e.source.clone());
-        }
-        let start = adjacency
-            .keys()
-            .find(|name| name.to_lowercase() == seed_lc)
-            .cloned()
-            .unwrap_or_else(|| seed.trim().to_string());
-        if !adjacency.contains_key(&start) {
-            return HashSet::new();
-        }
-        let mut out = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back((start.clone(), 0usize));
-        out.insert(start);
-        while let Some((node, depth)) = queue.pop_front() {
-            if depth >= hops {
-                continue;
+    let collect_nodes_within_hops =
+        |edges: &[ScoredEdge], seed: &str, hops: usize, max_nodes: usize| -> HashSet<String> {
+            if seed.trim().is_empty() {
+                return HashSet::new();
             }
-            if let Some(neighbors) = adjacency.get(&node) {
-                for next in neighbors {
-                    if out.len() >= max_nodes {
-                        break;
-                    }
-                    if out.insert(next.clone()) {
-                        queue.push_back((next.clone(), depth + 1));
+            let seed_lc = seed.trim().to_lowercase();
+            let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
+            for e in edges {
+                adjacency
+                    .entry(e.source.clone())
+                    .or_default()
+                    .push(e.target.clone());
+                adjacency
+                    .entry(e.target.clone())
+                    .or_default()
+                    .push(e.source.clone());
+            }
+            let start = adjacency
+                .keys()
+                .find(|name| name.to_lowercase() == seed_lc)
+                .cloned()
+                .unwrap_or_else(|| seed.trim().to_string());
+            if !adjacency.contains_key(&start) {
+                return HashSet::new();
+            }
+            let mut out = HashSet::new();
+            let mut queue = VecDeque::new();
+            queue.push_back((start.clone(), 0usize));
+            out.insert(start);
+            while let Some((node, depth)) = queue.pop_front() {
+                if depth >= hops {
+                    continue;
+                }
+                if let Some(neighbors) = adjacency.get(&node) {
+                    for next in neighbors {
+                        if out.len() >= max_nodes {
+                            break;
+                        }
+                        if out.insert(next.clone()) {
+                            queue.push_back((next.clone(), depth + 1));
+                        }
                     }
                 }
+                if out.len() >= max_nodes {
+                    break;
+                }
             }
-            if out.len() >= max_nodes {
-                break;
-            }
-        }
-        out
-    };
+            out
+        };
 
     let find_path_edges =
         |edges: &[ScoredEdge], source: &str, target: &str, max_edges: usize| -> Vec<ScoredEdge> {
@@ -656,17 +656,24 @@ pub async fn kg_page(
                 }
             }
 
-            let mut out: Vec<ScoredEdge> = edge_ids.into_iter().map(|idx| edges[idx].clone()).collect();
-            out.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| b.weight.cmp(&a.weight)));
+            let mut out: Vec<ScoredEdge> =
+                edge_ids.into_iter().map(|idx| edges[idx].clone()).collect();
+            out.sort_by(|a, b| {
+                b.score
+                    .total_cmp(&a.score)
+                    .then_with(|| b.weight.cmp(&a.weight))
+            });
             out.truncate(max_edges.max(8));
             out
         };
 
     if lens_mode == "path" {
-        let path_edges = find_path_edges(&working_edges, &path_source, &path_target, max_graph_links);
+        let path_edges =
+            find_path_edges(&working_edges, &path_source, &path_target, max_graph_links);
         if path_edges.is_empty() {
             lens_status = if path_source.is_empty() || path_target.is_empty() {
-                "Path mode requires both source and target entities. Showing analysis graph.".to_string()
+                "Path mode requires both source and target entities. Showing analysis graph."
+                    .to_string()
             } else {
                 format!(
                     "No path found between '{}' and '{}' in current filtered scope. Showing analysis graph.",
@@ -701,7 +708,10 @@ pub async fn kg_page(
             collect_nodes_within_hops(&working_edges, gene.trim(), local_hops, max_graph_nodes);
         if hop_nodes.len() >= 2 {
             selected_nodes = hop_nodes;
-            lens_status = format!("Analysis lens: {}-hop neighborhood around '{}'.", local_hops, gene);
+            lens_status = format!(
+                "Analysis lens: {}-hop neighborhood around '{}'.",
+                local_hops, gene
+            );
         }
     }
 
@@ -709,7 +719,11 @@ pub async fn kg_page(
         .into_iter()
         .filter(|e| selected_nodes.contains(&e.source) && selected_nodes.contains(&e.target))
         .collect();
-    selected_edges.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| b.weight.cmp(&a.weight)));
+    selected_edges.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| b.weight.cmp(&a.weight))
+    });
 
     let mut atlas_node_meta: HashMap<String, (String, i32, f64, String)> = HashMap::new();
     let mut graph_links = Vec::new();
@@ -757,7 +771,12 @@ pub async fn kg_page(
             let cluster_id = format!("cluster-{}", idx + 1);
             let mut members = component.clone();
             members.sort();
-            let preview = members.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let preview = members
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             let label = if preview.is_empty() {
                 format!("Cluster {}", idx + 1)
             } else {
@@ -765,9 +784,7 @@ pub async fn kg_page(
             };
             let short = truncate(&label, 42);
             let group = if !gene.is_empty()
-                && members
-                    .iter()
-                    .any(|m| m.eq_ignore_ascii_case(gene.trim()))
+                && members.iter().any(|m| m.eq_ignore_ascii_case(gene.trim()))
             {
                 1
             } else {
@@ -839,13 +856,11 @@ pub async fn kg_page(
     graph_links.sort_by(|a, b| {
         let ascore = a.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
         let bscore = b.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
-        bscore
-            .total_cmp(&ascore)
-            .then_with(|| {
-                let aw = a.get("weight").and_then(|w| w.as_u64()).unwrap_or(0);
-                let bw = b.get("weight").and_then(|w| w.as_u64()).unwrap_or(0);
-                bw.cmp(&aw)
-            })
+        bscore.total_cmp(&ascore).then_with(|| {
+            let aw = a.get("weight").and_then(|w| w.as_u64()).unwrap_or(0);
+            let bw = b.get("weight").and_then(|w| w.as_u64()).unwrap_or(0);
+            bw.cmp(&aw)
+        })
     });
     graph_links.truncate(max_graph_links);
     let graph_link_count = graph_links.len();
@@ -876,11 +891,21 @@ pub async fn kg_page(
         .iter()
         .map(|(name, deg)| {
             let (display_name, short, group, size) =
-                if let Some((label, atlas_group, atlas_size, atlas_short)) = atlas_node_meta.get(name)
+                if let Some((label, atlas_group, atlas_size, atlas_short)) =
+                    atlas_node_meta.get(name)
                 {
-                    (label.clone(), atlas_short.clone(), *atlas_group, *atlas_size)
+                    (
+                        label.clone(),
+                        atlas_short.clone(),
+                        *atlas_group,
+                        *atlas_size,
+                    )
                 } else {
-                    let group = if name.eq_ignore_ascii_case(&gene) { 1 } else { 2 };
+                    let group = if name.eq_ignore_ascii_case(&gene) {
+                        1
+                    } else {
+                        2
+                    };
                     let size = 3.2 + (*deg as f64).ln_1p() * 1.9;
                     (name.clone(), truncate(name, 42), group, size)
                 };
@@ -983,11 +1008,15 @@ pub async fn kg_page(
         entry.duplicate_count += 1;
         entry.rows.extend(rows);
     }
-    let mut grouped_entries: Vec<(String, Option<String>, usize, Vec<(String, String, String, Option<String>)>)> =
-        title_grouped
-            .into_values()
-            .map(|group| (group.title, group.url, group.duplicate_count, group.rows))
-            .collect();
+    let mut grouped_entries: Vec<(
+        String,
+        Option<String>,
+        usize,
+        Vec<(String, String, String, Option<String>)>,
+    )> = title_grouped
+        .into_values()
+        .map(|group| (group.title, group.url, group.duplicate_count, group.rows))
+        .collect();
     grouped_entries.sort_by(|a, b| b.3.len().cmp(&a.3.len()));
     let matched_paper_count = grouped_entries.len();
 
@@ -1104,7 +1133,11 @@ pub async fn kg_page(
     let confidence_options_html = render_confidence_filter_options_html(&confidence_filter_lc);
     let view_2d_selected = if use_3d { "" } else { "selected" };
     let view_3d_selected = if use_3d { "selected" } else { "" };
-    let lens_analysis_selected = if lens_mode == "analysis" { "selected" } else { "" };
+    let lens_analysis_selected = if lens_mode == "analysis" {
+        "selected"
+    } else {
+        ""
+    };
     let lens_atlas_selected = if lens_mode == "atlas" { "selected" } else { "" };
     let lens_path_selected = if lens_mode == "path" { "selected" } else { "" };
     let preset_analytical_selected = if render_preset == "analytical" {
@@ -1112,7 +1145,11 @@ pub async fn kg_page(
     } else {
         ""
     };
-    let preset_dense_selected = if render_preset == "dense" { "selected" } else { "" };
+    let preset_dense_selected = if render_preset == "dense" {
+        "selected"
+    } else {
+        ""
+    };
     let hops_value = local_hops;
     let lens_badge = match lens_mode.as_str() {
         "atlas" => "Atlas",
@@ -2040,11 +2077,22 @@ fn predicate_specificity(predicate: &str) -> f64 {
     let p = predicate.trim().to_lowercase();
     match p.as_str() {
         "synthetic_lethal_with" | "required_for_viability" => 1.35,
-        "inhibits" | "targets" | "activates" | "promotes_proliferation"
-        | "promotes_tumorigenesis" | "drives_metastasis" | "drives_invasion" => 1.20,
-        "confers_resistance" | "sensitizes_to" | "biomarker_of"
-        | "prognostic_for_poor_outcome" | "prognostic_for_better_outcome"
-        | "mutated_in" | "has_mutation" | "upregulated_in" | "downregulated_in" => 1.10,
+        "inhibits"
+        | "targets"
+        | "activates"
+        | "promotes_proliferation"
+        | "promotes_tumorigenesis"
+        | "drives_metastasis"
+        | "drives_invasion" => 1.20,
+        "confers_resistance"
+        | "sensitizes_to"
+        | "biomarker_of"
+        | "prognostic_for_poor_outcome"
+        | "prognostic_for_better_outcome"
+        | "mutated_in"
+        | "has_mutation"
+        | "upregulated_in"
+        | "downregulated_in" => 1.10,
         "associated_with" => 0.62,
         "mentions" => 0.42,
         _ => 1.0,
@@ -2581,16 +2629,22 @@ fn build_paper_external_url(reference: &PaperReference) -> Option<String> {
         return Some(format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid));
     }
 
-    let source = reference.source.as_deref().unwrap_or("").trim().to_ascii_lowercase();
+    let source = reference
+        .source
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     let source_id = match reference.source_id.as_deref().and_then(normalize_id_label) {
         Some(v) => v,
         None => return None,
     };
 
     match source.as_str() {
-        "semanticscholar" | "semantic_scholar" => {
-            Some(format!("https://www.semanticscholar.org/paper/{}", source_id))
-        }
+        "semanticscholar" | "semantic_scholar" => Some(format!(
+            "https://www.semanticscholar.org/paper/{}",
+            source_id
+        )),
         "arxiv" => Some(format!("https://arxiv.org/abs/{}", source_id)),
         "europepmc" => {
             if source_id.to_ascii_uppercase().starts_with("PMC") {

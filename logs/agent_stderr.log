@@ -1,0 +1,10 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   D:\AI\Ferrumyx\crates\ferrumyx-runtime-core\Cargo.toml
+workspace: D:\AI\Ferrumyx\Cargo.toml
+   Compiling ferrumyx-runtime-core v0.16.1 (D:\AI\Ferrumyx\crates\ferrumyx-runtime-core)
+   Compiling ferrumyx-runtime v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-runtime)
+   Compiling ferrumyx-agent v0.1.0 (D:\AI\Ferrumyx\crates\ferrumyx-agent)
+error: failed to remove file `D:\AI\Ferrumyx\target\debug\ferrumyx.exe`
+
+Caused by:
+  Access is denied. (os error 5)
