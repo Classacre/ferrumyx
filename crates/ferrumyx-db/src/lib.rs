@@ -51,10 +51,12 @@ pub use entity_mentions::EntityMentionRepository;
 pub use error::{DbError, Result};
 pub use federation::{
     build_contribution_manifest_draft, export_contribution_package, validate_contribution_manifest,
-    validate_contribution_package, sign_contribution_package, ArtifactValidationResult,
-    ManifestDraftRequest, PackageExportRequest, PackageExportResult, PackageSignRequest,
-    PackageSignResult, PackageValidationReport, PackageValidationRequest,
-    SignatureValidationResult,
+    validate_contribution_package, sign_contribution_package, submit_package_for_merge,
+    decide_merge_queue, list_merge_queue, get_canonical_lineage, ArtifactValidationResult,
+    CanonicalLineageStore, CanonicalSnapshotRecord, ManifestDraftRequest, MergeDecisionRequest,
+    MergeDecisionResult, MergeQueueEntry, MergeQueueStatus, MergeQueueStore, MergeSubmitRequest,
+    MergeSubmitResult, PackageExportRequest, PackageExportResult, PackageSignRequest,
+    PackageSignResult, PackageValidationReport, PackageValidationRequest, SignatureValidationResult,
 };
 pub use kg_conflicts::KgConflictRepository;
 pub use kg_facts::KgFactRepository;

@@ -8,6 +8,10 @@ use crate::handlers::{
     dashboard::dashboard,
     depmap::{api_depmap_celllines, api_depmap_gene, depmap_page},
     federation::{
+        api_federation_canonical_lineage,
+        api_federation_merge_decide,
+        api_federation_merge_queue,
+        api_federation_merge_submit,
         api_federation_manifest_draft, api_federation_manifest_validate,
         api_federation_package_export, api_federation_package_sign,
         api_federation_package_validate, api_federation_schema,
@@ -99,6 +103,22 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/federation/package/sign",
             post(api_federation_package_sign),
+        )
+        .route(
+            "/api/federation/merge/submit",
+            post(api_federation_merge_submit),
+        )
+        .route(
+            "/api/federation/merge/queue",
+            get(api_federation_merge_queue),
+        )
+        .route(
+            "/api/federation/merge/decide",
+            post(api_federation_merge_decide),
+        )
+        .route(
+            "/api/federation/canonical/lineage",
+            get(api_federation_canonical_lineage),
         )
         .route("/api/chat", post(chat_submit))
         .route("/api/chat/history", get(chat_history))

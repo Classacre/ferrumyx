@@ -35,6 +35,8 @@ const QUALITY_FACT_SCAN_LIMIT: usize = 20_000;
 const EXPORT_PAGE_SIZE: usize = 1_000;
 const DEFAULT_KEYS_DIR: &str = "./output/federation/keys";
 const DEFAULT_TRUST_REGISTRY_PATH: &str = "./output/federation/trust_registry.json";
+const DEFAULT_MERGE_QUEUE_PATH: &str = "./output/federation/merge_queue.json";
+const DEFAULT_CANONICAL_LINEAGE_PATH: &str = "./output/federation/canonical_lineage.json";
 const SIGNATURE_ALGORITHM_ED25519: &str = "ed25519";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -107,6 +109,82 @@ pub struct PackageSignResult {
     pub public_key_base64: String,
     pub signature_base64: String,
     pub signed_manifest_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeQueueStatus {
+    PendingReview,
+    Approved,
+    Rejected,
+    Invalid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeQueueEntry {
+    pub queue_id: String,
+    pub submitted_at: String,
+    pub submitted_by: Option<String>,
+    pub package_dir: String,
+    pub dataset_id: String,
+    pub snapshot_id: String,
+    pub parent_snapshot_id: Option<String>,
+    pub manifest_id: String,
+    pub status: MergeQueueStatus,
+    pub validation: PackageValidationReport,
+    pub decision_at: Option<String>,
+    pub decision_by: Option<String>,
+    pub decision_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MergeQueueStore {
+    #[serde(default)]
+    pub entries: Vec<MergeQueueEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeSubmitRequest {
+    pub package_dir: String,
+    pub submitted_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeSubmitResult {
+    pub entry: MergeQueueEntry,
+    pub queue_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeDecisionRequest {
+    pub queue_id: String,
+    pub approve: bool,
+    pub decision_by: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeDecisionResult {
+    pub entry: MergeQueueEntry,
+    pub canonical_lineage_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanonicalSnapshotRecord {
+    pub dataset_id: String,
+    pub snapshot_id: String,
+    pub parent_snapshot_id: Option<String>,
+    pub manifest_id: String,
+    pub package_dir: String,
+    pub approved_at: String,
+    pub approved_by: Option<String>,
+    pub quality: QualitySummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CanonicalLineageStore {
+    #[serde(default)]
+    pub snapshots: Vec<CanonicalSnapshotRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,6 +435,148 @@ pub fn validate_contribution_package(package_dir: impl AsRef<Path>) -> Result<Pa
     })
 }
 
+pub fn submit_package_for_merge(request: MergeSubmitRequest) -> Result<MergeSubmitResult> {
+    let package_dir = request.package_dir.trim();
+    if package_dir.is_empty() {
+        return Err(crate::error::DbError::InvalidQuery(
+            "package_dir is required".to_string(),
+        ));
+    }
+
+    let package_path = PathBuf::from(package_dir);
+    if !package_path.exists() {
+        return Err(crate::error::DbError::NotFound(format!(
+            "package_dir '{}' does not exist",
+            package_dir
+        )));
+    }
+
+    let manifest = read_manifest_from_package(&package_path)?;
+    let validation = validate_contribution_package(&package_path)?;
+
+    let is_valid = validation.valid;
+    let status = if is_valid {
+        MergeQueueStatus::PendingReview
+    } else {
+        MergeQueueStatus::Invalid
+    };
+    let now = Utc::now().to_rfc3339();
+    let entry = MergeQueueEntry {
+        queue_id: format!("mq-{}", uuid::Uuid::new_v4()),
+        submitted_at: now.clone(),
+        submitted_by: request.submitted_by.filter(|v| !v.trim().is_empty()),
+        package_dir: package_path.to_string_lossy().to_string(),
+        dataset_id: manifest.dataset_id.clone(),
+        snapshot_id: manifest.snapshot_id.clone(),
+        parent_snapshot_id: manifest.parent_snapshot_id.clone(),
+        manifest_id: manifest.manifest_id.to_string(),
+        status,
+        validation,
+        decision_at: if !is_valid { Some(now) } else { None },
+        decision_by: if is_valid {
+            None
+        } else {
+            Some("auto-validator".to_string())
+        },
+        decision_reason: if is_valid {
+            None
+        } else {
+            Some("package failed validation; cannot enter moderation queue".to_string())
+        },
+    };
+
+    let queue_path = federation_merge_queue_path();
+    let mut queue = load_merge_queue(&queue_path)?;
+    if queue.entries.iter().any(|existing| {
+        existing.dataset_id == entry.dataset_id
+            && existing.snapshot_id == entry.snapshot_id
+            && existing.status != MergeQueueStatus::Rejected
+    }) {
+        return Err(crate::error::DbError::InvalidQuery(format!(
+            "snapshot '{}' for dataset '{}' is already queued",
+            entry.snapshot_id, entry.dataset_id
+        )));
+    }
+    queue.entries.push(entry.clone());
+    save_merge_queue(&queue_path, &queue)?;
+
+    Ok(MergeSubmitResult {
+        entry,
+        queue_size: queue.entries.len(),
+    })
+}
+
+pub fn list_merge_queue() -> Result<MergeQueueStore> {
+    load_merge_queue(&federation_merge_queue_path())
+}
+
+pub fn decide_merge_queue(request: MergeDecisionRequest) -> Result<MergeDecisionResult> {
+    let queue_path = federation_merge_queue_path();
+    let mut queue = load_merge_queue(&queue_path)?;
+    let idx = queue
+        .entries
+        .iter()
+        .position(|entry| entry.queue_id == request.queue_id)
+        .ok_or_else(|| {
+            crate::error::DbError::NotFound(format!("queue_id '{}' not found", request.queue_id))
+        })?;
+
+    let entry = queue
+        .entries
+        .get_mut(idx)
+        .ok_or_else(|| crate::error::DbError::NotFound("queue entry missing".to_string()))?;
+    if entry.status != MergeQueueStatus::PendingReview {
+        return Err(crate::error::DbError::InvalidQuery(format!(
+            "queue entry '{}' is not pending review (current: {:?})",
+            entry.queue_id, entry.status
+        )));
+    }
+
+    entry.status = if request.approve {
+        MergeQueueStatus::Approved
+    } else {
+        MergeQueueStatus::Rejected
+    };
+    entry.decision_at = Some(Utc::now().to_rfc3339());
+    entry.decision_by = request.decision_by.filter(|v| !v.trim().is_empty());
+    entry.decision_reason = request.reason.filter(|v| !v.trim().is_empty());
+    let updated = entry.clone();
+
+    save_merge_queue(&queue_path, &queue)?;
+
+    let mut lineage = load_canonical_lineage(&federation_canonical_lineage_path())?;
+    if request.approve {
+        if !lineage.snapshots.iter().any(|snap| {
+            snap.dataset_id == updated.dataset_id && snap.snapshot_id == updated.snapshot_id
+        }) {
+            let manifest = read_manifest_from_package(Path::new(&updated.package_dir))?;
+            lineage.snapshots.push(CanonicalSnapshotRecord {
+                dataset_id: updated.dataset_id.clone(),
+                snapshot_id: updated.snapshot_id.clone(),
+                parent_snapshot_id: updated.parent_snapshot_id.clone(),
+                manifest_id: updated.manifest_id.clone(),
+                package_dir: updated.package_dir.clone(),
+                approved_at: updated
+                    .decision_at
+                    .clone()
+                    .unwrap_or_else(|| Utc::now().to_rfc3339()),
+                approved_by: updated.decision_by.clone(),
+                quality: manifest.quality,
+            });
+            save_canonical_lineage(&federation_canonical_lineage_path(), &lineage)?;
+        }
+    }
+
+    Ok(MergeDecisionResult {
+        entry: updated,
+        canonical_lineage_size: lineage.snapshots.len(),
+    })
+}
+
+pub fn get_canonical_lineage() -> Result<CanonicalLineageStore> {
+    load_canonical_lineage(&federation_canonical_lineage_path())
+}
+
 pub fn validate_contribution_manifest(manifest: &ContributionManifest) -> ManifestValidationReport {
     let mut issues: Vec<ValidationIssue> = Vec::new();
 
@@ -483,6 +703,10 @@ fn default_keys_dir() -> String {
     DEFAULT_KEYS_DIR.to_string()
 }
 
+fn default_merge_queue_path() -> String {
+    DEFAULT_MERGE_QUEUE_PATH.to_string()
+}
+
 fn federation_keys_dir_path() -> PathBuf {
     if let Ok(path) = std::env::var("FERRUMYX_FED_KEYS_DIR") {
         if !path.trim().is_empty() {
@@ -499,6 +723,67 @@ fn federation_trust_registry_path() -> PathBuf {
         }
     }
     PathBuf::from(DEFAULT_TRUST_REGISTRY_PATH)
+}
+
+fn federation_merge_queue_path() -> PathBuf {
+    if let Ok(path) = std::env::var("FERRUMYX_FED_MERGE_QUEUE_PATH") {
+        if !path.trim().is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    PathBuf::from(default_merge_queue_path())
+}
+
+fn federation_canonical_lineage_path() -> PathBuf {
+    if let Ok(path) = std::env::var("FERRUMYX_FED_CANONICAL_LINEAGE_PATH") {
+        if !path.trim().is_empty() {
+            return PathBuf::from(path);
+        }
+    }
+    PathBuf::from(DEFAULT_CANONICAL_LINEAGE_PATH)
+}
+
+fn read_manifest_from_package(package_dir: &Path) -> Result<ContributionManifest> {
+    let manifest_path = package_dir.join("manifest.json");
+    let raw = std::fs::read_to_string(&manifest_path)?;
+    let manifest: ContributionManifest = serde_json::from_str(&raw)?;
+    Ok(manifest)
+}
+
+fn load_merge_queue(path: &Path) -> Result<MergeQueueStore> {
+    if !path.exists() {
+        return Ok(MergeQueueStore::default());
+    }
+    let raw = std::fs::read_to_string(path)?;
+    let queue: MergeQueueStore = serde_json::from_str(&raw)?;
+    Ok(queue)
+}
+
+fn save_merge_queue(path: &Path, queue: &MergeQueueStore) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pretty = serde_json::to_string_pretty(queue)?;
+    std::fs::write(path, pretty)?;
+    Ok(())
+}
+
+fn load_canonical_lineage(path: &Path) -> Result<CanonicalLineageStore> {
+    if !path.exists() {
+        return Ok(CanonicalLineageStore::default());
+    }
+    let raw = std::fs::read_to_string(path)?;
+    let lineage: CanonicalLineageStore = serde_json::from_str(&raw)?;
+    Ok(lineage)
+}
+
+fn save_canonical_lineage(path: &Path, lineage: &CanonicalLineageStore) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pretty = serde_json::to_string_pretty(lineage)?;
+    std::fs::write(path, pretty)?;
+    Ok(())
 }
 
 fn write_manifest(path: &Path, manifest: &ContributionManifest) -> Result<()> {
@@ -1247,6 +1532,67 @@ mod tests {
 
         std::env::remove_var("FERRUMYX_FED_KEYS_DIR");
         std::env::remove_var("FERRUMYX_FED_TRUST_REGISTRY_PATH");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn merge_queue_submit_and_approve_updates_lineage() {
+        let base = std::env::temp_dir().join(format!(
+            "ferrumyx-fed-merge-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let db_dir = base.join("db");
+        let export_dir = base.join("export");
+        let merge_queue = base.join("merge_queue.json");
+        let lineage = base.join("canonical_lineage.json");
+        std::fs::create_dir_all(&db_dir).expect("create db dir");
+        std::fs::create_dir_all(&export_dir).expect("create export dir");
+        std::env::set_var(
+            "FERRUMYX_FED_MERGE_QUEUE_PATH",
+            merge_queue.to_string_lossy().to_string(),
+        );
+        std::env::set_var(
+            "FERRUMYX_FED_CANONICAL_LINEAGE_PATH",
+            lineage.to_string_lossy().to_string(),
+        );
+
+        let db = Arc::new(Database::open(&db_dir).await.expect("open db"));
+        db.initialize().await.expect("init db");
+        let export = export_contribution_package(
+            db,
+            PackageExportRequest {
+                output_root: Some(export_dir.to_string_lossy().to_string()),
+                ..PackageExportRequest::default()
+            },
+        )
+        .await
+        .expect("export package");
+
+        let submitted = submit_package_for_merge(MergeSubmitRequest {
+            package_dir: export.package_dir.clone(),
+            submitted_by: Some("tester".to_string()),
+        })
+        .expect("submit package");
+        assert_eq!(submitted.entry.status, MergeQueueStatus::PendingReview);
+
+        let decision = decide_merge_queue(MergeDecisionRequest {
+            queue_id: submitted.entry.queue_id.clone(),
+            approve: true,
+            decision_by: Some("moderator".to_string()),
+            reason: Some("quality checks passed".to_string()),
+        })
+        .expect("approve package");
+        assert_eq!(decision.entry.status, MergeQueueStatus::Approved);
+        assert!(decision.canonical_lineage_size >= 1);
+
+        let listed = get_canonical_lineage().expect("read lineage");
+        assert!(listed
+            .snapshots
+            .iter()
+            .any(|snap| snap.snapshot_id == submitted.entry.snapshot_id));
+
+        std::env::remove_var("FERRUMYX_FED_MERGE_QUEUE_PATH");
+        std::env::remove_var("FERRUMYX_FED_CANONICAL_LINEAGE_PATH");
         let _ = std::fs::remove_dir_all(&base);
     }
 }

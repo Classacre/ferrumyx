@@ -40,6 +40,20 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 - Added persistent lab run-state snapshots (`output/lab_runs.json`) for cross-process monitoring.
 - Added **Live Lab Run Monitor** in `/chat` with auto run-id detection, KPIs, and recent-run selector.
 - Improved autonomous prompt routing so chat prefers the lab orchestration toolchain.
+- Added federation bootstrap APIs with signed package export/validation plus merge-gate moderation queue and canonical lineage tracking.
+
+## Federation Bootstrap APIs
+
+- `GET /api/federation/schema`
+- `POST /api/federation/manifest/draft`
+- `POST /api/federation/manifest/validate`
+- `POST /api/federation/package/export`
+- `POST /api/federation/package/validate`
+- `POST /api/federation/package/sign`
+- `POST /api/federation/merge/submit`
+- `GET /api/federation/merge/queue`
+- `POST /api/federation/merge/decide`
+- `GET /api/federation/canonical/lineage`
 
 ## Architecture
 

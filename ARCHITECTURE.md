@@ -2553,13 +2553,15 @@ Implemented:
 - JSONL package export with SHA-256 + byte/row digests (`export_contribution_package`)
 - package integrity verification against manifest digests (`validate_contribution_package`)
 - local Ed25519 manifest signing with trust-registry key resolution (`sign_contribution_package`)
+- merge-gate moderation queue with status transitions (`submit_package_for_merge`, `decide_merge_queue`, `list_merge_queue`)
+- canonical lineage index for approved snapshots (`get_canonical_lineage`)
 - web APIs for schema inspection, manifest draft/validation, and package export/validation
 
 Not yet implemented (next pass):
 
 - Parquet export mode for high-volume snapshots (JSONL is implemented first)
 - remote trust bootstrap and key governance policy (local trust-registry signing/verification is implemented)
-- canonical cloud merge gate service and moderation queue
+- cloud-hosted canonical merge gate service (current moderation queue is local-first bootstrap)
 - differential snapshot sync and resumable pull/push transport
 
 ## 10.6 API Surface (Bootstrap)
@@ -2570,6 +2572,10 @@ Not yet implemented (next pass):
 - `POST /api/federation/package/export`
 - `POST /api/federation/package/validate`
 - `POST /api/federation/package/sign`
+- `POST /api/federation/merge/submit`
+- `GET /api/federation/merge/queue`
+- `POST /api/federation/merge/decide`
+- `GET /api/federation/canonical/lineage`
 
 These endpoints intentionally ship as a bootstrap layer so the federation contract can be tested before enabling cross-node write paths.
 

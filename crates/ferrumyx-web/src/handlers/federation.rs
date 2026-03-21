@@ -12,8 +12,10 @@ use ferrumyx_common::federation::{
 };
 use ferrumyx_db::{
     build_contribution_manifest_draft, export_contribution_package, validate_contribution_manifest,
-    validate_contribution_package, sign_contribution_package, ManifestDraftRequest,
-    PackageExportRequest, PackageSignRequest, PackageValidationRequest,
+    validate_contribution_package, sign_contribution_package, submit_package_for_merge,
+    decide_merge_queue, list_merge_queue, get_canonical_lineage, ManifestDraftRequest,
+    MergeDecisionRequest, MergeSubmitRequest, PackageExportRequest, PackageSignRequest,
+    PackageValidationRequest,
 };
 use serde::Serialize;
 
@@ -98,6 +100,54 @@ pub async fn api_federation_package_sign(
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(err) => (
             StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": err.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn api_federation_merge_submit(
+    Json(req): Json<MergeSubmitRequest>,
+) -> impl IntoResponse {
+    match submit_package_for_merge(req) {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": err.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn api_federation_merge_queue() -> impl IntoResponse {
+    match list_merge_queue() {
+        Ok(queue) => (StatusCode::OK, Json(queue)).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": err.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn api_federation_merge_decide(
+    Json(req): Json<MergeDecisionRequest>,
+) -> impl IntoResponse {
+    match decide_merge_queue(req) {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": err.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn api_federation_canonical_lineage() -> impl IntoResponse {
+    match get_canonical_lineage() {
+        Ok(lineage) => (StatusCode::OK, Json(lineage)).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": err.to_string() })),
         )
             .into_response(),
