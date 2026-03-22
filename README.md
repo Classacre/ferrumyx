@@ -10,169 +10,67 @@
   </a>
 </div>
 
-**Open-Source Autonomous Oncology Drug Discovery Engine**
+**Open-source autonomous oncology discovery system built in Rust.**
 
-Ferrumyx is an autonomous R&D engine built natively in Rust on the first-party `ferrumyx-runtime-core` autonomous agent framework. Designed as a fully self-improving scientific system, Ferrumyx orchestrates end-to-end therapeutic target discovery and molecular design without human intervention.
+Ferrumyx is an agentic platform for literature-driven target discovery and downstream molecular exploration. It combines autonomous ingestion, biomedical extraction, graph-backed evidence modeling, target ranking, and web/agent interfaces in a single Rust workspace.
 
-By leveraging Ferrumyx Runtime Core's robust event loop, reasoning capabilities, and Tool Registry, Ferrumyx operates as a persistent agent. It autonomously queries the latest biomedical literature, constructs and updates a dense Knowledge Graph within a local embedded LanceDB, and iteratively refines its multi-parametric scoring heuristics based on continuous evaluation of generated targets. This closed-loop learning architecture ensures that the system's predictive accuracy scales with its ingestion volume.
+## What Ferrumyx Does
 
-For a detailed technical breakdown of the engine's layers, reasoning loop, and state management, please refer directly to the [Architecture Document (ARCHITECTURE.md)](ARCHITECTURE.md).
+- Ingests and deduplicates biomedical literature from multiple sources.
+- Extracts entities and evidence relations from text.
+- Builds a queryable evidence graph backed by embedded storage.
+- Produces ranked target outputs using multi-signal scoring.
+- Supports downstream molecular steps (structure, pockets, ligand/docking flow).
+- Exposes interactive workflows through both agent tools and web APIs.
+- Supports federated package export/validation/signing/sync for shared knowledge distribution.
 
-## Current Status (Phase 4 Hardening + Autonomous Lab Ops)
+## Implementation Highlights
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Ingestion** | ✅ Working | Multi-source pipeline + full-text fallback + performance caches |
-| **NER & KG** | ✅ Working | Consolidated into `ferrumyx-kg` (Aho-Corasick) |
-| **Embedding** | ✅ Working | Pure Rust BiomedBERT (768-dim, Candle) |
-| **Ranker** | ✅ Working | Multi-factor scoring + DepMap integration |
-| **Molecular** | ✅ Working | Structural analysis & Ligand generation |
-| **Agent Loop** | ✅ Working | Ferrumyx Runtime Core-driven autonomous orchestration + lab role tools |
-| **Web GUI** | ✅ Working | Unified dashboard theme + live chat telemetry |
-| **Lab Run Monitor** | ✅ Working | Chat-integrated live monitor for autonomous runs |
+- **Rust-native architecture:** Core pipeline, storage access, orchestration, ranking, and web server are all implemented in Rust.
+- **Agent-first orchestration:** `ferrumyx-agent` registers domain tools and runs autonomous cycles over ingestion, scoring, retrieval, and validation.
+- **Embedded data layer:** Primary biomedical corpus is stored in LanceDB; runtime/workspace persistence is handled separately by runtime-core DB support.
+- **Hybrid retrieval:** Query-time retrieval combines lexical and vector signals and returns evidence-rich responses.
+- **Operational focus:** Includes performance telemetry, batched ingestion paths, background embedding backfill, and structured run monitoring.
 
-**100% Rust.** No Python dependencies. All components are Rust-native. No external database required (LanceDB/libSQL embedded).
+## Repository Layout
 
-## What Is New (2026-03-21)
+| Crate | Purpose |
+|---|---|
+| `crates/ferrumyx-agent` | Agent entrypoint, tool registration, autonomous and lab workflows |
+| `crates/ferrumyx-ingestion` | Literature ingestion, chunking, full-text flow, embeddings |
+| `crates/ferrumyx-kg` | Entity/relation extraction, KG update and scoring primitives |
+| `crates/ferrumyx-ranker` | Target ranking and provider-backed enrichment logic |
+| `crates/ferrumyx-molecules` | Structure/pocket/ligand/docking pipeline components |
+| `crates/ferrumyx-db` | LanceDB schema, repositories, and federation persistence |
+| `crates/ferrumyx-web` | Axum web UI and API handlers |
+| `crates/ferrumyx-runtime` | Runtime adapter layer used by the agent stack |
+| `crates/ferrumyx-runtime-core` | Shared runtime-core infrastructure used by the system |
+| `crates/ferrumyx-common` | Shared schema/types and cross-crate contracts |
 
-- Added autonomous lab role tools: `lab_planner`, `lab_retriever`, `lab_validator`.
-- Added coordinator and status tools: `run_lab_autoresearch`, `lab_run_status`.
-- Added persistent lab run-state snapshots (`output/lab_runs.json`) for cross-process monitoring.
-- Added **Live Lab Run Monitor** in `/chat` with auto run-id detection, KPIs, and recent-run selector.
-- Improved autonomous prompt routing so chat prefers the lab orchestration toolchain.
-- Added federation bootstrap APIs with signed package export/validation plus merge-gate moderation queue and canonical lineage tracking.
-- Added federation trust-key APIs and queue signature policy enforcement.
-- Added federation endpoint security controls (read/write bearer scopes, replay-guard nonce/timestamp checks, and JSONL audit logs) with Settings UI + runtime env wiring.
-- Added Hugging Face federation sync endpoints for canonical snapshot publish/pull (`/api/federation/hf/*`) with settings-driven repo/token/prefix controls.
+## Interfaces
 
-## Federation Bootstrap APIs
-
-- `GET /api/federation/schema`
-- `POST /api/federation/manifest/draft`
-- `POST /api/federation/manifest/validate`
-- `POST /api/federation/package/export`
-- `POST /api/federation/package/validate`
-- `POST /api/federation/package/sign`
-- `POST /api/federation/merge/submit`
-- `GET /api/federation/merge/queue`
-- `POST /api/federation/merge/decide`
-- `GET /api/federation/canonical/lineage`
-- `GET /api/federation/trust/list`
-- `POST /api/federation/trust/upsert`
-- `POST /api/federation/trust/revoke`
-- `GET /api/federation/sync/index`
-- `GET /api/federation/sync/snapshot`
-- `GET /api/federation/sync/artifact`
-- `POST /api/federation/sync/plan`
-- `POST /api/federation/sync/pull`
-- `POST /api/federation/sync/push`
-- `GET /api/federation/hf/status`
-- `POST /api/federation/hf/publish`
-- `POST /api/federation/hf/pull`
-
-### Federation Security Environment Variables
-
-- `FERRUMYX_FED_AUTH_ENABLED` (`0|1`) enable/disable federation auth checks.
-- `FERRUMYX_FED_READ_TOKEN` read-scope bearer token.
-- `FERRUMYX_FED_WRITE_TOKEN` write-scope bearer token.
-- `FERRUMYX_FED_REPLAY_REQUIRED` (`0|1`) enforce nonce+timestamp replay checks on write routes.
-- `FERRUMYX_FED_REPLAY_WINDOW_SECS` replay window in seconds (clamped to `30..3600`).
-- `FERRUMYX_FED_REQUIRE_SIGNATURE_FOR_QUEUE` (`0|1`) require trusted signed package for merge queue admission.
-- `FERRUMYX_FED_AUDIT_LOG_PATH` JSONL audit log destination for federation operations.
-
-### Hugging Face Federation Variables
-
-- `FERRUMYX_FED_HF_ENABLED` (`0|1`) enable/disable HF publish/pull endpoints.
-- `FERRUMYX_FED_HF_REPO_ID` default dataset repo id (e.g. `Classacre/ferrumyx-canonical-kb`).
-- `FERRUMYX_FED_HF_SNAPSHOTS_PREFIX` snapshot folder prefix in repo (default `snapshots`).
-- `FERRUMYX_FED_HF_REVISION` optional default branch/tag.
-- `FERRUMYX_FED_HF_TIMEOUT_SECS` CLI timeout per operation (default `1800`).
-- `FERRUMYX_FED_HF_PULL_ROOT` local root for HF pulls (default `./output/federation/hf_imports`).
-- `FERRUMYX_FED_HF_TOKEN` optional token for server-side HF CLI calls.
-
-## Architecture
-
-The system follows a reactive Agentic Architecture, where the Ferrumyx Runtime Core agent serves as the central brain, orchestrating specialized tools for literature ingestion, Knowledge Graph (KG) management, and molecular modeling.
-
-```mermaid
-graph TD
-    User([User Intent]) --> Agent[Ferrumyx Runtime Core Agent]
-    
-    subgraph "Core Agent Loop"
-        Agent <--> Tools[Tool Registry]
-        Tools <--> Ingestion[Ingestion Pipeline]
-        Tools <--> KG[Knowledge Graph]
-        Tools <--> Molecules[Molecular Engine]
-    end
-    
-    subgraph "Data Layer"
-        Ingestion --> Papers[(Papers Database)]
-        KG --> GraphData[(Graph & Scores)]
-        Molecules --> StructData[(Structural Assets)]
-    end
-    
-    subgraph "Intelligence"
-        Ingestion -- NER/LLM --> KG
-        KG -- Scoring --> Ranker[Target Prioritization]
-        Ranker -- Design --> Molecules
-    end
-    
-    Ranker --> Dashboard[Web Dashboard]
-```
-
-## Computational Methodology
-
-Ferrumyx leverages a defense-in-depth architecture to mitigate performance bottlenecks in large-scale scientific computation. By operating independently of external data services, we ensure computational reproducibility and data security.
-
-### Core Algorithmic Components
-
-1. **Information Extraction Engine**
-   Optimized biomedical NER via Aho-Corasick dictionary matching and LLM-assisted relationship extraction. Processes Genes, Proteins, Chemicals, and Mutations with high precision.
-
-2. **Graph-Theoretic Knowledge Representation**
-   Semantic triplets are stored in an embedded LanceDB vector database. SimHash-based deduplication and cross-reference conflict resolution ensure KG integrity.
-
-3. **Composite Target Prioritization Matrix**
-   Implements a multi-parametric heuristic function `S(g,c)` merging:
-   - Mutation frequencies & Structural variants
-   - CRISPR dependency models (DepMap)
-   - Survival correlates & Expression data
-   - Proteomic pocket detectability
-
-4. **Ferrumyx Runtime Core Autonomous Orchestration**
-   The system is non-human gated. Results are fed back to the Ferrumyx Runtime Core agent, which can autonomously modify parameters, create new search tools, or refine molecular optimization strategies until a viable "solution" is found.
-
-## Project Structure (Crates)
-
-| Crate | Description | Status |
-|-------|-------------|--------|
-| `ferrumyx-agent` | Ferrumyx Runtime Core-powered Primary Event Loop & Tool Registry | ✅ Working |
-| `ferrumyx-runtime-core` | Core autonomous agent framework & reasoning engine | ✅ Working |
-| `ferrumyx-ingestion` | Unified literature pipeline (PubMed, PDF, Embedding) | ✅ Working |
-| `ferrumyx-kg` | Knowledge Graph, NER, & Target Scoring logic | ✅ Working |
-| `ferrumyx-ranker` | Multi-factor prioritization (DepMap integration) | ✅ Working |
-| `ferrumyx-molecules` | Structural analysis, ADMET, & Ligand generation | ✅ Working |
-| `ferrumyx-db` | LanceDB & libSQL embedded database layer | ✅ Working |
-| `ferrumyx-common` | Shared types, schemas, and utility functions | ✅ Working |
-| `ferrumyx-web` | Real-time Dashboard & Interactive Visualizations | ✅ Working |
+- **Agent runtime:** `cargo run --release --bin ferrumyx`
+- **Web app/API:** `cargo run -p ferrumyx-web`
 
 ## Quick Start
 
 ```powershell
-# Windows: Set Protobuf path (required for LanceDB)
+# Optional (Windows): ensure protoc is available for build dependencies
 $env:PROTOC = "C:\protoc\bin\protoc.exe"
 
-# Easy start (Installs Rust, selects models, and runs)
+# Start helper
 .\start.ps1
 
-# Manual run (agent runtime)
+# Or run components manually
 cargo run --release --bin ferrumyx
-
-# Web UI (in a second terminal)
 cargo run -p ferrumyx-web
 ```
+
+## Documentation
+
+- High-level architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
+- In-depth implementation wiki: [docs/WIKI.md](docs/WIKI.md)
 
 ## License
 
 Apache-2.0 OR MIT
-
