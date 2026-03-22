@@ -34,7 +34,9 @@ use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
-use crate::embedding::{embed_pending_chunks, EmbeddingClient, EmbeddingConfig};
+use crate::embedding::{
+    embed_pending_chunks, embed_pending_chunks_for_papers, EmbeddingClient, EmbeddingConfig,
+};
 use crate::models::SectionType;
 use crate::pdf_parser::parse_pdf_sections;
 use crate::repository::IngestionRepository;
@@ -124,6 +126,7 @@ struct PaperProcessingResult {
     generic_relation_fact_count: usize,
     unique_predicates: HashSet<String>,
     errors: Vec<String>,
+    heavy_task: Option<tokio::task::JoinHandle<PaperProcessingResult>>,
 }
 
 // ── Job config ────────────────────────────────────────────────────────────────
@@ -254,6 +257,7 @@ pub struct IngestionResult {
     pub papers_found: usize,
     pub papers_inserted: usize,
     pub papers_duplicate: usize,
+    pub inserted_paper_ids: Vec<Uuid>,
     pub chunks_inserted: usize,
     pub chunks_embedded: usize,
     pub source_telemetry: Vec<IngestionSourceTelemetry>,
@@ -376,6 +380,7 @@ pub async fn run_ingestion(
                 papers_found_raw: 0,
                 papers_inserted: 0,
                 papers_duplicate: 0,
+                inserted_paper_ids: Vec::new(),
                 chunks_inserted: 0,
                 chunks_embedded: 0,
                 source_telemetry: Vec::new(),
@@ -403,6 +408,7 @@ pub async fn run_ingestion(
         papers_found: 0,
         papers_inserted: 0,
         papers_duplicate: 0,
+        inserted_paper_ids: Vec::new(),
         chunks_inserted: 0,
         chunks_embedded: 0,
         source_telemetry: Vec::new(),
@@ -561,7 +567,8 @@ pub async fn run_ingestion(
     // ── 2. Upsert papers + chunk abstracts ───────────────────────────────────
     let chunker_cfg = ChunkerConfig::default();
     let t_upsert = std::time::Instant::now();
-    let mut queued_new_papers: Vec<(crate::models::PaperMetadata, Uuid)> = Vec::new();
+    let mut queued_new_papers: Vec<(crate::models::PaperMetadata, Uuid)> =
+        Vec::with_capacity(all_papers.len());
     let paper_repo = PaperRepository::new(repo.db());
     let mut candidate_dois: Vec<String> = all_papers
         .iter()
@@ -595,7 +602,7 @@ pub async fn run_ingestion(
             existing_by_pmid.insert(norm, id);
         }
     }
-    for paper in &all_papers {
+    for paper in all_papers {
         let doi_hit = paper
             .doi
             .as_ref()
@@ -611,7 +618,7 @@ pub async fn run_ingestion(
             continue;
         }
 
-        let upsert = match repo.upsert_paper(paper).await {
+        let upsert = match repo.upsert_paper(&paper).await {
             Ok(u) => u,
             Err(e) => {
                 let id = paper
@@ -631,13 +638,14 @@ pub async fn run_ingestion(
             continue;
         }
         result.papers_inserted += 1;
+        result.inserted_paper_ids.push(upsert.paper_id);
         if let Some(doi) = paper.doi.as_deref().and_then(canonical_doi) {
             existing_by_doi.insert(doi, upsert.paper_id);
         }
         if let Some(pmid) = paper.pmid.as_deref().and_then(canonical_pmid) {
             existing_by_pmid.insert(pmid, upsert.paper_id);
         }
-        queued_new_papers.push((paper.clone(), upsert.paper_id));
+        queued_new_papers.push((paper, upsert.paper_id));
     }
 
     result.perf_telemetry.upsert_ms = t_upsert.elapsed().as_millis() as u64;
@@ -654,7 +662,7 @@ pub async fn run_ingestion(
         .clamp(1, 32);
     let paper_worker_limit = resolve_paper_process_workers();
     let total_new_papers = queued_new_papers.len();
-    let t_prefetch_and_process = std::time::Instant::now();
+    let t_prefetch = std::time::Instant::now();
 
     emit(
         "process",
@@ -677,20 +685,25 @@ pub async fn run_ingestion(
     let unpaywall_email = job.unpaywall_email.clone();
     let enable_scihub = job.enable_scihub_fallback;
     let full_text_enabled = job.full_text_enabled;
-    let prefetch_input = queued_new_papers.clone();
+    let prefetch_input = queued_new_papers;
     let prefetch_task = tokio::spawn(async move {
+        let prefetch_started_at = std::time::Instant::now();
         if !full_text_enabled {
             for (paper, paper_id) in prefetch_input {
                 let _ = prefetch_tx.send((paper, paper_id, Vec::new())).await;
             }
-            return;
+            return prefetch_started_at.elapsed().as_millis() as u64;
         }
 
         let mut set = tokio::task::JoinSet::new();
-        let mut next_idx = 0usize;
-        while next_idx < prefetch_input.len() || !set.is_empty() {
-            while next_idx < prefetch_input.len() && set.len() < prefetch_worker_limit {
-                let (paper, paper_id) = prefetch_input[next_idx].clone();
+        let mut remaining = prefetch_input.into_iter();
+        let mut input_exhausted = false;
+        while !input_exhausted || !set.is_empty() {
+            while set.len() < prefetch_worker_limit {
+                let Some((paper, paper_id)) = remaining.next() else {
+                    input_exhausted = true;
+                    break;
+                };
                 let unpaywall_email = unpaywall_email.clone();
                 set.spawn(async move {
                     let sections = fetch_full_text_sections_for_paper(
@@ -703,7 +716,6 @@ pub async fn run_ingestion(
                     .unwrap_or_default();
                     (paper, paper_id, sections)
                 });
-                next_idx += 1;
             }
 
             if let Some(joined) = set.join_next().await {
@@ -712,12 +724,19 @@ pub async fn run_ingestion(
                 }
             }
         }
+        prefetch_started_at.elapsed().as_millis() as u64
     });
 
     let mut processing_set = tokio::task::JoinSet::new();
+    let mut heavy_tasks = Vec::new();
     let mut completed = 0usize;
     let mut adaptive_process_limit = paper_worker_limit.clamp(1, 16);
     let mut predicate_hist: HashMap<String, usize> = HashMap::new();
+    let defer_embedding_to_global_batch = embed_client.is_some()
+        && resolve_embedding_global_batch_enabled()
+        && (!resolve_heavy_lane_async_enabled() || resolve_heavy_lane_drain_enabled());
+    let processing_heartbeat_interval = std::time::Duration::from_secs(15);
+    let t_process = std::time::Instant::now();
     let query_gene_hint = {
         let g = job.gene.trim().to_uppercase();
         if g.is_empty() {
@@ -728,7 +747,30 @@ pub async fn run_ingestion(
     };
     while prefetch_rx.is_closed() == false || !processing_set.is_empty() {
         while processing_set.len() < adaptive_process_limit {
-            let maybe_payload = prefetch_rx.recv().await;
+            let maybe_payload =
+                match timeout(processing_heartbeat_interval, prefetch_rx.recv()).await {
+                    Ok(payload) => payload,
+                    Err(_) => {
+                        emit(
+                            "progress",
+                            &format!(
+                                "Waiting on full-text prefetch ({}/{} papers complete, inflight={}, prefetch_backlog={})",
+                                completed,
+                                total_new_papers,
+                                processing_set.len(),
+                                prefetch_rx.len()
+                            ),
+                            {
+                                let mut p = prog_base.clone();
+                                p.papers_found = result.papers_found;
+                                p.papers_inserted = result.papers_inserted;
+                                p.chunks_inserted = result.chunks_inserted;
+                                p
+                            },
+                        );
+                        continue;
+                    }
+                };
             let Some((paper, paper_id, full_text_sections)) = maybe_payload else {
                 break;
             };
@@ -737,6 +779,7 @@ pub async fn run_ingestion(
             let chunker_cfg_clone = chunker_cfg.clone();
             let embed_client_clone = embed_client.clone();
             let query_gene_hint_clone = query_gene_hint.clone();
+            let defer_embedding_to_global_batch_clone = defer_embedding_to_global_batch;
             processing_set.spawn(async move {
                 process_single_paper(
                     paper,
@@ -747,28 +790,20 @@ pub async fn run_ingestion(
                     ner_clone,
                     chunker_cfg_clone,
                     embed_client_clone,
+                    defer_embedding_to_global_batch_clone,
                 )
                 .await
             });
         }
 
-        if let Some(joined) = processing_set.join_next().await {
-            match joined {
+        match timeout(processing_heartbeat_interval, processing_set.join_next()).await {
+            Ok(Some(joined)) => match joined {
                 Ok(outcome) => {
                     completed += 1;
-                    result.chunks_inserted += outcome.chunks_inserted;
-                    result.chunks_embedded += outcome.chunks_embedded;
-                    result.errors.extend(outcome.errors);
-                    if outcome.quality_gate_skipped {
-                        result.perf_telemetry.quality_gate_skips += 1;
-                    }
-                    result.perf_telemetry.relation_fact_count += outcome.relation_fact_count;
-                    result.perf_telemetry.typed_relation_fact_count +=
-                        outcome.typed_relation_fact_count;
-                    result.perf_telemetry.generic_relation_fact_count +=
-                        outcome.generic_relation_fact_count;
-                    for predicate in outcome.unique_predicates {
-                        *predicate_hist.entry(predicate).or_insert(0) += 1;
+                    if let Some(heavy_task) =
+                        merge_paper_processing_outcome(&mut result, &mut predicate_hist, outcome)
+                    {
+                        heavy_tasks.push(heavy_task);
                     }
                     emit(
                         "progress",
@@ -795,16 +830,137 @@ pub async fn run_ingestion(
                     warn!("{}", msg);
                     result.errors.push(msg);
                 }
+            },
+            Ok(None) => {
+                if prefetch_rx.is_closed() {
+                    break;
+                }
             }
-        } else if prefetch_rx.is_closed() {
-            break;
+            Err(_) => {
+                emit(
+                    "progress",
+                    &format!(
+                        "Processing heartbeat ({}/{} papers complete, inflight={}, prefetch_backlog={})",
+                        completed,
+                        total_new_papers,
+                        processing_set.len(),
+                        prefetch_rx.len()
+                    ),
+                    {
+                        let mut p = prog_base.clone();
+                        p.papers_found = result.papers_found;
+                        p.papers_inserted = result.papers_inserted;
+                        p.chunks_inserted = result.chunks_inserted;
+                        p
+                    },
+                );
+            }
         }
     }
-    let _ = prefetch_task.await;
-    result.perf_telemetry.prefetch_ms = t_prefetch_and_process.elapsed().as_millis() as u64;
-    result.perf_telemetry.process_ms = result.perf_telemetry.prefetch_ms;
+    let mut prefetch_task = prefetch_task;
+    result.perf_telemetry.prefetch_ms = loop {
+        match timeout(processing_heartbeat_interval, &mut prefetch_task).await {
+            Ok(joined) => {
+                break match joined {
+                    Ok(ms) => ms,
+                    Err(e) => {
+                        let msg = format!("prefetch worker join error: {e}");
+                        warn!("{}", msg);
+                        result.errors.push(msg);
+                        t_prefetch.elapsed().as_millis() as u64
+                    }
+                };
+            }
+            Err(_) => {
+                emit(
+                    "progress",
+                    &format!(
+                        "Prefetch heartbeat ({}/{} papers complete, inflight={}, prefetch_backlog={})",
+                        completed,
+                        total_new_papers,
+                        processing_set.len(),
+                        prefetch_rx.len()
+                    ),
+                    {
+                        let mut p = prog_base.clone();
+                        p.papers_found = result.papers_found;
+                        p.papers_inserted = result.papers_inserted;
+                        p.chunks_inserted = result.chunks_inserted;
+                        p
+                    },
+                );
+            }
+        }
+    };
+    let heavy_lane_async = resolve_heavy_lane_async_enabled();
+    let drain_heavy_lane = heavy_lane_async && resolve_heavy_lane_drain_enabled();
+    let heavy_lane_pending_for_telemetry = !drain_heavy_lane && !heavy_tasks.is_empty();
+    if drain_heavy_lane {
+        let heavy_total = heavy_tasks.len();
+        for (heavy_idx, task) in heavy_tasks.into_iter().enumerate() {
+            let mut task = task;
+            loop {
+                match timeout(processing_heartbeat_interval, &mut task).await {
+                    Ok(joined) => {
+                        match joined {
+                            Ok(outcome) => {
+                                let _ = merge_paper_processing_outcome(
+                                    &mut result,
+                                    &mut predicate_hist,
+                                    outcome,
+                                );
+                            }
+                            Err(e) => {
+                                let msg = format!("heavy enrichment task join error: {e}");
+                                warn!("{}", msg);
+                                result.errors.push(msg);
+                            }
+                        }
+                        break;
+                    }
+                    Err(_) => {
+                        emit(
+                            "progress",
+                            &format!(
+                                "Heavy enrichment heartbeat ({}/{}, papers {}/{}, chunks={})",
+                                heavy_idx + 1,
+                                heavy_total,
+                                completed,
+                                total_new_papers,
+                                result.chunks_inserted
+                            ),
+                            {
+                                let mut p = prog_base.clone();
+                                p.papers_found = result.papers_found;
+                                p.papers_inserted = result.papers_inserted;
+                                p.chunks_inserted = result.chunks_inserted;
+                                p
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
 
-    result.duration_ms = t0.elapsed().as_millis() as u64;
+    if defer_embedding_to_global_batch {
+        if let Some(ref ec) = embed_client {
+            match embed_pending_chunks_for_papers(ec.as_ref(), repo.as_ref(), &result.inserted_paper_ids)
+                .await
+            {
+                Ok(n) => {
+                    result.chunks_embedded += n;
+                }
+                Err(e) => {
+                    let msg = format!("global embedding pass failed: {e}");
+                    warn!("{}", msg);
+                    result.errors.push(msg);
+                }
+            }
+        }
+    }
+    result.perf_telemetry.process_ms = t_process.elapsed().as_millis() as u64;
+
     let (pdf_hits, pdf_misses) = pdf_cache_counters();
     result.perf_telemetry.pdf_cache_hits = pdf_hits;
     result.perf_telemetry.pdf_cache_misses = pdf_misses;
@@ -822,10 +978,11 @@ pub async fn run_ingestion(
     result.perf_telemetry.predicate_coverage_flagged = result.perf_telemetry.unique_predicate_count
         < min_unique
         || result.perf_telemetry.predicate_generic_share > max_generic_share;
-    if resolve_heavy_lane_async_enabled() && result.perf_telemetry.relation_fact_count == 0 {
+    if heavy_lane_pending_for_telemetry && result.perf_telemetry.relation_fact_count == 0 {
         // Heavy enrichment can complete after run_ingestion returns; avoid false negatives.
         result.perf_telemetry.predicate_coverage_flagged = false;
     }
+    result.duration_ms = t0.elapsed().as_millis() as u64;
     let cross_source_dedup_dropped = result.papers_found_raw.saturating_sub(result.papers_found);
     info!(
         papers_found_raw = result.papers_found_raw,
@@ -1198,6 +1355,18 @@ fn resolve_predicate_coverage_max_generic_share() -> f64 {
 
 fn resolve_heavy_lane_async_enabled() -> bool {
     std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_ASYNC")
+        .ok()
+        .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+fn resolve_embedding_global_batch_enabled() -> bool {
+    std::env::var("FERRUMYX_INGESTION_EMBED_GLOBAL_BATCH")
+        .ok()
+        .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+fn resolve_heavy_lane_drain_enabled() -> bool {
+    std::env::var("FERRUMYX_INGESTION_HEAVY_LANE_DRAIN")
         .ok()
         .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 }
@@ -1849,6 +2018,39 @@ fn infer_gene_candidates_from_text(
     out
 }
 
+fn merge_paper_processing_outcome(
+    result: &mut IngestionResult,
+    predicate_hist: &mut HashMap<String, usize>,
+    outcome: PaperProcessingResult,
+) -> Option<tokio::task::JoinHandle<PaperProcessingResult>> {
+    let PaperProcessingResult {
+        chunks_inserted,
+        chunks_embedded,
+        quality_gate_skipped,
+        relation_fact_count,
+        typed_relation_fact_count,
+        generic_relation_fact_count,
+        unique_predicates,
+        mut errors,
+        heavy_task,
+    } = outcome;
+
+    result.chunks_inserted += chunks_inserted;
+    result.chunks_embedded += chunks_embedded;
+    result.errors.append(&mut errors);
+    if quality_gate_skipped {
+        result.perf_telemetry.quality_gate_skips += 1;
+    }
+    result.perf_telemetry.relation_fact_count += relation_fact_count;
+    result.perf_telemetry.typed_relation_fact_count += typed_relation_fact_count;
+    result.perf_telemetry.generic_relation_fact_count += generic_relation_fact_count;
+    for predicate in unique_predicates {
+        *predicate_hist.entry(predicate).or_insert(0) += 1;
+    }
+
+    heavy_task
+}
+
 async fn process_single_paper(
     paper: crate::models::PaperMetadata,
     paper_id: Uuid,
@@ -1858,6 +2060,7 @@ async fn process_single_paper(
     ner: Arc<TrieNer>,
     chunker_cfg: ChunkerConfig,
     embed_client: Option<Arc<EmbeddingClient>>,
+    defer_embedding_to_global_batch: bool,
 ) -> PaperProcessingResult {
     let mut out = PaperProcessingResult::default();
     info!(paper_id = %paper_id, title = %paper.title, "Processing new paper");
@@ -1921,6 +2124,9 @@ async fn process_single_paper(
         out.quality_gate_skipped = true;
         let _ = repo.set_parse_status(paper_id, "parsed_light").await;
         if let Some(ref ec) = embed_client {
+            if defer_embedding_to_global_batch {
+                return out;
+            }
             match embed_pending_chunks(ec.as_ref(), repo.as_ref(), paper_id).await {
                 Ok(n) => out.chunks_embedded += n,
                 Err(e) => out
@@ -1937,22 +2143,24 @@ async fn process_single_paper(
         let paper_bg = paper.clone();
         let chunks_bg = chunks.clone();
         let embed_bg = embed_client.clone();
+        let query_gene_hint_bg = query_gene_hint;
         let limiter = HEAVY_LANE_LIMITER
             .get_or_init(|| Arc::new(Semaphore::new(resolve_heavy_lane_max_inflight())))
             .clone();
-        tokio::spawn(async move {
+        out.heavy_task = Some(tokio::spawn(async move {
             let _permit = limiter.acquire_owned().await.ok();
-            let _ = run_heavy_enrichment_for_chunks(
+            run_heavy_enrichment_for_chunks(
                 paper_bg,
                 paper_id,
                 chunks_bg,
-                query_gene_hint.clone(),
+                query_gene_hint_bg,
                 repo_bg,
                 ner_bg,
                 embed_bg,
+                defer_embedding_to_global_batch,
             )
-            .await;
-        });
+            .await
+        }));
         let _ = repo.set_parse_status(paper_id, "parsed_fast").await;
         return out;
     }
@@ -1965,6 +2173,7 @@ async fn process_single_paper(
         repo,
         ner,
         embed_client,
+        defer_embedding_to_global_batch,
     )
     .await;
     out.chunks_embedded += heavy.chunks_embedded;
@@ -1992,6 +2201,20 @@ struct RelationFactSeed {
     confidence: f32,
 }
 
+fn safe_prefix(text: &str, max_bytes: usize) -> &str {
+    if text.len() <= max_bytes {
+        return text;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    if end == 0 {
+        return "";
+    }
+    &text[..end]
+}
+
 async fn run_heavy_enrichment_for_chunks(
     paper: crate::models::PaperMetadata,
     paper_id: Uuid,
@@ -2000,6 +2223,7 @@ async fn run_heavy_enrichment_for_chunks(
     repo: Arc<IngestionRepository>,
     ner: Arc<TrieNer>,
     embed_client: Option<Arc<EmbeddingClient>>,
+    defer_embedding_to_global_batch: bool,
 ) -> PaperProcessingResult {
     let mut out = PaperProcessingResult::default();
     debug!(
@@ -2021,11 +2245,7 @@ async fn run_heavy_enrichment_for_chunks(
     let mut unique_candidates: HashMap<String, (DbEntityType, String)> = HashMap::new();
 
     for chunk in &chunks {
-        let fp_input = if chunk.content.len() > 512 {
-            &chunk.content[..512]
-        } else {
-            &chunk.content
-        };
+        let fp_input = safe_prefix(&chunk.content, 512);
         if resolve_ingestion_validation_mode() != IngestionValidationMode::Strict {
             let base_fingerprint = hash_text(fp_input);
             let scoped_fingerprint = match resolve_chunk_fingerprint_scope() {
@@ -2297,6 +2517,9 @@ async fn run_heavy_enrichment_for_chunks(
     let _ = repo.set_parse_status(paper_id, "parsed").await;
 
     if let Some(ref ec) = embed_client {
+        if defer_embedding_to_global_batch {
+            return out;
+        }
         match embed_pending_chunks(ec.as_ref(), repo.as_ref(), paper_id).await {
             Ok(n) => {
                 out.chunks_embedded += n;
@@ -3123,4 +3346,3 @@ mod tests {
             .any(|s| s.heading.as_deref() == Some("Results")));
     }
 }
-

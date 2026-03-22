@@ -1201,28 +1201,29 @@ async fn load_target_rows(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    let gene_filter_upper = gene_filter.map(|value| value.trim().to_ascii_uppercase());
     let gene_ids: Vec<uuid::Uuid> = scores.iter().map(|s| s.gene_id).collect();
     let evidence_gene_ids: Vec<uuid::Uuid> = gene_ids.iter().copied().take(1_200).collect();
     let evidence_by_gene: HashMap<uuid::Uuid, u32> = kg_repo
         .count_by_subject_ids(&evidence_gene_ids, 32)
         .await
         .unwrap_or_default();
-
-    let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
-    let mut rows = Vec::new();
+    let name_cache = entity_repo
+        .find_names_by_ids(&gene_ids)
+        .await
+        .unwrap_or_default();
+    let mut rows = Vec::with_capacity(scores.len());
 
     for s in scores {
         let mut gene = if let Some(raw_gene) = extract_json_string_field(&s.components_raw, "gene")
             .or_else(|| extract_json_string_field(&s.components_raw, "gene_symbol"))
         {
             raw_gene
-        } else if let Some(cached) = name_cache.get(&s.gene_id) {
-            cached.clone()
-        } else if let Ok(Some(ent)) = entity_repo.find_by_id(s.gene_id).await {
-            name_cache.insert(s.gene_id, ent.name.clone());
-            ent.name
         } else {
-            s.gene_id.to_string()
+            name_cache
+                .get(&s.gene_id)
+                .cloned()
+                .unwrap_or_else(|| s.gene_id.to_string())
         };
         gene = gene.trim().to_uppercase();
         if looks_like_uuid(&gene) {
@@ -1239,8 +1240,8 @@ async fn load_target_rows(
             }
         }
 
-        if let Some(gf) = gene_filter {
-            if !gene.to_lowercase().contains(&gf.to_lowercase()) {
+        if let Some(gf) = gene_filter_upper.as_deref() {
+            if !gene.contains(gf) {
                 continue;
             }
         }

@@ -7,6 +7,7 @@ use crate::schema;
 use arrow_array::RecordBatchIterator;
 use arrow_schema::{DataType, Field, Fields, Schema};
 use lancedb::connection::Connection;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -18,6 +19,16 @@ pub struct Database {
 }
 
 impl Database {
+    async fn table_names_set(&self) -> Result<HashSet<String>> {
+        Ok(self
+            .conn
+            .table_names()
+            .execute()
+            .await?
+            .into_iter()
+            .collect())
+    }
+
     /// Open or create a database at the specified path.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
@@ -50,118 +61,81 @@ impl Database {
     /// This creates the tables if they don't exist.
     /// LanceDB requires initial data to create a table with a schema.
     pub async fn initialize(&self) -> Result<()> {
-        // Create papers table if it doesn't exist
-        if !self.table_exists(schema::TABLE_PAPERS).await? {
-            self.create_papers_table().await?;
+        let mut existing_tables = self.table_names_set().await?;
+
+        macro_rules! create_if_missing {
+            ($table:expr, $create_fn:ident) => {
+                if existing_tables.insert($table.to_string()) {
+                    self.$create_fn().await?;
+                }
+            };
         }
 
-        // Create chunks table if it doesn't exist
-        if !self.table_exists(schema::TABLE_CHUNKS).await? {
-            self.create_chunks_table().await?;
-        }
+        create_if_missing!(schema::TABLE_PAPERS, create_papers_table);
+        create_if_missing!(schema::TABLE_CHUNKS, create_chunks_table);
+        create_if_missing!(schema::TABLE_ENTITIES, create_entities_table);
+        create_if_missing!(schema::TABLE_ENTITY_MENTIONS, create_entity_mentions_table);
+        create_if_missing!(schema::TABLE_KG_FACTS, create_kg_facts_table);
+        create_if_missing!(schema::TABLE_KG_CONFLICTS, create_kg_conflicts_table);
+        create_if_missing!(schema::TABLE_TARGET_SCORES, create_target_scores_table);
+        create_if_missing!(schema::TABLE_INGESTION_AUDIT, create_ingestion_audit_table);
 
-        // Create entities table if it doesn't exist
-        if !self.table_exists(schema::TABLE_ENTITIES).await? {
-            self.create_entities_table().await?;
-        }
-
-        // Create entity_mentions table if it doesn't exist
-        if !self.table_exists(schema::TABLE_ENTITY_MENTIONS).await? {
-            self.create_entity_mentions_table().await?;
-        }
-
-        // Create kg_facts table if it doesn't exist
-        if !self.table_exists(schema::TABLE_KG_FACTS).await? {
-            self.create_kg_facts_table().await?;
-        }
-
-        // Create kg_conflicts table if it doesn't exist
-        if !self.table_exists(schema::TABLE_KG_CONFLICTS).await? {
-            self.create_kg_conflicts_table().await?;
-        }
-
-        // Create target_scores table if it doesn't exist
-        if !self.table_exists(schema::TABLE_TARGET_SCORES).await? {
-            self.create_target_scores_table().await?;
-        }
-
-        // Create ingestion_audit table if it doesn't exist
-        if !self.table_exists(schema::TABLE_INGESTION_AUDIT).await? {
-            self.create_ingestion_audit_table().await?;
-        }
-
-        // Entity Stage Tables (Phase 3)
-        if !self.table_exists(schema::TABLE_ENT_GENES).await? {
-            self.create_ent_genes_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_MUTATIONS).await? {
-            self.create_ent_mutations_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_CANCER_TYPES).await? {
-            self.create_ent_cancer_types_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_PATHWAYS).await? {
-            self.create_ent_pathways_table().await?;
-        }
-        if !self
-            .table_exists(schema::TABLE_ENT_CLINICAL_EVIDENCE)
-            .await?
-        {
-            self.create_ent_clinical_evidence_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_COMPOUNDS).await? {
-            self.create_ent_compounds_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_STRUCTURES).await? {
-            self.create_ent_structures_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_DRUGGABILITY).await? {
-            self.create_ent_druggability_table().await?;
-        }
-        if !self
-            .table_exists(schema::TABLE_ENT_SYNTHETIC_LETHALITY)
-            .await?
-        {
-            self.create_ent_synthetic_lethality_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_TCGA_SURVIVAL).await? {
-            self.create_ent_tcga_survival_table().await?;
-        }
-        if !self
-            .table_exists(schema::TABLE_ENT_CBIO_MUTATION_FREQUENCY)
-            .await?
-        {
-            self.create_ent_cbio_mutation_frequency_table().await?;
-        }
-        if !self
-            .table_exists(schema::TABLE_ENT_COSMIC_MUTATION_FREQUENCY)
-            .await?
-        {
-            self.create_ent_cosmic_mutation_frequency_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_GTEX_EXPRESSION).await? {
-            self.create_ent_gtex_expression_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_CHEMBL_TARGETS).await? {
-            self.create_ent_chembl_targets_table().await?;
-        }
-        if !self.table_exists(schema::TABLE_ENT_REACTOME_GENES).await? {
-            self.create_ent_reactome_genes_table().await?;
-        }
-        if !self
-            .table_exists(schema::TABLE_ENT_PROVIDER_REFRESH_RUNS)
-            .await?
-        {
-            self.create_ent_provider_refresh_runs_table().await?;
-        }
+        create_if_missing!(schema::TABLE_ENT_GENES, create_ent_genes_table);
+        create_if_missing!(schema::TABLE_ENT_MUTATIONS, create_ent_mutations_table);
+        create_if_missing!(
+            schema::TABLE_ENT_CANCER_TYPES,
+            create_ent_cancer_types_table
+        );
+        create_if_missing!(schema::TABLE_ENT_PATHWAYS, create_ent_pathways_table);
+        create_if_missing!(
+            schema::TABLE_ENT_CLINICAL_EVIDENCE,
+            create_ent_clinical_evidence_table
+        );
+        create_if_missing!(schema::TABLE_ENT_COMPOUNDS, create_ent_compounds_table);
+        create_if_missing!(schema::TABLE_ENT_STRUCTURES, create_ent_structures_table);
+        create_if_missing!(
+            schema::TABLE_ENT_DRUGGABILITY,
+            create_ent_druggability_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_SYNTHETIC_LETHALITY,
+            create_ent_synthetic_lethality_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_TCGA_SURVIVAL,
+            create_ent_tcga_survival_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_CBIO_MUTATION_FREQUENCY,
+            create_ent_cbio_mutation_frequency_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_COSMIC_MUTATION_FREQUENCY,
+            create_ent_cosmic_mutation_frequency_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_GTEX_EXPRESSION,
+            create_ent_gtex_expression_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_CHEMBL_TARGETS,
+            create_ent_chembl_targets_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_REACTOME_GENES,
+            create_ent_reactome_genes_table
+        );
+        create_if_missing!(
+            schema::TABLE_ENT_PROVIDER_REFRESH_RUNS,
+            create_ent_provider_refresh_runs_table
+        );
 
         Ok(())
     }
 
     /// Check if a table exists.
     pub async fn table_exists(&self, name: &str) -> Result<bool> {
-        let tables = self.conn.table_names().execute().await?;
-        Ok(tables.contains(&name.to_string()))
+        Ok(self.table_names_set().await?.contains(name))
     }
 
     /// Create the papers table with an empty schema.
@@ -414,10 +388,24 @@ impl Database {
     pub async fn create_vector_index(&self) -> Result<()> {
         let table = self.conn.open_table(schema::TABLE_CHUNKS).execute().await?;
 
-        table
+        if table
+            .list_indices()
+            .await?
+            .iter()
+            .any(|index| index.columns.len() == 1 && index.columns[0] == "embedding")
+        {
+            return Ok(());
+        }
+
+        match table
             .create_index(&["embedding"], lancedb::index::Index::Auto)
             .execute()
-            .await?;
+            .await
+        {
+            Ok(()) => {}
+            Err(err) if is_existing_vector_index_error(&err) => {}
+            Err(err) => return Err(err.into()),
+        }
 
         Ok(())
     }
@@ -438,74 +426,28 @@ impl Database {
 
     /// Get table statistics.
     pub async fn stats(&self) -> Result<DatabaseStats> {
-        let papers_count = if self.table_exists(schema::TABLE_PAPERS).await? {
-            let table = self.conn.open_table(schema::TABLE_PAPERS).execute().await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let chunks_count = if self.table_exists(schema::TABLE_CHUNKS).await? {
-            let table = self.conn.open_table(schema::TABLE_CHUNKS).execute().await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let entities_count = if self.table_exists(schema::TABLE_ENTITIES).await? {
-            let table = self
-                .conn
-                .open_table(schema::TABLE_ENTITIES)
-                .execute()
-                .await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let mentions_count = if self.table_exists(schema::TABLE_ENTITY_MENTIONS).await? {
-            let table = self
-                .conn
-                .open_table(schema::TABLE_ENTITY_MENTIONS)
-                .execute()
-                .await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let facts_count = if self.table_exists(schema::TABLE_KG_FACTS).await? {
-            let table = self
-                .conn
-                .open_table(schema::TABLE_KG_FACTS)
-                .execute()
-                .await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let target_scores_count = if self.table_exists(schema::TABLE_TARGET_SCORES).await? {
-            let table = self
-                .conn
-                .open_table(schema::TABLE_TARGET_SCORES)
-                .execute()
-                .await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
-
-        let ingestion_audit_count = if self.table_exists(schema::TABLE_INGESTION_AUDIT).await? {
-            let table = self
-                .conn
-                .open_table(schema::TABLE_INGESTION_AUDIT)
-                .execute()
-                .await?;
-            table.count_rows(None).await? as u64
-        } else {
-            0
-        };
+        let existing_tables = self.table_names_set().await?;
+        let papers_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_PAPERS)
+            .await?;
+        let chunks_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_CHUNKS)
+            .await?;
+        let entities_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_ENTITIES)
+            .await?;
+        let mentions_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_ENTITY_MENTIONS)
+            .await?;
+        let facts_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_KG_FACTS)
+            .await?;
+        let target_scores_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_TARGET_SCORES)
+            .await?;
+        let ingestion_audit_count = self
+            .count_rows_if_present(&existing_tables, schema::TABLE_INGESTION_AUDIT)
+            .await?;
 
         Ok(DatabaseStats {
             papers: papers_count,
@@ -517,6 +459,28 @@ impl Database {
             ingestion_audit: ingestion_audit_count,
         })
     }
+}
+
+impl Database {
+    async fn count_rows_if_present(
+        &self,
+        existing_tables: &HashSet<String>,
+        table_name: &str,
+    ) -> Result<u64> {
+        if !existing_tables.contains(table_name) {
+            return Ok(0);
+        }
+
+        let table = self.conn.open_table(table_name).execute().await?;
+        Ok(table.count_rows(None).await? as u64)
+    }
+}
+
+fn is_existing_vector_index_error(err: &lancedb::Error) -> bool {
+    let message = err.to_string().to_ascii_lowercase();
+    message.contains("already exists")
+        || message.contains("already indexed")
+        || message.contains("already configured")
 }
 
 /// Database statistics.

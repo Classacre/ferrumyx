@@ -35,13 +35,129 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 const PROVIDER_SIGNAL_TTL_DAYS: i64 = 14;
+const IN_PROCESS_PROVIDER_CACHE_TTL_SECS: u64 = 60 * 60;
+const IN_PROCESS_PROVIDER_CACHE_MAX_ENTRIES: usize = 4096;
 
 pub struct TargetQueryEngine {
     db: Arc<Database>,
+}
+
+#[derive(Debug, Clone)]
+struct TimedCacheEntry<V> {
+    value: V,
+    inserted_at: Instant,
+}
+
+#[derive(Debug)]
+struct InProcessTtlCache<V> {
+    ttl: Duration,
+    max_entries: usize,
+    entries: Mutex<HashMap<String, TimedCacheEntry<V>>>,
+}
+
+impl<V> InProcessTtlCache<V> {
+    fn new(ttl: Duration, max_entries: usize) -> Self {
+        Self {
+            ttl,
+            max_entries: max_entries.max(1),
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl<V: Clone> InProcessTtlCache<V> {
+    fn get_cloned(&self, key: &str) -> Option<V> {
+        let now = Instant::now();
+        let Ok(mut guard) = self.entries.lock() else {
+            return None;
+        };
+        cache_get_cloned(&mut guard, key, now, self.ttl)
+    }
+
+    fn insert(&self, key: String, value: V) {
+        let Ok(mut guard) = self.entries.lock() else {
+            return;
+        };
+        cache_insert(
+            &mut guard,
+            key,
+            value,
+            Instant::now(),
+            self.ttl,
+            self.max_entries,
+        );
+    }
+}
+
+fn prune_cache_entries<V>(
+    cache: &mut HashMap<String, TimedCacheEntry<V>>,
+    now: Instant,
+    ttl: Duration,
+) {
+    cache.retain(|_, entry| now.saturating_duration_since(entry.inserted_at) < ttl);
+}
+
+fn cache_get_cloned<V: Clone>(
+    cache: &mut HashMap<String, TimedCacheEntry<V>>,
+    key: &str,
+    now: Instant,
+    ttl: Duration,
+) -> Option<V> {
+    prune_cache_entries(cache, now, ttl);
+    cache.get(key).map(|entry| entry.value.clone())
+}
+
+fn cache_insert<V>(
+    cache: &mut HashMap<String, TimedCacheEntry<V>>,
+    key: String,
+    value: V,
+    now: Instant,
+    ttl: Duration,
+    max_entries: usize,
+) {
+    prune_cache_entries(cache, now, ttl);
+    cache.insert(
+        key,
+        TimedCacheEntry {
+            value,
+            inserted_at: now,
+        },
+    );
+    if cache.len() <= max_entries {
+        return;
+    }
+
+    let remove_n = cache.len() - max_entries;
+    let mut oldest_keys: Vec<(Instant, String)> = cache
+        .iter()
+        .map(|(key, entry)| (entry.inserted_at, key.clone()))
+        .collect();
+    oldest_keys.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    for (_, key) in oldest_keys.into_iter().take(remove_n) {
+        cache.remove(&key);
+    }
+}
+
+fn provider_process_cache_ttl() -> Duration {
+    Duration::from_secs(IN_PROCESS_PROVIDER_CACHE_TTL_SECS)
+}
+
+fn provider_f64_cache() -> InProcessTtlCache<Option<f64>> {
+    InProcessTtlCache::new(
+        provider_process_cache_ttl(),
+        IN_PROCESS_PROVIDER_CACHE_MAX_ENTRIES,
+    )
+}
+
+fn provider_u32_cache() -> InProcessTtlCache<Option<u32>> {
+    InProcessTtlCache::new(
+        provider_process_cache_ttl(),
+        IN_PROCESS_PROVIDER_CACHE_MAX_ENTRIES,
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +246,40 @@ fn fact_signal_weight(provenance: FactProvenance, tier: ConfidenceTier, predicat
         1.0_f64
     };
     (provenance_weight * tier_weight * predicate_weight).clamp(0.18_f64, 2.2_f64)
+}
+
+fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if haystack.len() < needle.len() {
+        return false;
+    }
+
+    let needle_len = needle.len();
+    for (start, _) in haystack.char_indices() {
+        let end = start + needle_len;
+        if end > haystack.len() {
+            break;
+        }
+        if let Some(segment) = haystack.get(start..end) {
+            if segment.eq_ignore_ascii_case(needle) {
+                return true;
+            }
+        }
+    }
+
+    haystack
+        .get(haystack.len().saturating_sub(needle_len)..)
+        .is_some_and(|segment| segment.eq_ignore_ascii_case(needle))
+}
+
+fn fields_contain_any_ascii_keyword(fields: &[&str], keywords: &[&str]) -> bool {
+    fields.iter().any(|field| {
+        keywords
+            .iter()
+            .any(|keyword| contains_ascii_case_insensitive(field, keyword))
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,21 +373,36 @@ impl TargetQueryEngine {
             conflicts_by_fact.entry(c.fact_b_id).or_default().push(c);
         }
 
-        let mut candidates: HashMap<uuid::Uuid, GeneCandidate> = HashMap::new();
+        let mut candidates: HashMap<uuid::Uuid, GeneCandidate> = HashMap::with_capacity(fact_limit);
 
         for f in facts {
             if f.predicate.eq_ignore_ascii_case("mentions") || !is_gene_like(&f.subject_name) {
                 continue;
             }
 
-            if !gene_filter.is_empty() && !f.subject_name.to_lowercase().contains(&gene_filter) {
+            let subject_name_lc = (!gene_filter.is_empty() || !cancer_filter.is_empty())
+                .then(|| f.subject_name.to_lowercase());
+            if !gene_filter.is_empty()
+                && !subject_name_lc
+                    .as_deref()
+                    .is_some_and(|subject| subject.contains(&gene_filter))
+            {
                 continue;
             }
 
+            let object_name_lc = (!cancer_filter.is_empty()).then(|| f.object_name.to_lowercase());
+            let predicate_lc_for_filter =
+                (!cancer_filter.is_empty()).then(|| f.predicate.to_lowercase());
             if !cancer_filter.is_empty() {
-                let has_cancer_context = f.subject_name.to_lowercase().contains(&cancer_filter)
-                    || f.object_name.to_lowercase().contains(&cancer_filter)
-                    || f.predicate.to_lowercase().contains(&cancer_filter);
+                let has_cancer_context = subject_name_lc
+                    .as_deref()
+                    .is_some_and(|subject| subject.contains(&cancer_filter))
+                    || object_name_lc
+                        .as_deref()
+                        .is_some_and(|object| object.contains(&cancer_filter))
+                    || predicate_lc_for_filter
+                        .as_deref()
+                        .is_some_and(|predicate| predicate.contains(&cancer_filter));
                 if !has_cancer_context {
                     continue;
                 }
@@ -290,7 +455,8 @@ impl TargetQueryEngine {
             }
             entry.paper_ids.insert(f.paper_id);
 
-            let predicate_lc = f.predicate.to_lowercase();
+            let predicate_lc =
+                predicate_lc_for_filter.unwrap_or_else(|| f.predicate.to_lowercase());
             if predicate_lc.contains("mutation") || predicate_lc == "has_mutation" {
                 entry.mutation_mentions += 1;
                 entry.mutation_mentions_w += signal_weight;
@@ -304,26 +470,21 @@ impl TargetQueryEngine {
             {
                 entry.survival_mentions += 1;
                 entry.survival_mentions_w += signal_weight;
-                let survival_ctx = format!(
-                    "{} {} {}",
-                    f.subject_name.to_lowercase(),
-                    f.object_name.to_lowercase(),
-                    f.evidence.as_deref().unwrap_or("").to_lowercase()
-                );
-                if survival_ctx.contains("poor")
-                    || survival_ctx.contains("worse")
-                    || survival_ctx.contains("decreased")
-                    || survival_ctx.contains("shorter")
-                    || survival_ctx.contains("reduced")
-                {
+                let survival_fields = [
+                    f.subject_name.as_str(),
+                    f.object_name.as_str(),
+                    f.evidence.as_deref().unwrap_or(""),
+                ];
+                if fields_contain_any_ascii_keyword(
+                    &survival_fields,
+                    &["poor", "worse", "decreased", "shorter", "reduced"],
+                ) {
                     entry.survival_negative += 1;
                     entry.survival_negative_w += signal_weight;
-                } else if survival_ctx.contains("improved")
-                    || survival_ctx.contains("better")
-                    || survival_ctx.contains("longer")
-                    || survival_ctx.contains("favorable")
-                    || survival_ctx.contains("increased")
-                {
+                } else if fields_contain_any_ascii_keyword(
+                    &survival_fields,
+                    &["improved", "better", "longer", "favorable", "increased"],
+                ) {
                     entry.survival_positive += 1;
                     entry.survival_positive_w += signal_weight;
                 }
@@ -334,17 +495,15 @@ impl TargetQueryEngine {
                 || predicate_lc.contains("upregulat")
                 || predicate_lc.contains("downregulat")
             {
-                let expr_ctx = format!(
-                    "{} {} {}",
-                    f.subject_name.to_lowercase(),
-                    f.object_name.to_lowercase(),
-                    f.evidence.as_deref().unwrap_or("").to_lowercase()
-                );
-                if expr_ctx.contains("normal")
-                    || expr_ctx.contains("healthy")
-                    || expr_ctx.contains("non-tumor")
-                    || expr_ctx.contains("adjacent")
-                {
+                let expression_fields = [
+                    f.subject_name.as_str(),
+                    f.object_name.as_str(),
+                    f.evidence.as_deref().unwrap_or(""),
+                ];
+                if fields_contain_any_ascii_keyword(
+                    &expression_fields,
+                    &["normal", "healthy", "non-tumor", "adjacent"],
+                ) {
                     entry.expression_normal_mentions += 1;
                     entry.expression_normal_mentions_w += signal_weight;
                 } else {
@@ -398,6 +557,15 @@ impl TargetQueryEngine {
         let ent_repo = EntStageRepository::new(self.db.clone());
         let signal_repo = Phase4SignalRepository::new(self.db.clone());
         let paper_repo = PaperRepository::new(self.db.clone());
+        let candidate_count = candidates.len();
+        let req_cancer_code = req.cancer_code.clone();
+        let normalized_req_provider_cancer = req_cancer_code
+            .as_deref()
+            .and_then(normalize_provider_cancer_code);
+        let fetch_cbio = should_fetch_cbio(candidate_count, &req);
+        let fetch_gtex = should_fetch_gtex(candidate_count, &req);
+        let fetch_chembl = should_fetch_chembl(candidate_count, &req);
+        let fetch_reactome = should_fetch_reactome(candidate_count, &req);
         let symbol_list: Vec<String> = candidates.values().map(|c| c.gene_symbol.clone()).collect();
         let enrichment_by_symbol = ent_repo
             .get_enrichment_by_symbol(&symbol_list)
@@ -415,19 +583,22 @@ impl TargetQueryEngine {
             .unwrap_or_default();
         let t_enrich = Instant::now();
 
-        let mut cohort_metrics = Vec::new();
-        let mut by_gene_metrics: HashMap<uuid::Uuid, TargetMetrics> = HashMap::new();
+        let mut cohort_metrics = Vec::with_capacity(candidate_count);
+        let mut by_gene_metrics: HashMap<uuid::Uuid, TargetMetrics> =
+            HashMap::with_capacity(candidate_count);
         let mut component_sources_by_gene: HashMap<uuid::Uuid, BTreeMap<String, String>> =
-            HashMap::new();
+            HashMap::with_capacity(candidate_count);
         let source_backed_only = phase4_source_backed_only();
         let semantic_fallback_enabled = phase4_semantic_fallback_enabled();
         let query_cache_only = phase4_query_cache_only();
         let disable_structural_proxy =
-            source_backed_only || should_disable_structural_proxy(candidates.len());
+            source_backed_only || should_disable_structural_proxy(candidate_count);
         let allow_live_provider_fetch =
-            !query_cache_only && should_allow_live_provider_fetch(candidates.len());
-        let mut structural_source_missing: HashSet<uuid::Uuid> = HashSet::new();
+            !query_cache_only && should_allow_live_provider_fetch(candidate_count);
+        let mut structural_source_missing: HashSet<uuid::Uuid> =
+            HashSet::with_capacity(candidate_count);
         for (gene_id, candidate) in &candidates {
+            let candidate_symbol_upper = candidate.gene_symbol.to_uppercase();
             let mut metrics = if source_backed_only {
                 source_backed_default_metrics()
             } else {
@@ -449,7 +620,8 @@ impl TargetQueryEngine {
                     "source_missing".to_string(),
                 );
             }
-            if let Some(enrich) = enrichment_by_symbol.get(&candidate.gene_symbol.to_uppercase()) {
+            let enrichment = enrichment_by_symbol.get(&candidate_symbol_upper);
+            if let Some(enrich) = enrichment {
                 if !source_backed_only && enrich.mutation_count > 0 {
                     let source_mutation = (enrich.mutation_count as f64 / 20.0).clamp(0.0, 1.0);
                     metrics.mutation_freq = metrics.mutation_freq.max(source_mutation);
@@ -509,16 +681,14 @@ impl TargetQueryEngine {
 
             let inferred_cancer = candidate
                 .infer_cancer_code()
-                .or_else(|| req.cancer_code.clone())
+                .or_else(|| req_cancer_code.clone())
                 .unwrap_or_else(|| "UNK".to_string());
 
-            let provider_cancer = req
-                .cancer_code
-                .as_deref()
-                .and_then(normalize_provider_cancer_code)
+            let provider_cancer = normalized_req_provider_cancer
+                .clone()
                 .or_else(|| normalize_provider_cancer_code(&inferred_cancer));
 
-            if should_fetch_cbio(candidates.len(), &req) {
+            if fetch_cbio {
                 let mut cbio_source: Option<&str> = None;
                 let mut cbio_mutation = None;
                 if let Some(cancer_code) = provider_cancer.as_deref() {
@@ -602,7 +772,7 @@ impl TargetQueryEngine {
                 }
             }
 
-            if should_fetch_tcga(candidates.len(), provider_cancer.is_some()) {
+            if should_fetch_tcga(candidate_count, provider_cancer.is_some()) {
                 if let Some(cancer_code) = provider_cancer.as_deref() {
                     if let Some(tcga_survival_score) = get_cached_tcga_survival_score(
                         &signal_repo,
@@ -621,7 +791,7 @@ impl TargetQueryEngine {
                 }
             }
 
-            if should_fetch_gtex(candidates.len(), &req) {
+            if fetch_gtex {
                 if let Some(gtex_expr_score) = get_cached_gtex_expression_score(
                     &signal_repo,
                     &candidate.gene_symbol,
@@ -666,7 +836,7 @@ impl TargetQueryEngine {
                 }
             }
 
-            if should_fetch_chembl(candidates.len(), &req) {
+            if fetch_chembl {
                 if let Some(chembl_count) = get_cached_chembl_inhibitor_count(
                     &signal_repo,
                     &candidate.gene_symbol,
@@ -684,7 +854,7 @@ impl TargetQueryEngine {
                 }
             }
 
-            if should_fetch_reactome(candidates.len(), &req) {
+            if fetch_reactome {
                 if let Some(reactome_count) = get_cached_reactome_pathway_count(
                     &signal_repo,
                     &candidate.gene_symbol,
@@ -711,17 +881,18 @@ impl TargetQueryEngine {
 
         let cohort_scores = scorer::PrioritizationEngine::calculate_scores(&cohort_metrics);
 
-        let mut results = Vec::new();
+        let mut results = Vec::with_capacity(candidate_count);
 
         for (gene_id, candidate) in &candidates {
             if let Some(score_res) = cohort_scores.get(gene_id) {
                 let Some(metrics) = by_gene_metrics.get(gene_id) else {
                     continue;
                 };
+                let candidate_symbol_upper = candidate.gene_symbol.to_uppercase();
 
                 let inferred_cancer = candidate
                     .infer_cancer_code()
-                    .or_else(|| req.cancer_code.clone())
+                    .or_else(|| req_cancer_code.clone())
                     .unwrap_or_else(|| "UNK".to_string());
 
                 let effective_score = score_res.composite_score.clamp(0.0, 0.98);
@@ -761,7 +932,7 @@ impl TargetQueryEngine {
                     flags.push("HARD_EXCLUSION_SATURATED_TARGET".to_string());
                 }
                 if !source_backed_only
-                    && !enrichment_by_symbol.contains_key(&candidate.gene_symbol.to_uppercase())
+                    && !enrichment_by_symbol.contains_key(&candidate_symbol_upper)
                 {
                     flags.push("COVERAGE_PROXY_ONLY".to_string());
                 }
@@ -804,7 +975,7 @@ impl TargetQueryEngine {
         }
         results.truncate(req.max_results);
 
-        let large_cohort = should_prewarm_large_cohort(candidates.len());
+        let large_cohort = should_prewarm_large_cohort(candidate_count);
         if query_cache_only || large_cohort {
             let prewarm_take = if large_cohort { 20 } else { 12 };
             let prewarm_genes: Vec<String> = results
@@ -930,166 +1101,36 @@ impl TargetQueryEngine {
             ),
         );
 
-        for batch in genes.chunks(batch_size) {
-            for gene in batch {
-                report.genes_processed += 1;
+        for (batch_index, batch) in genes.chunks(batch_size).enumerate() {
+            let mut tasks = tokio::task::JoinSet::new();
+            let batch_start = batch_index * batch_size;
+            for (offset, gene) in batch.iter().enumerate() {
+                tasks.spawn(refresh_provider_signals_for_gene(
+                    self.db.clone(),
+                    batch_start + offset,
+                    gene.clone(),
+                    cancer_code.clone(),
+                    cbio_policy.clone(),
+                    cosmic_policy.clone(),
+                    gtex_policy.clone(),
+                    tcga_policy.clone(),
+                    chembl_policy.clone(),
+                    reactome_policy.clone(),
+                    force_refresh,
+                    retries,
+                ));
+            }
 
-                {
-                    let t_provider = Instant::now();
-                    if !cbio_policy.run_now {
-                        report.cbio_skipped += 1;
-                    } else if let Some(cc) = cancer_code.as_deref() {
-                        report.cbio_attempted += 1;
-                        if retry_fetch_f64(retries, || {
-                            get_cached_cbio_mutation_frequency(
-                                &signal_repo,
-                                gene,
-                                cc,
-                                force_refresh,
-                            )
-                        })
-                        .await
-                        {
-                            report.cbio_success += 1;
-                        } else {
-                            report.cbio_failed += 1;
-                        }
-                    } else {
-                        report.cbio_skipped += 1;
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("cbioportal".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
+            let mut batch_results = Vec::with_capacity(batch.len());
+            while let Some(result) = tasks.join_next().await {
+                let gene_result =
+                    result.map_err(|err| anyhow::anyhow!("provider refresh task failed: {err}"))?;
+                batch_results.push(gene_result);
+            }
 
-                {
-                    let t_provider = Instant::now();
-                    if !cosmic_policy.run_now {
-                        report.cosmic_skipped += 1;
-                    } else {
-                        report.cosmic_attempted += 1;
-                        let ok = if let Some(cc) = cancer_code.as_deref() {
-                            retry_fetch_f64(retries, || {
-                                get_cached_cosmic_mutation_frequency(
-                                    &signal_repo,
-                                    gene,
-                                    cc,
-                                    force_refresh,
-                                )
-                            })
-                            .await
-                        } else {
-                            retry_fetch_f64(retries, || {
-                                get_cached_cosmic_mutation_frequency_any_cancer(
-                                    &signal_repo,
-                                    gene,
-                                    force_refresh,
-                                )
-                            })
-                            .await
-                        };
-                        if ok {
-                            report.cosmic_success += 1;
-                        } else {
-                            report.cosmic_failed += 1;
-                        }
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("cosmic".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
-
-                {
-                    let t_provider = Instant::now();
-                    if !gtex_policy.run_now {
-                        report.gtex_skipped += 1;
-                    } else {
-                        report.gtex_attempted += 1;
-                        if retry_fetch_f64(retries, || {
-                            get_cached_gtex_expression_score(&signal_repo, gene, force_refresh)
-                        })
-                        .await
-                        {
-                            report.gtex_success += 1;
-                        } else {
-                            report.gtex_failed += 1;
-                        }
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("gtex".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
-
-                {
-                    let t_provider = Instant::now();
-                    if !chembl_policy.run_now {
-                        report.chembl_skipped += 1;
-                    } else {
-                        report.chembl_attempted += 1;
-                        if retry_fetch_u32(retries, || {
-                            get_cached_chembl_inhibitor_count(&signal_repo, gene, force_refresh)
-                        })
-                        .await
-                        {
-                            report.chembl_success += 1;
-                        } else {
-                            report.chembl_failed += 1;
-                        }
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("chembl".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
-
-                {
-                    let t_provider = Instant::now();
-                    if !reactome_policy.run_now {
-                        report.reactome_skipped += 1;
-                    } else {
-                        report.reactome_attempted += 1;
-                        if retry_fetch_u32(retries, || {
-                            get_cached_reactome_pathway_count(&signal_repo, gene, force_refresh)
-                        })
-                        .await
-                        {
-                            report.reactome_success += 1;
-                        } else {
-                            report.reactome_failed += 1;
-                        }
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("reactome".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
-
-                {
-                    let t_provider = Instant::now();
-                    if !tcga_policy.run_now {
-                        report.tcga_skipped += 1;
-                    } else if let Some(cc) = cancer_code.as_deref() {
-                        report.tcga_attempted += 1;
-                        if retry_fetch_f64(retries, || {
-                            get_cached_tcga_survival_score(&signal_repo, gene, cc, force_refresh)
-                        })
-                        .await
-                        {
-                            report.tcga_success += 1;
-                        } else {
-                            report.tcga_failed += 1;
-                        }
-                    } else {
-                        report.tcga_skipped += 1;
-                    }
-                    *report
-                        .provider_timing_ms
-                        .entry("tcga".to_string())
-                        .or_insert(0) += t_provider.elapsed().as_millis() as u64;
-                }
+            batch_results.sort_by_key(|result| result.gene_index);
+            for gene_result in batch_results {
+                apply_gene_provider_refresh_result(&mut report, gene_result);
             }
         }
 
@@ -1918,21 +1959,258 @@ where
     false
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ProviderAttemptResult {
+    provider: &'static str,
+    attempted: bool,
+    success: bool,
+    duration_ms: u64,
+}
+
+#[derive(Debug)]
+struct GeneProviderRefreshResult {
+    gene_index: usize,
+    provider_results: [ProviderAttemptResult; 6],
+}
+
+impl ProviderAttemptResult {
+    fn skipped(provider: &'static str, started: Instant) -> Self {
+        Self {
+            provider,
+            attempted: false,
+            success: false,
+            duration_ms: started.elapsed().as_millis() as u64,
+        }
+    }
+
+    fn attempted(provider: &'static str, success: bool, started: Instant) -> Self {
+        Self {
+            provider,
+            attempted: true,
+            success,
+            duration_ms: started.elapsed().as_millis() as u64,
+        }
+    }
+}
+
+async fn run_refresh_f64_attempt<F, Fut>(
+    provider: &'static str,
+    should_run: bool,
+    retries: u8,
+    op: F,
+) -> ProviderAttemptResult
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Option<f64>>,
+{
+    let started = Instant::now();
+    if !should_run {
+        return ProviderAttemptResult::skipped(provider, started);
+    }
+    let success = retry_fetch_f64(retries, op).await;
+    ProviderAttemptResult::attempted(provider, success, started)
+}
+
+async fn run_refresh_u32_attempt<F, Fut>(
+    provider: &'static str,
+    should_run: bool,
+    retries: u8,
+    op: F,
+) -> ProviderAttemptResult
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Option<u32>>,
+{
+    let started = Instant::now();
+    if !should_run {
+        return ProviderAttemptResult::skipped(provider, started);
+    }
+    let success = retry_fetch_u32(retries, op).await;
+    ProviderAttemptResult::attempted(provider, success, started)
+}
+
+async fn refresh_provider_signals_for_gene(
+    db: Arc<Database>,
+    gene_index: usize,
+    gene: String,
+    cancer_code: Option<String>,
+    cbio_policy: ProviderRefreshPolicy,
+    cosmic_policy: ProviderRefreshPolicy,
+    gtex_policy: ProviderRefreshPolicy,
+    tcga_policy: ProviderRefreshPolicy,
+    chembl_policy: ProviderRefreshPolicy,
+    reactome_policy: ProviderRefreshPolicy,
+    force_refresh: bool,
+    retries: u8,
+) -> GeneProviderRefreshResult {
+    let signal_repo = Phase4SignalRepository::new(db);
+    let cbio_cancer = cancer_code.clone();
+    let cosmic_cancer = cancer_code.clone();
+    let tcga_cancer = cancer_code;
+
+    let cbio = async {
+        run_refresh_f64_attempt(
+            "cbioportal",
+            cbio_policy.run_now && cbio_cancer.is_some(),
+            retries,
+            || async {
+                let cc = cbio_cancer
+                    .as_deref()
+                    .expect("cbio cancer code checked before fetch");
+                get_cached_cbio_mutation_frequency(&signal_repo, &gene, cc, force_refresh).await
+            },
+        )
+        .await
+    };
+
+    let cosmic = async {
+        run_refresh_f64_attempt("cosmic", cosmic_policy.run_now, retries, || async {
+            if let Some(cc) = cosmic_cancer.as_deref() {
+                get_cached_cosmic_mutation_frequency(&signal_repo, &gene, cc, force_refresh).await
+            } else {
+                get_cached_cosmic_mutation_frequency_any_cancer(&signal_repo, &gene, force_refresh)
+                    .await
+            }
+        })
+        .await
+    };
+
+    let gtex = async {
+        run_refresh_f64_attempt("gtex", gtex_policy.run_now, retries, || async {
+            get_cached_gtex_expression_score(&signal_repo, &gene, force_refresh).await
+        })
+        .await
+    };
+
+    let tcga = async {
+        run_refresh_f64_attempt(
+            "tcga",
+            tcga_policy.run_now && tcga_cancer.is_some(),
+            retries,
+            || async {
+                let cc = tcga_cancer
+                    .as_deref()
+                    .expect("tcga cancer code checked before fetch");
+                get_cached_tcga_survival_score(&signal_repo, &gene, cc, force_refresh).await
+            },
+        )
+        .await
+    };
+
+    let chembl = async {
+        run_refresh_u32_attempt("chembl", chembl_policy.run_now, retries, || async {
+            get_cached_chembl_inhibitor_count(&signal_repo, &gene, force_refresh).await
+        })
+        .await
+    };
+
+    let reactome = async {
+        run_refresh_u32_attempt("reactome", reactome_policy.run_now, retries, || async {
+            get_cached_reactome_pathway_count(&signal_repo, &gene, force_refresh).await
+        })
+        .await
+    };
+
+    let (cbio, cosmic, gtex, tcga, chembl, reactome) =
+        tokio::join!(cbio, cosmic, gtex, tcga, chembl, reactome);
+
+    GeneProviderRefreshResult {
+        gene_index,
+        provider_results: [cbio, cosmic, gtex, tcga, chembl, reactome],
+    }
+}
+
+fn apply_gene_provider_refresh_result(
+    report: &mut ProviderRefreshReport,
+    gene_result: GeneProviderRefreshResult,
+) {
+    report.genes_processed += 1;
+    for provider_result in gene_result.provider_results {
+        *report
+            .provider_timing_ms
+            .entry(provider_result.provider.to_string())
+            .or_insert(0) += provider_result.duration_ms;
+
+        match provider_result.provider {
+            "cbioportal" => apply_provider_attempt(
+                provider_result,
+                &mut report.cbio_attempted,
+                &mut report.cbio_success,
+                &mut report.cbio_failed,
+                &mut report.cbio_skipped,
+            ),
+            "cosmic" => apply_provider_attempt(
+                provider_result,
+                &mut report.cosmic_attempted,
+                &mut report.cosmic_success,
+                &mut report.cosmic_failed,
+                &mut report.cosmic_skipped,
+            ),
+            "gtex" => apply_provider_attempt(
+                provider_result,
+                &mut report.gtex_attempted,
+                &mut report.gtex_success,
+                &mut report.gtex_failed,
+                &mut report.gtex_skipped,
+            ),
+            "tcga" => apply_provider_attempt(
+                provider_result,
+                &mut report.tcga_attempted,
+                &mut report.tcga_success,
+                &mut report.tcga_failed,
+                &mut report.tcga_skipped,
+            ),
+            "chembl" => apply_provider_attempt(
+                provider_result,
+                &mut report.chembl_attempted,
+                &mut report.chembl_success,
+                &mut report.chembl_failed,
+                &mut report.chembl_skipped,
+            ),
+            "reactome" => apply_provider_attempt(
+                provider_result,
+                &mut report.reactome_attempted,
+                &mut report.reactome_success,
+                &mut report.reactome_failed,
+                &mut report.reactome_skipped,
+            ),
+            _ => {}
+        }
+    }
+}
+
+fn apply_provider_attempt(
+    result: ProviderAttemptResult,
+    attempted: &mut usize,
+    success: &mut usize,
+    failed: &mut usize,
+    skipped: &mut usize,
+) {
+    if result.attempted {
+        *attempted += 1;
+        if result.success {
+            *success += 1;
+        } else {
+            *failed += 1;
+        }
+    } else {
+        *skipped += 1;
+    }
+}
+
 async fn get_cached_cbio_mutation_frequency(
     signal_repo: &Phase4SignalRepository,
     gene_symbol: &str,
     cancer_code: &str,
     allow_live_fetch: bool,
 ) -> Option<f64> {
-    static CBIO_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static CBIO_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let gene = gene_symbol.trim().to_uppercase();
     let cancer = normalize_provider_cancer_code(cancer_code)?;
     let key = format!("{gene}|{cancer}");
-    let cache = CBIO_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = CBIO_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -1940,9 +2218,7 @@ async fn get_cached_cbio_mutation_frequency(
         .await
     {
         let value = Some(row.mutation_frequency.clamp(0.0, 1.0));
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -1982,9 +2258,7 @@ async fn get_cached_cbio_mutation_frequency(
                 fetched_at: chrono::Utc::now(),
             })
             .await;
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, Some(value));
-        }
+        cache.insert(key, Some(value));
         return Some(value);
     }
 
@@ -1995,9 +2269,7 @@ async fn get_cached_cbio_mutation_frequency(
         .flatten()
         .map(|row| row.mutation_frequency.clamp(0.0, 1.0));
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -2005,16 +2277,14 @@ async fn get_cached_cbio_mutation_frequency_any_cancer(
     signal_repo: &Phase4SignalRepository,
     gene_symbol: &str,
 ) -> Option<f64> {
-    static CBIO_ANY_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static CBIO_ANY_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let gene = gene_symbol.trim().to_uppercase();
     if gene.is_empty() {
         return None;
     }
-    let cache = CBIO_ANY_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&gene) {
-            return *v;
-        }
+    let cache = CBIO_ANY_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&gene) {
+        return v;
     }
 
     let resolved = signal_repo
@@ -2024,9 +2294,7 @@ async fn get_cached_cbio_mutation_frequency_any_cancer(
         .flatten()
         .map(|row| row.mutation_frequency.clamp(0.0, 1.0));
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(gene, resolved);
-    }
+    cache.insert(gene, resolved);
     resolved
 }
 
@@ -2036,7 +2304,7 @@ async fn get_cached_cosmic_mutation_frequency(
     cancer_code: &str,
     allow_live_fetch: bool,
 ) -> Option<f64> {
-    static COSMIC_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static COSMIC_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let gene = gene_symbol.trim().to_uppercase();
     let cancer = normalize_provider_cancer_code(cancer_code)
         .unwrap_or_else(|| cancer_code.trim().to_uppercase());
@@ -2044,11 +2312,9 @@ async fn get_cached_cosmic_mutation_frequency(
         return None;
     }
     let key = format!("{gene}|{cancer}");
-    let cache = COSMIC_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = COSMIC_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2056,9 +2322,7 @@ async fn get_cached_cosmic_mutation_frequency(
         .await
     {
         let value = Some(row.mutation_frequency.clamp(0.0, 1.0));
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -2094,9 +2358,7 @@ async fn get_cached_cosmic_mutation_frequency(
                 fetched_at: chrono::Utc::now(),
             })
             .await;
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, Some(value));
-        }
+        cache.insert(key, Some(value));
         return Some(value);
     }
 
@@ -2106,9 +2368,7 @@ async fn get_cached_cosmic_mutation_frequency(
         .ok()
         .flatten()
         .map(|row| row.mutation_frequency.clamp(0.0, 1.0));
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -2117,16 +2377,14 @@ async fn get_cached_cosmic_mutation_frequency_any_cancer(
     gene_symbol: &str,
     allow_live_fetch: bool,
 ) -> Option<f64> {
-    static COSMIC_ANY_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static COSMIC_ANY_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let gene = gene_symbol.trim().to_uppercase();
     if gene.is_empty() {
         return None;
     }
-    let cache = COSMIC_ANY_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&gene) {
-            return *v;
-        }
+    let cache = COSMIC_ANY_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&gene) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2134,9 +2392,7 @@ async fn get_cached_cosmic_mutation_frequency_any_cancer(
         .await
     {
         let value = Some(row.mutation_frequency.clamp(0.0, 1.0));
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(gene.clone(), value);
-        }
+        cache.insert(gene.clone(), value);
         return value;
     }
 
@@ -2171,15 +2427,11 @@ async fn get_cached_cosmic_mutation_frequency_any_cancer(
                 fetched_at: chrono::Utc::now(),
             })
             .await;
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(gene, Some(value));
-        }
+        cache.insert(gene, Some(value));
         return Some(value);
     }
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(gene, None);
-    }
+    cache.insert(gene, None);
     None
 }
 
@@ -2188,17 +2440,15 @@ async fn get_cached_gtex_expression_score(
     gene_symbol: &str,
     allow_live_fetch: bool,
 ) -> Option<f64> {
-    static GTEX_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static GTEX_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let key = gene_symbol.trim().to_uppercase();
     if key.is_empty() {
         return None;
     }
 
-    let cache = GTEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = GTEX_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2206,9 +2456,7 @@ async fn get_cached_gtex_expression_score(
         .await
     {
         let value = Some(row.expression_score.clamp(0.0, 1.0));
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -2254,9 +2502,7 @@ async fn get_cached_gtex_expression_score(
             .map(|row| row.expression_score.clamp(0.0, 1.0))
     };
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -2281,17 +2527,15 @@ async fn get_cached_tcga_survival_score(
     cancer_code: &str,
     allow_live_fetch: bool,
 ) -> Option<f64> {
-    static TCGA_CACHE: OnceLock<Mutex<HashMap<String, Option<f64>>>> = OnceLock::new();
+    static TCGA_CACHE: OnceLock<InProcessTtlCache<Option<f64>>> = OnceLock::new();
     let gene = gene_symbol.trim().to_uppercase();
     let project = to_tcga_project_id(cancer_code)?;
     let normalized_cancer = cancer_code.trim().to_uppercase();
     let key = format!("{}|{}", gene, project);
 
-    let cache = TCGA_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = TCGA_CACHE.get_or_init(provider_f64_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2299,9 +2543,7 @@ async fn get_cached_tcga_survival_score(
         .await
     {
         let value = Some(row.survival_score.clamp(0.0, 1.0));
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -2347,9 +2589,7 @@ async fn get_cached_tcga_survival_score(
             .map(|row| row.survival_score.clamp(0.0, 1.0))
     };
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -2365,16 +2605,14 @@ async fn get_cached_chembl_inhibitor_count(
     gene_symbol: &str,
     allow_live_fetch: bool,
 ) -> Option<u32> {
-    static CHEMBL_CACHE: OnceLock<Mutex<HashMap<String, Option<u32>>>> = OnceLock::new();
+    static CHEMBL_CACHE: OnceLock<InProcessTtlCache<Option<u32>>> = OnceLock::new();
     let key = gene_symbol.trim().to_uppercase();
     if key.is_empty() {
         return None;
     }
-    let cache = CHEMBL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = CHEMBL_CACHE.get_or_init(provider_u32_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2382,9 +2620,7 @@ async fn get_cached_chembl_inhibitor_count(
         .await
     {
         let value = Some(row.inhibitor_count.max(0) as u32);
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -2444,9 +2680,7 @@ async fn get_cached_chembl_inhibitor_count(
             .map(|row| row.inhibitor_count.max(0) as u32)
     };
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -2455,16 +2689,14 @@ async fn get_cached_reactome_pathway_count(
     gene_symbol: &str,
     allow_live_fetch: bool,
 ) -> Option<u32> {
-    static REACTOME_CACHE: OnceLock<Mutex<HashMap<String, Option<u32>>>> = OnceLock::new();
+    static REACTOME_CACHE: OnceLock<InProcessTtlCache<Option<u32>>> = OnceLock::new();
     let key = gene_symbol.trim().to_uppercase();
     if key.is_empty() {
         return None;
     }
-    let cache = REACTOME_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(guard) = cache.lock() {
-        if let Some(v) = guard.get(&key) {
-            return *v;
-        }
+    let cache = REACTOME_CACHE.get_or_init(provider_u32_cache);
+    if let Some(v) = cache.get_cloned(&key) {
+        return v;
     }
 
     if let Ok(Some(row)) = signal_repo
@@ -2472,9 +2704,7 @@ async fn get_cached_reactome_pathway_count(
         .await
     {
         let value = Some(row.pathway_count.max(0) as u32);
-        if let Ok(mut guard) = cache.lock() {
-            guard.insert(key, value);
-        }
+        cache.insert(key, value);
         return value;
     }
 
@@ -2530,9 +2760,7 @@ async fn get_cached_reactome_pathway_count(
             .map(|row| row.pathway_count.max(0) as u32)
     };
 
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(key, resolved);
-    }
+    cache.insert(key, resolved);
     resolved
 }
 
@@ -3223,5 +3451,93 @@ mod tests {
         let best = parse_fpocket_best_score(&out_dir).unwrap();
         assert!((best - 0.63).abs() < 1e-6);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cache_entries_expire_after_ttl() {
+        let mut cache = HashMap::new();
+        let started = Instant::now();
+        let ttl = Duration::from_secs(5);
+
+        cache_insert(
+            &mut cache,
+            "TP53".to_string(),
+            Some(0.42f64),
+            started,
+            ttl,
+            4,
+        );
+        assert_eq!(
+            cache_get_cloned(&mut cache, "TP53", started + Duration::from_secs(4), ttl),
+            Some(Some(0.42))
+        );
+        assert_eq!(
+            cache_get_cloned(&mut cache, "TP53", started + Duration::from_secs(5), ttl),
+            None
+        );
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn cache_insert_prunes_oldest_entries_when_full() {
+        let mut cache = HashMap::new();
+        let started = Instant::now();
+        let ttl = Duration::from_secs(60);
+
+        cache_insert(&mut cache, "A".to_string(), Some(1u32), started, ttl, 2);
+        cache_insert(
+            &mut cache,
+            "B".to_string(),
+            Some(2u32),
+            started + Duration::from_secs(1),
+            ttl,
+            2,
+        );
+        cache_insert(
+            &mut cache,
+            "C".to_string(),
+            Some(3u32),
+            started + Duration::from_secs(2),
+            ttl,
+            2,
+        );
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache.contains_key("B"));
+        assert!(cache.contains_key("C"));
+        assert!(!cache.contains_key("A"));
+    }
+
+    #[test]
+    fn contains_ascii_case_insensitive_matches_without_allocating_joined_context() {
+        assert!(contains_ascii_case_insensitive(
+            "Overall survival improved in tumors",
+            "IMPROVED"
+        ));
+        assert!(contains_ascii_case_insensitive(
+            "adjacent normal tissue",
+            "normal"
+        ));
+        assert!(!contains_ascii_case_insensitive(
+            "tumor selective",
+            "healthy"
+        ));
+    }
+
+    #[test]
+    fn fields_contain_any_ascii_keyword_scans_across_multiple_fields() {
+        let fields = [
+            "KRAS",
+            "lung adenocarcinoma",
+            "Associated with shorter survival",
+        ];
+        assert!(fields_contain_any_ascii_keyword(
+            &fields,
+            &["better", "shorter"]
+        ));
+        assert!(!fields_contain_any_ascii_keyword(
+            &fields,
+            &["healthy", "adjacent"]
+        ));
     }
 }

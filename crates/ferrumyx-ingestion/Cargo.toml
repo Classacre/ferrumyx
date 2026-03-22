@@ -14,6 +14,7 @@ candle-nn.workspace = true
 candle-transformers.workspace = true
 hf-hub.workspace = true
 tokenizers.workspace = true
+fastembed = { version = "5.13.0", optional = true, default-features = false, features = ["ort-download-binaries-native-tls", "hf-hub-native-tls"] }
 lru = "0.13"
 anyhow.workspace = true
 thiserror.workspace = true
@@ -34,10 +35,15 @@ scraper = "0.25.0"
 url = "2.5.8"
 strsim = "0.11.1"
 sha2.workspace = true
+futures = "0.3"
+lancedb = "0.26"
+arrow-array = "57"
+arrow-schema = "57"
 
 [features]
 default = []
 rust-embed = []
 python-embed = []  # Native BiomedBERT via Candle is default
+fastembed_backend = ["dep:fastembed"]
 cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]

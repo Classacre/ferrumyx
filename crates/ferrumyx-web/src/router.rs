@@ -12,6 +12,18 @@ use crate::handlers::{
         api_federation_merge_decide,
         api_federation_merge_queue,
         api_federation_merge_submit,
+        api_federation_sync_artifact,
+        api_federation_sync_index,
+        api_federation_sync_plan,
+        api_federation_sync_pull,
+        api_federation_sync_push,
+        api_federation_sync_snapshot,
+        api_federation_hf_pull,
+        api_federation_hf_publish,
+        api_federation_hf_status,
+        api_federation_trust_list,
+        api_federation_trust_revoke,
+        api_federation_trust_upsert,
         api_federation_manifest_draft, api_federation_manifest_validate,
         api_federation_package_export, api_federation_package_sign,
         api_federation_package_validate, api_federation_schema,
@@ -120,6 +132,30 @@ pub fn build_router(state: AppState) -> Router {
             "/api/federation/canonical/lineage",
             get(api_federation_canonical_lineage),
         )
+        .route("/api/federation/trust/list", get(api_federation_trust_list))
+        .route(
+            "/api/federation/trust/upsert",
+            post(api_federation_trust_upsert),
+        )
+        .route(
+            "/api/federation/trust/revoke",
+            post(api_federation_trust_revoke),
+        )
+        .route("/api/federation/sync/index", get(api_federation_sync_index))
+        .route(
+            "/api/federation/sync/snapshot",
+            get(api_federation_sync_snapshot),
+        )
+        .route(
+            "/api/federation/sync/artifact",
+            get(api_federation_sync_artifact),
+        )
+        .route("/api/federation/sync/plan", post(api_federation_sync_plan))
+        .route("/api/federation/sync/pull", post(api_federation_sync_pull))
+        .route("/api/federation/sync/push", post(api_federation_sync_push))
+        .route("/api/federation/hf/status", get(api_federation_hf_status))
+        .route("/api/federation/hf/publish", post(api_federation_hf_publish))
+        .route("/api/federation/hf/pull", post(api_federation_hf_pull))
         .route("/api/chat", post(chat_submit))
         .route("/api/chat/history", get(chat_history))
         .route("/api/chat/threads", get(chat_threads))

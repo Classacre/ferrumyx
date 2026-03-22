@@ -1,6 +1,7 @@
 use ferrumyx_ingestion::pipeline::{
     load_recent_perf_snapshots, run_ingestion, IngestionJob, IngestionSourceSpec,
 };
+use ferrumyx_ingestion::embedding::{EmbeddingBackend, EmbeddingConfig};
 use ferrumyx_ingestion::repository::IngestionRepository;
 use ferrumyx_kg::scoring::compute_target_scores_for_gene_names;
 use ferrumyx_molecules::pipeline::MoleculesPipeline;
@@ -28,6 +29,20 @@ fn pct_delta(new_ms: u64, baseline_ms: u64) -> f64 {
     ((new_ms as f64 - baseline_ms as f64) / baseline_ms as f64) * 100.0
 }
 
+fn env_nonempty(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn env_bool(key: &str, default: bool) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(default)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -42,9 +57,10 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
     job.enable_scihub_fallback = enable_scihub;
-    job.gene = "BRCA1".to_string();
-    job.mutation = None; // Important: Clear the default G12D mutation restriction
-    job.cancer_type = "ovarian cancer".to_string();
+    job.gene = env_nonempty("FERRUMYX_BENCH_GENE").unwrap_or_else(|| "BRCA1".to_string());
+    job.mutation = env_nonempty("FERRUMYX_BENCH_MUTATION");
+    job.cancer_type =
+        env_nonempty("FERRUMYX_BENCH_CANCER_TYPE").unwrap_or_else(|| "ovarian cancer".to_string());
     job.max_results = std::env::var("FERRUMYX_BENCH_MAX_RESULTS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -68,6 +84,45 @@ async fn main() -> anyhow::Result<()> {
     job.full_text_enabled = std::env::var("FERRUMYX_BENCH_FULL_TEXT")
         .ok()
         .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    if env_bool("FERRUMYX_BENCH_ENABLE_EMBEDDINGS", false) {
+        let backend = env_nonempty("FERRUMYX_BENCH_EMBED_BACKEND")
+            .unwrap_or_else(|| "rust_native".to_string())
+            .to_ascii_lowercase();
+        let model = env_nonempty("FERRUMYX_BENCH_EMBED_MODEL").unwrap_or_else(|| {
+            "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string()
+        });
+        let dim = std::env::var("FERRUMYX_BENCH_EMBED_DIM")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(768)
+            .clamp(64, 4096);
+        let batch_size = std::env::var("FERRUMYX_BENCH_EMBED_BATCH_SIZE")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(16)
+            .clamp(1, 256);
+        let base_url = env_nonempty("FERRUMYX_BENCH_EMBED_BASE_URL");
+        let api_key = env_nonempty("FERRUMYX_BENCH_EMBED_API_KEY");
+        let mapped_backend = match backend.as_str() {
+            "openai" => EmbeddingBackend::OpenAi,
+            "gemini" => EmbeddingBackend::Gemini,
+            "openai_compatible" => EmbeddingBackend::OpenAiCompatible,
+            "ollama" => EmbeddingBackend::Ollama,
+            "biomedbert" => EmbeddingBackend::BiomedBert,
+            "fastembed" => EmbeddingBackend::FastEmbed,
+            _ => EmbeddingBackend::RustNative,
+        };
+        job.embedding_cfg = Some(EmbeddingConfig {
+            backend: mapped_backend,
+            api_key,
+            model,
+            dim,
+            batch_size,
+            base_url,
+        });
+    } else {
+        job.embedding_cfg = None;
+    }
     let benchmark_gene = job.gene.clone();
 
     let repo = Arc::new(IngestionRepository::new(db.clone()));

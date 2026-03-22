@@ -57,6 +57,8 @@ pub use federation::{
     MergeDecisionResult, MergeQueueEntry, MergeQueueStatus, MergeQueueStore, MergeSubmitRequest,
     MergeSubmitResult, PackageExportRequest, PackageExportResult, PackageSignRequest,
     PackageSignResult, PackageValidationReport, PackageValidationRequest, SignatureValidationResult,
+    list_trusted_signing_keys, upsert_trusted_signing_key, revoke_trusted_signing_key,
+    TrustKeyRecord, TrustKeyRevokeRequest, TrustKeyUpsertRequest,
 };
 pub use kg_conflicts::KgConflictRepository;
 pub use kg_facts::KgFactRepository;

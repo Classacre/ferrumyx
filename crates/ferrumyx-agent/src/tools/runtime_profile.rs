@@ -78,7 +78,8 @@ impl RuntimeProfile {
         } else {
             16
         };
-        current.max(1).min(target)
+        let floor = (target / 2).max(8);
+        current.max(1).max(floor).min(target)
     }
 }
 

@@ -149,8 +149,18 @@ async fn load_ranked_targets(
     // Avoid heavy KG fan-out on this hot path; keep ranker page responsive and crash-safe.
     let fact_count_by_gene: HashMap<uuid::Uuid, u32> = HashMap::new();
 
-    let mut name_cache: HashMap<uuid::Uuid, String> = HashMap::new();
-    let mut out = Vec::new();
+    let entity_ids: Vec<uuid::Uuid> = rows
+        .iter()
+        .flat_map(|score| {
+            std::iter::once(score.gene_id)
+                .chain((score.cancer_id != uuid::Uuid::nil()).then_some(score.cancer_id))
+        })
+        .collect();
+    let name_cache = entity_repo
+        .find_names_by_ids(&entity_ids)
+        .await
+        .unwrap_or_default();
+    let mut out = Vec::with_capacity(rows.len());
     for s in rows {
         let raw_json: serde_json::Value =
             serde_json::from_str(&s.components_raw).unwrap_or_default();
@@ -166,22 +176,10 @@ async fn load_ranked_targets(
             .map(|v| v.to_string());
 
         if gene.is_none() {
-            if let Some(cached) = name_cache.get(&s.gene_id) {
-                gene = Some(cached.clone());
-            } else if let Ok(Some(ent)) = entity_repo.find_by_id(s.gene_id).await {
-                name_cache.insert(s.gene_id, ent.name.clone());
-                gene = Some(ent.name);
-            }
+            gene = name_cache.get(&s.gene_id).cloned();
         }
         if cancer_type.is_none() {
-            if let Some(cached) = name_cache.get(&s.cancer_id) {
-                cancer_type = Some(cached.clone());
-            } else if s.cancer_id != uuid::Uuid::nil() {
-                if let Ok(Some(ent)) = entity_repo.find_by_id(s.cancer_id).await {
-                    name_cache.insert(s.cancer_id, ent.name.clone());
-                    cancer_type = Some(ent.name);
-                }
-            }
+            cancer_type = name_cache.get(&s.cancer_id).cloned();
         }
 
         let gene = gene.unwrap_or_else(|| s.gene_id.to_string());

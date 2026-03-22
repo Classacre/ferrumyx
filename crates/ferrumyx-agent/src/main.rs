@@ -815,6 +815,9 @@ async fn async_main() -> anyhow::Result<()> {
     runtime_tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(
         db.clone(),
     )));
+    runtime_tool_registry.register_sync(Arc::new(
+        tools::embedding_backfill_tool::BackfillEmbeddingsTool::new(db.clone()),
+    ));
     runtime_tool_registry.register_sync(Arc::new(tools::query_tool::TargetQueryTool::new(
         db.clone(),
     )));

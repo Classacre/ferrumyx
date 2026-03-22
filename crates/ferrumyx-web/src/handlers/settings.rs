@@ -146,6 +146,22 @@ async function loadSettings() {
   byId('cosmic_base_url').value = data.cosmic_base_url;
   byId('cosmic_timeout_secs').value = data.cosmic_timeout_secs;
   byId('cosmic_mutation_data_path').value = data.cosmic_mutation_data_path;
+  byId('federation_default_remote_base_url').value = data.federation_default_remote_base_url;
+  byId('federation_node_public_base_url').value = data.federation_node_public_base_url;
+  byId('federation_sync_chunk_bytes').value = data.federation_sync_chunk_bytes;
+  byId('federation_sync_timeout_secs').value = data.federation_sync_timeout_secs;
+  byId('federation_pull_auto_submit').checked = data.federation_pull_auto_submit;
+  byId('federation_auth_enabled').checked = data.federation_auth_enabled;
+  byId('federation_replay_required').checked = data.federation_replay_required;
+  byId('federation_replay_window_secs').value = data.federation_replay_window_secs;
+  byId('federation_require_signature_for_queue').checked = data.federation_require_signature_for_queue;
+  byId('federation_audit_log_path').value = data.federation_audit_log_path;
+  byId('federation_hf_enabled').checked = data.federation_hf_enabled;
+  byId('federation_hf_repo_id').value = data.federation_hf_repo_id;
+  byId('federation_hf_snapshots_prefix').value = data.federation_hf_snapshots_prefix;
+  byId('federation_hf_revision').value = data.federation_hf_revision;
+  byId('federation_hf_timeout_secs').value = data.federation_hf_timeout_secs;
+  byId('federation_hf_pull_root').value = data.federation_hf_pull_root;
 
   setProviderState('openai_state', data.has_openai_key);
   setProviderState('anthropic_state', data.has_anthropic_key);
@@ -156,6 +172,10 @@ async function loadSettings() {
   setProviderState('cbio_state', data.has_cbioportal_key);
   setProviderState('cosmic_state', data.has_cosmic_key);
   setProviderState('embedding_state', data.has_embedding_key);
+  setProviderState('federation_remote_token_state', data.has_federation_remote_api_token);
+  setProviderState('federation_read_token_state', data.has_federation_read_token);
+  setProviderState('federation_write_token_state', data.has_federation_write_token);
+  setProviderState('federation_hf_token_state', data.has_federation_hf_token);
 
   byId('sync_backend').textContent = data.runtime_sync.llm_backend;
   byId('sync_base_url').textContent = data.runtime_sync.llm_base_url || 'n/a';
@@ -280,6 +300,22 @@ async function saveSettings() {
     cosmic_base_url: byId('cosmic_base_url').value,
     cosmic_timeout_secs: Number(byId('cosmic_timeout_secs').value || 10),
     cosmic_mutation_data_path: byId('cosmic_mutation_data_path').value,
+    federation_default_remote_base_url: byId('federation_default_remote_base_url').value,
+    federation_node_public_base_url: byId('federation_node_public_base_url').value,
+    federation_sync_chunk_bytes: Number(byId('federation_sync_chunk_bytes').value || 1048576),
+    federation_sync_timeout_secs: Number(byId('federation_sync_timeout_secs').value || 60),
+    federation_pull_auto_submit: byId('federation_pull_auto_submit').checked,
+    federation_auth_enabled: byId('federation_auth_enabled').checked,
+    federation_replay_required: byId('federation_replay_required').checked,
+    federation_replay_window_secs: Number(byId('federation_replay_window_secs').value || 300),
+    federation_require_signature_for_queue: byId('federation_require_signature_for_queue').checked,
+    federation_audit_log_path: byId('federation_audit_log_path').value,
+    federation_hf_enabled: byId('federation_hf_enabled').checked,
+    federation_hf_repo_id: byId('federation_hf_repo_id').value,
+    federation_hf_snapshots_prefix: byId('federation_hf_snapshots_prefix').value,
+    federation_hf_revision: byId('federation_hf_revision').value,
+    federation_hf_timeout_secs: Number(byId('federation_hf_timeout_secs').value || 1800),
+    federation_hf_pull_root: byId('federation_hf_pull_root').value,
     openai_api_key: byId('openai_api_key').value || null,
     anthropic_api_key: byId('anthropic_api_key').value || null,
     gemini_api_key: byId('gemini_api_key').value || null,
@@ -288,6 +324,10 @@ async function saveSettings() {
     semanticscholar_api_key: byId('semanticscholar_api_key').value || null,
     cbioportal_api_token: byId('cbioportal_api_token').value || null,
     cosmic_api_key: byId('cosmic_api_key').value || null,
+    federation_remote_api_token: byId('federation_remote_api_token').value || null,
+    federation_read_token: byId('federation_read_token').value || null,
+    federation_write_token: byId('federation_write_token').value || null,
+    federation_hf_token: byId('federation_hf_token').value || null,
     embedding_api_key: byId('embedding_api_key').value || null,
   };
 
@@ -303,7 +343,7 @@ async function saveSettings() {
     btn.innerHTML = 'Saved';
     btn.style.backgroundColor = 'var(--success)';
 
-    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','cbioportal_api_token','cosmic_api_key','embedding_api_key']
+    ['openai_api_key','anthropic_api_key','gemini_api_key','compat_api_key','pubmed_api_key','semanticscholar_api_key','cbioportal_api_token','cosmic_api_key','federation_remote_api_token','federation_read_token','federation_write_token','federation_hf_token','embedding_api_key']
       .forEach((id) => { byId(id).value = ''; });
 
     await loadSettings();
@@ -374,6 +414,7 @@ __NAV__
       <button class="tab-btn" data-tab="tab-ingestion">Ingestion APIs</button>
       <button class="tab-btn" data-tab="tab-embeddings">Embeddings</button>
       <button class="tab-btn" data-tab="tab-runtime">Runtime</button>
+      <button class="tab-btn" data-tab="tab-federation">Federation</button>
       <button class="tab-btn" data-tab="tab-graph">Graph</button>
       <button class="tab-btn" data-tab="tab-benchmark">Benchmark</button>
     </nav>
@@ -984,6 +1025,112 @@ __NAV__
           </div>
         </div>
       </section>
+
+      <section id="tab-federation" class="tab-panel card p-4">
+        <h3 class="settings-section-title">Federation Sync Transport</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="federation_default_remote_base_url">Default Remote Base URL</label>
+            <input id="federation_default_remote_base_url" class="form-control" placeholder="https://federation-node.example.com" />
+            <div class="help-text">Used as the default remote for sync planning and pull/push actions.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_node_public_base_url">This Node Public Base URL</label>
+            <input id="federation_node_public_base_url" class="form-control" placeholder="https://this-node.example.com" />
+            <div class="help-text">Publicly reachable URL other nodes use to pull snapshots from this node.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_sync_chunk_bytes">Sync Chunk Size (bytes)</label>
+            <input id="federation_sync_chunk_bytes" type="number" min="4096" max="16777216" class="form-control" />
+            <div class="help-text">Per-request artifact chunk size for resumable transfer.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_sync_timeout_secs">Sync Request Timeout (seconds)</label>
+            <input id="federation_sync_timeout_secs" type="number" min="5" max="600" class="form-control" />
+            <div class="help-text">HTTP timeout for federation sync endpoints.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_pull_auto_submit">Auto-Submit Pulled Packages to Merge Queue</label>
+            <input id="federation_pull_auto_submit" type="checkbox" />
+            <div class="help-text">If disabled, pull only stages and validates the package without queue submission.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_remote_api_token">Remote Federation API Token <span id="federation_remote_token_state" class="state-pill">Not Set</span></label>
+            <input id="federation_remote_api_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Optional bearer token used when this node calls remote federation sync APIs.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_auth_enabled">Require Auth for Federation Endpoints</label>
+            <input id="federation_auth_enabled" type="checkbox" />
+            <div class="help-text">When enabled, federation API endpoints require bearer tokens.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_read_token">Federation Read Token <span id="federation_read_token_state" class="state-pill">Not Set</span></label>
+            <input id="federation_read_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Token for read-scope federation routes (schema, index, lineage, trust list).</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_write_token">Federation Write Token <span id="federation_write_token_state" class="state-pill">Not Set</span></label>
+            <input id="federation_write_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Token for write-scope federation routes (merge queue, sync push/pull, trust changes).</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_replay_required">Replay Guard for Write Requests</label>
+            <input id="federation_replay_required" type="checkbox" />
+            <div class="help-text">Requires <code>x-ferrumyx-nonce</code> and <code>x-ferrumyx-ts</code> for write requests and rejects nonce reuse.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_replay_window_secs">Replay Window (seconds)</label>
+            <input id="federation_replay_window_secs" type="number" min="30" max="3600" class="form-control" />
+            <div class="help-text">Allowed clock skew for replay validation.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_require_signature_for_queue">Require Trusted Signature for Merge Queue Admission</label>
+            <input id="federation_require_signature_for_queue" type="checkbox" />
+            <div class="help-text">Rejects unsigned or untrusted packages before merge approval workflow.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_audit_log_path">Federation Audit Log Path</label>
+            <input id="federation_audit_log_path" class="form-control" placeholder="./output/federation/audit.log" />
+            <div class="help-text">JSONL log for federation actions, denials, and outcomes.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_enabled">Enable Hugging Face Federation Sync</label>
+            <input id="federation_hf_enabled" type="checkbox" />
+            <div class="help-text">Enables publishing snapshots to Hugging Face dataset repos and pulling them back into local merge flow.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_repo_id">Hugging Face Dataset Repo ID</label>
+            <input id="federation_hf_repo_id" class="form-control" placeholder="Classacre/ferrumyx-canonical-kb" />
+            <div class="help-text">Default canonical dataset repository used by federation HF endpoints.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_snapshots_prefix">HF Snapshot Prefix</label>
+            <input id="federation_hf_snapshots_prefix" class="form-control" placeholder="snapshots" />
+            <div class="help-text">Repository folder prefix where immutable snapshots are stored (e.g., <code>snapshots/&lt;snapshot_id&gt;</code>).</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_revision">HF Revision (branch/tag, optional)</label>
+            <input id="federation_hf_revision" class="form-control" placeholder="main" />
+            <div class="help-text">Optional default revision used for publish/pull operations.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_timeout_secs">HF CLI Timeout (seconds)</label>
+            <input id="federation_hf_timeout_secs" type="number" min="30" max="7200" class="form-control" />
+            <div class="help-text">Timeout for individual <code>hf</code> CLI operations invoked by the web gateway.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_pull_root">HF Pull Destination Root</label>
+            <input id="federation_hf_pull_root" class="form-control" placeholder="./output/federation/hf_imports" />
+            <div class="help-text">Local root directory for HF snapshot pulls before validation and optional queue submission.</div>
+          </div>
+          <div class="form-group">
+            <label for="federation_hf_token">Hugging Face Write Token (optional) <span id="federation_hf_token_state" class="state-pill">Not Set</span></label>
+            <input id="federation_hf_token" type="password" class="form-control" placeholder="Leave blank to keep existing" />
+            <div class="help-text">Optional token used by server-side HF publish/pull calls (falls back to local HF auth session when empty).</div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </main>
@@ -1188,6 +1335,38 @@ pub struct SettingsView {
     cosmic_timeout_secs: u64,
     #[serde(default)]
     cosmic_mutation_data_path: String,
+    #[serde(default)]
+    federation_default_remote_base_url: String,
+    #[serde(default)]
+    federation_node_public_base_url: String,
+    #[serde(default = "default_federation_sync_chunk_bytes")]
+    federation_sync_chunk_bytes: u64,
+    #[serde(default = "default_federation_sync_timeout_secs")]
+    federation_sync_timeout_secs: u64,
+    #[serde(default = "default_true")]
+    federation_pull_auto_submit: bool,
+    #[serde(default = "default_false")]
+    federation_auth_enabled: bool,
+    #[serde(default = "default_true")]
+    federation_replay_required: bool,
+    #[serde(default = "default_federation_replay_window_secs")]
+    federation_replay_window_secs: u64,
+    #[serde(default = "default_true")]
+    federation_require_signature_for_queue: bool,
+    #[serde(default = "default_federation_audit_log_path")]
+    federation_audit_log_path: String,
+    #[serde(default = "default_false")]
+    federation_hf_enabled: bool,
+    #[serde(default)]
+    federation_hf_repo_id: String,
+    #[serde(default = "default_federation_hf_snapshots_prefix")]
+    federation_hf_snapshots_prefix: String,
+    #[serde(default)]
+    federation_hf_revision: String,
+    #[serde(default = "default_federation_hf_timeout_secs")]
+    federation_hf_timeout_secs: u64,
+    #[serde(default = "default_federation_hf_pull_root")]
+    federation_hf_pull_root: String,
     has_openai_key: bool,
     has_anthropic_key: bool,
     has_gemini_key: bool,
@@ -1196,6 +1375,10 @@ pub struct SettingsView {
     has_semanticscholar_key: bool,
     has_cbioportal_key: bool,
     has_cosmic_key: bool,
+    has_federation_remote_api_token: bool,
+    has_federation_read_token: bool,
+    has_federation_write_token: bool,
+    has_federation_hf_token: bool,
     has_embedding_key: bool,
     runtime_sync: RuntimeSyncView,
 }
@@ -1397,6 +1580,38 @@ pub struct SettingsSaveRequest {
     cosmic_timeout_secs: u64,
     #[serde(default)]
     cosmic_mutation_data_path: String,
+    #[serde(default)]
+    federation_default_remote_base_url: String,
+    #[serde(default)]
+    federation_node_public_base_url: String,
+    #[serde(default = "default_federation_sync_chunk_bytes")]
+    federation_sync_chunk_bytes: u64,
+    #[serde(default = "default_federation_sync_timeout_secs")]
+    federation_sync_timeout_secs: u64,
+    #[serde(default = "default_true")]
+    federation_pull_auto_submit: bool,
+    #[serde(default = "default_false")]
+    federation_auth_enabled: bool,
+    #[serde(default = "default_true")]
+    federation_replay_required: bool,
+    #[serde(default = "default_federation_replay_window_secs")]
+    federation_replay_window_secs: u64,
+    #[serde(default = "default_true")]
+    federation_require_signature_for_queue: bool,
+    #[serde(default = "default_federation_audit_log_path")]
+    federation_audit_log_path: String,
+    #[serde(default = "default_false")]
+    federation_hf_enabled: bool,
+    #[serde(default)]
+    federation_hf_repo_id: String,
+    #[serde(default = "default_federation_hf_snapshots_prefix")]
+    federation_hf_snapshots_prefix: String,
+    #[serde(default)]
+    federation_hf_revision: String,
+    #[serde(default = "default_federation_hf_timeout_secs")]
+    federation_hf_timeout_secs: u64,
+    #[serde(default = "default_federation_hf_pull_root")]
+    federation_hf_pull_root: String,
     openai_api_key: Option<String>,
     anthropic_api_key: Option<String>,
     gemini_api_key: Option<String>,
@@ -1405,11 +1620,18 @@ pub struct SettingsSaveRequest {
     semanticscholar_api_key: Option<String>,
     cbioportal_api_token: Option<String>,
     cosmic_api_key: Option<String>,
+    federation_remote_api_token: Option<String>,
+    federation_read_token: Option<String>,
+    federation_write_token: Option<String>,
+    federation_hf_token: Option<String>,
     embedding_api_key: Option<String>,
 }
 
 fn default_true() -> bool {
     true
+}
+fn default_false() -> bool {
+    false
 }
 fn default_full_text_total_timeout_secs() -> u64 {
     28
@@ -1476,6 +1698,27 @@ fn default_cosmic_base_url() -> String {
 }
 fn default_cosmic_timeout_secs() -> u64 {
     10
+}
+fn default_federation_sync_chunk_bytes() -> u64 {
+    1_048_576
+}
+fn default_federation_sync_timeout_secs() -> u64 {
+    60
+}
+fn default_federation_replay_window_secs() -> u64 {
+    300
+}
+fn default_federation_audit_log_path() -> String {
+    "./output/federation/audit.log".to_string()
+}
+fn default_federation_hf_snapshots_prefix() -> String {
+    "snapshots".to_string()
+}
+fn default_federation_hf_timeout_secs() -> u64 {
+    1_800
+}
+fn default_federation_hf_pull_root() -> String {
+    "./output/federation/hf_imports".to_string()
 }
 fn default_phase4_structural_prewarm_max_genes() -> u64 {
     8
@@ -2549,6 +2792,128 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
                 std::env::var("FERRUMYX_COSMIC_MUTATION_DATA_PATH").unwrap_or_default()
             }
         },
+        federation_default_remote_base_url: {
+            let toml_value = str_at(&root, &["federation", "sync", "default_remote_base_url"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_DEFAULT_REMOTE_BASE_URL").unwrap_or_default()
+            }
+        },
+        federation_node_public_base_url: {
+            let toml_value = str_at(&root, &["federation", "sync", "node_public_base_url"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_NODE_PUBLIC_BASE_URL").unwrap_or_default()
+            }
+        },
+        federation_sync_chunk_bytes: int_at(
+            &root,
+            &["federation", "sync", "chunk_bytes"],
+            default_federation_sync_chunk_bytes(),
+        )
+        .clamp(4096, 16 * 1024 * 1024),
+        federation_sync_timeout_secs: int_at(
+            &root,
+            &["federation", "sync", "timeout_secs"],
+            default_federation_sync_timeout_secs(),
+        )
+        .clamp(5, 600),
+        federation_pull_auto_submit: bool_at(
+            &root,
+            &["federation", "sync", "pull_auto_submit"],
+            true,
+        ),
+        federation_auth_enabled: bool_at(
+            &root,
+            &["federation", "security", "auth_enabled"],
+            std::env::var("FERRUMYX_FED_AUTH_ENABLED")
+                .ok()
+                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+        ),
+        federation_replay_required: bool_at(
+            &root,
+            &["federation", "security", "replay_required"],
+            true,
+        ),
+        federation_replay_window_secs: int_at(
+            &root,
+            &["federation", "security", "replay_window_secs"],
+            default_federation_replay_window_secs(),
+        )
+        .clamp(30, 3_600),
+        federation_require_signature_for_queue: bool_at(
+            &root,
+            &["federation", "security", "require_signature_for_queue"],
+            true,
+        ),
+        federation_audit_log_path: {
+            let toml_value = str_at(&root, &["federation", "security", "audit_log_path"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_AUDIT_LOG_PATH")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_federation_audit_log_path)
+            }
+        },
+        federation_hf_enabled: bool_at(
+            &root,
+            &["federation", "huggingface", "enabled"],
+            std::env::var("FERRUMYX_FED_HF_ENABLED")
+                .ok()
+                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+        ),
+        federation_hf_repo_id: {
+            let toml_value = str_at(&root, &["federation", "huggingface", "repo_id"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_HF_REPO_ID").unwrap_or_default()
+            }
+        },
+        federation_hf_snapshots_prefix: {
+            let toml_value = str_at(
+                &root,
+                &["federation", "huggingface", "snapshots_prefix"],
+                "",
+            );
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_HF_SNAPSHOTS_PREFIX")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_federation_hf_snapshots_prefix)
+            }
+        },
+        federation_hf_revision: {
+            let toml_value = str_at(&root, &["federation", "huggingface", "revision"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_HF_REVISION").unwrap_or_default()
+            }
+        },
+        federation_hf_timeout_secs: int_at(
+            &root,
+            &["federation", "huggingface", "timeout_secs"],
+            default_federation_hf_timeout_secs(),
+        )
+        .clamp(30, 7_200),
+        federation_hf_pull_root: {
+            let toml_value = str_at(&root, &["federation", "huggingface", "pull_root"], "");
+            if !toml_value.trim().is_empty() {
+                toml_value
+            } else {
+                std::env::var("FERRUMYX_FED_HF_PULL_ROOT")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(default_federation_hf_pull_root)
+            }
+        },
         has_openai_key: has_nonempty(&root, &["llm", "openai", "api_key"])
             || std::env::var("FERRUMYX_OPENAI_API_KEY").is_ok(),
         has_anthropic_key: has_nonempty(&root, &["llm", "anthropic", "api_key"])
@@ -2576,6 +2941,26 @@ fn load_settings_view() -> anyhow::Result<SettingsView> {
         has_cosmic_key: has_nonempty(&root, &["ranker", "providers", "cosmic", "api_key"])
             || has_nonempty(&root, &["ranker", "providers", "cosmic", "api_key_secret"])
             || std::env::var("FERRUMYX_COSMIC_API_KEY").is_ok_and(|v| !v.trim().is_empty()),
+        has_federation_remote_api_token: has_nonempty(
+            &root,
+            &["federation", "sync", "remote_api_token"],
+        ) || std::env::var("FERRUMYX_FED_REMOTE_API_TOKEN")
+            .is_ok_and(|v| !v.trim().is_empty()),
+        has_federation_read_token: has_nonempty(
+            &root,
+            &["federation", "security", "read_token"],
+        ) || std::env::var("FERRUMYX_FED_READ_TOKEN")
+            .is_ok_and(|v| !v.trim().is_empty()),
+        has_federation_write_token: has_nonempty(
+            &root,
+            &["federation", "security", "write_token"],
+        ) || std::env::var("FERRUMYX_FED_WRITE_TOKEN")
+            .is_ok_and(|v| !v.trim().is_empty()),
+        has_federation_hf_token: has_nonempty(
+            &root,
+            &["federation", "huggingface", "token"],
+        ) || std::env::var("FERRUMYX_FED_HF_TOKEN")
+            .is_ok_and(|v| !v.trim().is_empty()),
         has_embedding_key: has_nonempty(&root, &["embedding", "api_key"]),
         runtime_sync: RuntimeSyncView {
             llm_backend: std::env::var("LLM_BACKEND").unwrap_or_else(|_| "unset".to_string()),
@@ -3046,6 +3431,117 @@ fn save_settings(payload: SettingsSaveRequest) -> anyhow::Result<()> {
     maybe_set_secret(cosmic, "api_key", &payload.cosmic_api_key);
     maybe_set_secret(cosmic, "api_key_secret", &payload.cosmic_api_key);
 
+    let federation = table_mut(&mut root, "federation");
+    let federation_sync = nested_table_mut(federation, "sync");
+    set_str(
+        federation_sync,
+        "default_remote_base_url",
+        payload
+            .federation_default_remote_base_url
+            .trim()
+            .to_string(),
+    );
+    set_str(
+        federation_sync,
+        "node_public_base_url",
+        payload.federation_node_public_base_url.trim().to_string(),
+    );
+    federation_sync.insert(
+        "chunk_bytes".to_string(),
+        toml::Value::Integer(payload.federation_sync_chunk_bytes.clamp(4096, 16 * 1024 * 1024) as i64),
+    );
+    federation_sync.insert(
+        "timeout_secs".to_string(),
+        toml::Value::Integer(payload.federation_sync_timeout_secs.clamp(5, 600) as i64),
+    );
+    federation_sync.insert(
+        "pull_auto_submit".to_string(),
+        toml::Value::Boolean(payload.federation_pull_auto_submit),
+    );
+    maybe_set_secret(
+        federation_sync,
+        "remote_api_token",
+        &payload.federation_remote_api_token,
+    );
+    let federation_security = nested_table_mut(federation, "security");
+    federation_security.insert(
+        "auth_enabled".to_string(),
+        toml::Value::Boolean(payload.federation_auth_enabled),
+    );
+    federation_security.insert(
+        "replay_required".to_string(),
+        toml::Value::Boolean(payload.federation_replay_required),
+    );
+    federation_security.insert(
+        "replay_window_secs".to_string(),
+        toml::Value::Integer(payload.federation_replay_window_secs.clamp(30, 3_600) as i64),
+    );
+    federation_security.insert(
+        "require_signature_for_queue".to_string(),
+        toml::Value::Boolean(payload.federation_require_signature_for_queue),
+    );
+    set_str(
+        federation_security,
+        "audit_log_path",
+        if payload.federation_audit_log_path.trim().is_empty() {
+            default_federation_audit_log_path()
+        } else {
+            payload.federation_audit_log_path.trim().to_string()
+        },
+    );
+    maybe_set_secret(
+        federation_security,
+        "read_token",
+        &payload.federation_read_token,
+    );
+    maybe_set_secret(
+        federation_security,
+        "write_token",
+        &payload.federation_write_token,
+    );
+    let federation_huggingface = nested_table_mut(federation, "huggingface");
+    federation_huggingface.insert(
+        "enabled".to_string(),
+        toml::Value::Boolean(payload.federation_hf_enabled),
+    );
+    set_str(
+        federation_huggingface,
+        "repo_id",
+        payload.federation_hf_repo_id.trim().to_string(),
+    );
+    set_str(
+        federation_huggingface,
+        "snapshots_prefix",
+        if payload.federation_hf_snapshots_prefix.trim().is_empty() {
+            default_federation_hf_snapshots_prefix()
+        } else {
+            payload.federation_hf_snapshots_prefix.trim().to_string()
+        },
+    );
+    set_str(
+        federation_huggingface,
+        "revision",
+        payload.federation_hf_revision.trim().to_string(),
+    );
+    federation_huggingface.insert(
+        "timeout_secs".to_string(),
+        toml::Value::Integer(payload.federation_hf_timeout_secs.clamp(30, 7_200) as i64),
+    );
+    set_str(
+        federation_huggingface,
+        "pull_root",
+        if payload.federation_hf_pull_root.trim().is_empty() {
+            default_federation_hf_pull_root()
+        } else {
+            payload.federation_hf_pull_root.trim().to_string()
+        },
+    );
+    maybe_set_secret(
+        federation_huggingface,
+        "token",
+        &payload.federation_hf_token,
+    );
+
     let benchmark = table_mut(&mut root, "benchmark");
     benchmark.insert(
         "offline_strict".to_string(),
@@ -3198,6 +3694,123 @@ fn apply_runtime_env_from_saved_toml(root: &toml::Value) {
         "LLM_COMPAT_CACHED_CHAT",
         if compat_cached_chat { "1" } else { "0" },
     );
+
+    let fed_default_remote = str_at(root, &["federation", "sync", "default_remote_base_url"], "");
+    std::env::set_var("FERRUMYX_FED_DEFAULT_REMOTE_BASE_URL", fed_default_remote);
+    let fed_node_public = str_at(root, &["federation", "sync", "node_public_base_url"], "");
+    std::env::set_var("FERRUMYX_FED_NODE_PUBLIC_BASE_URL", fed_node_public);
+    let fed_chunk_bytes = int_at(
+        root,
+        &["federation", "sync", "chunk_bytes"],
+        default_federation_sync_chunk_bytes(),
+    )
+    .clamp(4096, 16 * 1024 * 1024);
+    std::env::set_var("FERRUMYX_FED_SYNC_CHUNK_BYTES", fed_chunk_bytes.to_string());
+    let fed_timeout_secs = int_at(
+        root,
+        &["federation", "sync", "timeout_secs"],
+        default_federation_sync_timeout_secs(),
+    )
+    .clamp(5, 600);
+    std::env::set_var("FERRUMYX_FED_SYNC_TIMEOUT_SECS", fed_timeout_secs.to_string());
+    let fed_pull_auto_submit = bool_at(root, &["federation", "sync", "pull_auto_submit"], true);
+    std::env::set_var(
+        "FERRUMYX_FED_PULL_AUTO_SUBMIT",
+        if fed_pull_auto_submit { "1" } else { "0" },
+    );
+    let fed_remote_token = str_at(root, &["federation", "sync", "remote_api_token"], "");
+    if !fed_remote_token.trim().is_empty() {
+        std::env::set_var("FERRUMYX_FED_REMOTE_API_TOKEN", fed_remote_token);
+    }
+    let fed_auth_enabled = bool_at(root, &["federation", "security", "auth_enabled"], false);
+    std::env::set_var(
+        "FERRUMYX_FED_AUTH_ENABLED",
+        if fed_auth_enabled { "1" } else { "0" },
+    );
+    let fed_replay_required = bool_at(root, &["federation", "security", "replay_required"], true);
+    std::env::set_var(
+        "FERRUMYX_FED_REPLAY_REQUIRED",
+        if fed_replay_required { "1" } else { "0" },
+    );
+    let fed_replay_window_secs = int_at(
+        root,
+        &["federation", "security", "replay_window_secs"],
+        default_federation_replay_window_secs(),
+    )
+    .clamp(30, 3_600);
+    std::env::set_var(
+        "FERRUMYX_FED_REPLAY_WINDOW_SECS",
+        fed_replay_window_secs.to_string(),
+    );
+    let fed_require_signature = bool_at(
+        root,
+        &["federation", "security", "require_signature_for_queue"],
+        true,
+    );
+    std::env::set_var(
+        "FERRUMYX_FED_REQUIRE_SIGNATURE_FOR_QUEUE",
+        if fed_require_signature { "1" } else { "0" },
+    );
+    let fed_audit_log_path = str_at(
+        root,
+        &["federation", "security", "audit_log_path"],
+        &default_federation_audit_log_path(),
+    );
+    std::env::set_var("FERRUMYX_FED_AUDIT_LOG_PATH", fed_audit_log_path);
+    let fed_read_token = str_at(root, &["federation", "security", "read_token"], "");
+    if fed_read_token.trim().is_empty() {
+        std::env::remove_var("FERRUMYX_FED_READ_TOKEN");
+    } else {
+        std::env::set_var("FERRUMYX_FED_READ_TOKEN", fed_read_token);
+    }
+    let fed_write_token = str_at(root, &["federation", "security", "write_token"], "");
+    if fed_write_token.trim().is_empty() {
+        std::env::remove_var("FERRUMYX_FED_WRITE_TOKEN");
+    } else {
+        std::env::set_var("FERRUMYX_FED_WRITE_TOKEN", fed_write_token);
+    }
+    let fed_hf_enabled = bool_at(root, &["federation", "huggingface", "enabled"], false);
+    std::env::set_var(
+        "FERRUMYX_FED_HF_ENABLED",
+        if fed_hf_enabled { "1" } else { "0" },
+    );
+    let fed_hf_repo_id = str_at(root, &["federation", "huggingface", "repo_id"], "");
+    if fed_hf_repo_id.trim().is_empty() {
+        std::env::remove_var("FERRUMYX_FED_HF_REPO_ID");
+    } else {
+        std::env::set_var("FERRUMYX_FED_HF_REPO_ID", fed_hf_repo_id);
+    }
+    let fed_hf_snapshots_prefix = str_at(
+        root,
+        &["federation", "huggingface", "snapshots_prefix"],
+        &default_federation_hf_snapshots_prefix(),
+    );
+    std::env::set_var("FERRUMYX_FED_HF_SNAPSHOTS_PREFIX", fed_hf_snapshots_prefix);
+    let fed_hf_revision = str_at(root, &["federation", "huggingface", "revision"], "");
+    if fed_hf_revision.trim().is_empty() {
+        std::env::remove_var("FERRUMYX_FED_HF_REVISION");
+    } else {
+        std::env::set_var("FERRUMYX_FED_HF_REVISION", fed_hf_revision);
+    }
+    let fed_hf_timeout_secs = int_at(
+        root,
+        &["federation", "huggingface", "timeout_secs"],
+        default_federation_hf_timeout_secs(),
+    )
+    .clamp(30, 7_200);
+    std::env::set_var("FERRUMYX_FED_HF_TIMEOUT_SECS", fed_hf_timeout_secs.to_string());
+    let fed_hf_pull_root = str_at(
+        root,
+        &["federation", "huggingface", "pull_root"],
+        &default_federation_hf_pull_root(),
+    );
+    std::env::set_var("FERRUMYX_FED_HF_PULL_ROOT", fed_hf_pull_root);
+    let fed_hf_token = str_at(root, &["federation", "huggingface", "token"], "");
+    if fed_hf_token.trim().is_empty() {
+        std::env::remove_var("FERRUMYX_FED_HF_TOKEN");
+    } else {
+        std::env::set_var("FERRUMYX_FED_HF_TOKEN", fed_hf_token);
+    }
 
     let graph_default_mode = str_at(root, &["graph", "default_mode"], &default_graph_mode());
     std::env::set_var(

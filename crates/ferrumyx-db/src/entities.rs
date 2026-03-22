@@ -3,11 +3,14 @@
 //! Provides CRUD operations for named entities (genes, diseases, drugs, etc.).
 
 use crate::database::Database;
+use crate::error::DbError;
 use crate::error::Result;
 use crate::schema::{Entity, EntityType};
 use crate::schema_arrow::{entity_to_record, record_to_entity};
+use arrow_array::StringArray;
 use futures::StreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Repository for entity operations.
@@ -189,12 +192,9 @@ impl EntityRepository {
             .execute()
             .await?;
 
-        let escaped = synonym.replace('\'', "''");
-
-        // Search in the synonyms column (array_contains for list columns)
         let mut stream = table
             .query()
-            .only_if(&format!("array_contains(synonyms, '{}')", escaped))
+            .only_if(&synonym_exact_filter(synonym))
             .execute()
             .await?;
 
@@ -207,6 +207,78 @@ impl EntityRepository {
         }
 
         Ok(entities)
+    }
+
+    /// Find entity names for a batch of IDs.
+    pub async fn find_names_by_ids(
+        &self,
+        ids: &[uuid::Uuid],
+    ) -> Result<HashMap<uuid::Uuid, String>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_ENTITIES)
+            .execute()
+            .await?;
+
+        let unique_ids: Vec<uuid::Uuid> = ids
+            .iter()
+            .copied()
+            .filter(|id| !id.is_nil())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        if unique_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut names_by_id = HashMap::with_capacity(unique_ids.len());
+        for chunk in unique_ids.chunks(512) {
+            let filter = format!(
+                "id IN ({})",
+                chunk
+                    .iter()
+                    .map(|id| format!("'{}'", id))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            let mut stream = table
+                .query()
+                .select(Select::columns(&["id", "name"]))
+                .only_if(&filter)
+                .execute()
+                .await?;
+
+            while let Some(batch) = stream.next().await {
+                let batch = batch?;
+                let ids = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| DbError::Arrow("entities.id column was not Utf8".to_string()))?;
+                let names = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| {
+                        DbError::Arrow("entities.name column was not Utf8".to_string())
+                    })?;
+
+                for row in 0..batch.num_rows() {
+                    if let Ok(id) = uuid::Uuid::parse_str(ids.value(row)) {
+                        names_by_id.insert(id, names.value(row).to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(names_by_id)
     }
 
     /// Update an entity.
@@ -308,17 +380,9 @@ impl EntityRepository {
             .execute()
             .await?;
 
-        let escaped = query.replace('\'', "''");
-
-        // Use LIKE for simple text search
-        let filter = format!(
-            "name LIKE '%{}%' OR array_contains(synonyms, '{}')",
-            escaped, escaped
-        );
-
         let mut stream = table
             .query()
-            .only_if(&filter)
+            .only_if(&synonym_search_filter(query))
             .limit(limit)
             .execute()
             .await?;
@@ -333,4 +397,24 @@ impl EntityRepository {
 
         Ok(entities)
     }
+}
+
+fn escape_sql_literal(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
+fn synonym_exact_filter(value: &str) -> String {
+    let escaped = escape_sql_literal(value);
+    let quoted_escaped = escape_sql_literal(&format!("\"{}\"", value));
+
+    format!("synonyms = '{escaped}' OR synonyms LIKE '%{quoted_escaped}%'")
+}
+
+fn synonym_search_filter(value: &str) -> String {
+    let escaped = escape_sql_literal(value);
+    let quoted_escaped = escape_sql_literal(&format!("\"{}\"", value));
+
+    format!(
+        "name LIKE '%{escaped}%' OR synonyms LIKE '%{escaped}%' OR synonyms LIKE '%{quoted_escaped}%'"
+    )
 }

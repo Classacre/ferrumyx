@@ -9,12 +9,19 @@
 use crate::dedup::{check_fuzzy_duplicate, hamming_distance, simhash, DedupResult};
 use crate::models::{Author, DocumentChunk, IngestionSource, PaperMetadata};
 use anyhow::Result;
+use arrow_array::{RecordBatch, RecordBatchIterator, StringArray};
+use arrow_schema::{DataType, Field, Schema};
 use ferrumyx_db::{
     chunks::ChunkRepository,
     papers::PaperRepository,
-    schema::{Chunk, Paper},
+    schema::{Chunk, Paper, TABLE_CHUNKS, TABLE_INGESTION_AUDIT},
+    schema_arrow::record_to_chunk,
     Database,
 };
+use futures::StreamExt;
+use lancedb::query::{ExecutableQuery, QueryBase};
+use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -52,6 +59,16 @@ impl IngestionRepository {
         // Check if a paper with this DOI or PMID already exists
         if let Some(doi) = &meta.doi {
             if let Some(existing) = paper_repo.find_by_doi(doi).await? {
+                self.record_duplicate_audit(
+                    existing.id,
+                    "doi",
+                    json!({
+                        "method": "doi",
+                        "matched_paper_id": existing.id,
+                        "doi": truncate_audit_detail(doi, 160),
+                    }),
+                )
+                .await;
                 tracing::debug!(
                     paper_id = %existing.id,
                     doi = ?meta.doi,
@@ -67,6 +84,16 @@ impl IngestionRepository {
 
         if let Some(pmid) = &meta.pmid {
             if let Some(existing) = paper_repo.find_by_pmid(pmid).await? {
+                self.record_duplicate_audit(
+                    existing.id,
+                    "pmid",
+                    json!({
+                        "method": "pmid",
+                        "matched_paper_id": existing.id,
+                        "pmid": truncate_audit_detail(pmid, 64),
+                    }),
+                )
+                .await;
                 tracing::debug!(
                     paper_id = %existing.id,
                     pmid = ?meta.pmid,
@@ -89,6 +116,16 @@ impl IngestionRepository {
                     canonical_title_identity(&p.title)
                         .is_some_and(|key| title_identity_match(&incoming_title_key, &key))
                 }) {
+                    self.record_duplicate_audit(
+                        existing.id,
+                        "title",
+                        json!({
+                            "method": "title",
+                            "matched_paper_id": existing.id,
+                            "title_key": truncate_audit_detail(&incoming_title_key, 160),
+                        }),
+                    )
+                    .await;
                     tracing::debug!(
                         paper_id = %existing.id,
                         title = %meta.title,
@@ -122,6 +159,16 @@ impl IngestionRepository {
                         .map(|h| hamming_distance(incoming_hash, h) <= 6)
                         .unwrap_or(false)
                 }) {
+                    self.record_duplicate_audit(
+                        existing.id,
+                        "strict_fuzzy",
+                        json!({
+                            "method": "strict_simhash",
+                            "matched_paper_id": existing.id,
+                            "distance_max": 6,
+                        }),
+                    )
+                    .await;
                     tracing::debug!(
                         paper_id = %existing.id,
                         "Paper deduplicated by strict abstract SimHash distance <= 6"
@@ -145,6 +192,17 @@ impl IngestionRepository {
                             ) >= similarity.max(0.98)
                     }) {
                         if let Some(db_row) = recent.iter().find(|p| p.title == existing.title) {
+                            self.record_duplicate_audit(
+                                db_row.id,
+                                "strict_fuzzy",
+                                json!({
+                                    "method": "strict_fuzzy",
+                                    "matched_paper_id": db_row.id,
+                                    "rule": truncate_audit_detail(&method, 64),
+                                    "similarity": round_similarity(similarity),
+                                }),
+                            )
+                            .await;
                             tracing::debug!(
                                 paper_id = %db_row.id,
                                 method = %method,
@@ -382,16 +440,95 @@ impl IngestionRepository {
         paper_id: Uuid,
     ) -> Result<Vec<(Uuid, String)>> {
         let chunk_repo = ChunkRepository::new(self.db.clone());
-        let chunks = chunk_repo.find_by_paper_id(paper_id).await?;
+        let table = self
+            .db
+            .connection()
+            .open_table(TABLE_CHUNKS)
+            .execute()
+            .await?;
+        let missing_filter = format!("paper_id = '{}' AND embedding IS NULL", paper_id);
+        match table.query().only_if(&missing_filter).execute().await {
+            Ok(mut stream) => {
+                let mut pending = Vec::new();
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    for i in 0..batch.num_rows() {
+                        let chunk = record_to_chunk(&batch, i)?;
+                        pending.push((chunk.id, chunk.content));
+                    }
+                }
+                return Ok(pending);
+            }
+            Err(err) => {
+                tracing::debug!(
+                    paper_id = %paper_id,
+                    error = %err,
+                    "Chunk embedding-null DB filter unsupported; falling back to client-side filtering"
+                );
+            }
+        }
 
-        // Filter to only those without embeddings
-        let pending: Vec<(Uuid, String)> = chunks
+        let chunks = chunk_repo.find_by_paper_id(paper_id).await?;
+        Ok(chunks
             .into_iter()
             .filter(|c| c.embedding.is_none())
             .map(|c| (c.id, c.content))
-            .collect();
+            .collect())
+    }
 
-        Ok(pending)
+    /// Find paper IDs that still have chunks without embeddings, using a bounded
+    /// paper scan as a fallback for manual backfill jobs.
+    pub async fn pending_embedding_paper_ids(&self, scan_limit: usize) -> Result<Vec<Uuid>> {
+        if scan_limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let table = self
+            .db
+            .connection()
+            .open_table(TABLE_CHUNKS)
+            .execute()
+            .await?;
+        let max_chunk_scan = scan_limit.saturating_mul(128).clamp(64, 20_000);
+        if let Ok(mut stream) = table
+            .query()
+            .only_if("embedding IS NULL")
+            .limit(max_chunk_scan)
+            .execute()
+            .await
+        {
+            let mut seen = HashSet::new();
+            let mut out = Vec::new();
+            while let Some(batch) = stream.next().await {
+                let batch = batch?;
+                for i in 0..batch.num_rows() {
+                    let chunk = record_to_chunk(&batch, i)?;
+                    if seen.insert(chunk.paper_id) {
+                        out.push(chunk.paper_id);
+                        if out.len() >= scan_limit {
+                            return Ok(out);
+                        }
+                    }
+                }
+            }
+            if !out.is_empty() {
+                return Ok(out);
+            }
+        }
+
+        // Fallback for backends that cannot execute the `embedding IS NULL`
+        // predicate reliably.
+        let paper_repo = PaperRepository::new(self.db.clone());
+        let papers = paper_repo.list(0, scan_limit).await?;
+        let mut out = Vec::new();
+
+        for paper in papers {
+            if !self.find_chunks_without_embeddings(paper.id).await?.is_empty() {
+                out.push(paper.id);
+            }
+        }
+
+        Ok(out)
     }
 
     /// Update the embedding for a chunk.
@@ -406,33 +543,83 @@ impl IngestionRepository {
         if updates.is_empty() {
             return Ok(0);
         }
-        let concurrency = std::env::var("FERRUMYX_INGESTION_EMBED_UPDATE_CONCURRENCY")
+
+        let batch_size = std::env::var("FERRUMYX_INGESTION_EMBED_UPDATE_BATCH_SIZE")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(8)
-            .clamp(1, 64);
-        let mut set = tokio::task::JoinSet::new();
-        let mut next_idx = 0usize;
+            .unwrap_or(256)
+            .clamp(1, 2_048);
+
+        let chunk_repo = ChunkRepository::new(self.db.clone());
         let mut updated = 0usize;
-        while next_idx < updates.len() || !set.is_empty() {
-            while next_idx < updates.len() && set.len() < concurrency {
-                let (chunk_id, embedding) = updates[next_idx].clone();
-                let db = self.db.clone();
-                set.spawn(async move {
-                    let repo = ChunkRepository::new(db);
-                    repo.update_embedding(chunk_id, embedding)
-                        .await
-                        .ok()
-                        .map(|_| 1usize)
-                        .unwrap_or(0)
-                });
-                next_idx += 1;
-            }
-            if let Some(joined) = set.join_next().await {
-                updated += joined.unwrap_or(0);
-            }
+        for batch in updates.chunks(batch_size) {
+            updated += chunk_repo.update_embeddings_batch(batch).await?;
         }
         Ok(updated)
+    }
+
+    async fn record_duplicate_audit(&self, paper_id: Uuid, method: &str, detail: Value) {
+        let action = "deduplicated";
+        let payload = json!({
+            "method": method,
+            "detail": detail,
+        });
+        if let Err(err) = self
+            .write_ingestion_audit(action, payload.to_string(), Some(paper_id))
+            .await
+        {
+            tracing::warn!(
+                paper_id = %paper_id,
+                method,
+                error = %err,
+                "Failed to persist ingestion_audit dedup event"
+            );
+        }
+        tracing::debug!(
+            paper_id = %paper_id,
+            method,
+            detail = %payload,
+            "Ingestion dedup audit event"
+        );
+    }
+
+    async fn write_ingestion_audit(
+        &self,
+        action: &str,
+        detail: String,
+        paper_id: Option<Uuid>,
+    ) -> Result<()> {
+        let table = self
+            .db
+            .connection()
+            .open_table(TABLE_INGESTION_AUDIT)
+            .execute()
+            .await?;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("job_id", DataType::Utf8, true),
+            Field::new("paper_id", DataType::Utf8, true),
+            Field::new("action", DataType::Utf8, false),
+            Field::new("detail", DataType::Utf8, false),
+            Field::new("created_at", DataType::Utf8, false),
+        ]));
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec![Uuid::new_v4().to_string()])),
+                Arc::new(StringArray::from(vec![Option::<String>::None])),
+                Arc::new(StringArray::from(vec![paper_id.map(|v| v.to_string())])),
+                Arc::new(StringArray::from(vec![action.to_string()])),
+                Arc::new(StringArray::from(vec![detail])),
+                Arc::new(StringArray::from(vec![now])),
+            ],
+        )?;
+        let iter = RecordBatchIterator::new(vec![Ok(batch)], schema);
+        table.add(iter).execute().await?;
+        Ok(())
     }
 }
 
@@ -517,4 +704,16 @@ fn title_identity_match(a: &str, b: &str) -> bool {
         return true;
     }
     strsim::jaro_winkler(a, b) >= 0.992
+}
+
+fn truncate_audit_detail(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    trimmed.chars().take(max_chars).collect()
+}
+
+fn round_similarity(value: f64) -> f64 {
+    (value * 10_000.0).round() / 10_000.0
 }

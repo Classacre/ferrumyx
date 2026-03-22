@@ -33,7 +33,7 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 
 **100% Rust.** No Python dependencies. All components are Rust-native. No external database required (LanceDB/libSQL embedded).
 
-## What Is New (2026-03-17)
+## What Is New (2026-03-21)
 
 - Added autonomous lab role tools: `lab_planner`, `lab_retriever`, `lab_validator`.
 - Added coordinator and status tools: `run_lab_autoresearch`, `lab_run_status`.
@@ -41,6 +41,9 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 - Added **Live Lab Run Monitor** in `/chat` with auto run-id detection, KPIs, and recent-run selector.
 - Improved autonomous prompt routing so chat prefers the lab orchestration toolchain.
 - Added federation bootstrap APIs with signed package export/validation plus merge-gate moderation queue and canonical lineage tracking.
+- Added federation trust-key APIs and queue signature policy enforcement.
+- Added federation endpoint security controls (read/write bearer scopes, replay-guard nonce/timestamp checks, and JSONL audit logs) with Settings UI + runtime env wiring.
+- Added Hugging Face federation sync endpoints for canonical snapshot publish/pull (`/api/federation/hf/*`) with settings-driven repo/token/prefix controls.
 
 ## Federation Bootstrap APIs
 
@@ -54,6 +57,38 @@ For a detailed technical breakdown of the engine's layers, reasoning loop, and s
 - `GET /api/federation/merge/queue`
 - `POST /api/federation/merge/decide`
 - `GET /api/federation/canonical/lineage`
+- `GET /api/federation/trust/list`
+- `POST /api/federation/trust/upsert`
+- `POST /api/federation/trust/revoke`
+- `GET /api/federation/sync/index`
+- `GET /api/federation/sync/snapshot`
+- `GET /api/federation/sync/artifact`
+- `POST /api/federation/sync/plan`
+- `POST /api/federation/sync/pull`
+- `POST /api/federation/sync/push`
+- `GET /api/federation/hf/status`
+- `POST /api/federation/hf/publish`
+- `POST /api/federation/hf/pull`
+
+### Federation Security Environment Variables
+
+- `FERRUMYX_FED_AUTH_ENABLED` (`0|1`) enable/disable federation auth checks.
+- `FERRUMYX_FED_READ_TOKEN` read-scope bearer token.
+- `FERRUMYX_FED_WRITE_TOKEN` write-scope bearer token.
+- `FERRUMYX_FED_REPLAY_REQUIRED` (`0|1`) enforce nonce+timestamp replay checks on write routes.
+- `FERRUMYX_FED_REPLAY_WINDOW_SECS` replay window in seconds (clamped to `30..3600`).
+- `FERRUMYX_FED_REQUIRE_SIGNATURE_FOR_QUEUE` (`0|1`) require trusted signed package for merge queue admission.
+- `FERRUMYX_FED_AUDIT_LOG_PATH` JSONL audit log destination for federation operations.
+
+### Hugging Face Federation Variables
+
+- `FERRUMYX_FED_HF_ENABLED` (`0|1`) enable/disable HF publish/pull endpoints.
+- `FERRUMYX_FED_HF_REPO_ID` default dataset repo id (e.g. `Classacre/ferrumyx-canonical-kb`).
+- `FERRUMYX_FED_HF_SNAPSHOTS_PREFIX` snapshot folder prefix in repo (default `snapshots`).
+- `FERRUMYX_FED_HF_REVISION` optional default branch/tag.
+- `FERRUMYX_FED_HF_TIMEOUT_SECS` CLI timeout per operation (default `1800`).
+- `FERRUMYX_FED_HF_PULL_ROOT` local root for HF pulls (default `./output/federation/hf_imports`).
+- `FERRUMYX_FED_HF_TOKEN` optional token for server-side HF CLI calls.
 
 ## Architecture
 

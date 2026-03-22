@@ -96,6 +96,7 @@ ollama_rpm     = 120
 [embedding]
 # Which backend to use for text embeddings (written to paper_chunks.embedding)
 # "rust_native"     — Microsoft BiomedBERT via Candle (recommended, no API key)
+# "fastembed"       — ONNX Runtime via fastembed-rs (highest local CPU throughput; requires `ferrumyx-ingestion/fastembed_backend`)
 # "openai"           — text-embedding-3-small (1536-dim, fast, cheap)
 # "gemini"           — text-embedding-004 (768-dim, good quality, free tier)
 # "ollama"           — local Ollama embedding model
@@ -106,6 +107,7 @@ embedding_model = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
 #   OpenAI:        backend = "openai", embedding_model = "text-embedding-3-small", embedding_dim = 1536
 #   Gemini:        backend = "gemini", embedding_model = "text-embedding-004", embedding_dim = 768
 #   Ollama:        backend = "ollama", embedding_model = "nomic-embed-text", embedding_dim = 768
+#   FastEmbed:     backend = "fastembed", embedding_model = "BGEBaseENV15Q", embedding_dim = 768 (feature `ferrumyx-ingestion/fastembed_backend`)
 embedding_dim   = 768        # BiomedBERT outputs 768-dim vectors
 
 # ── Ingestion ─────────────────────────────────────────────────────────────────

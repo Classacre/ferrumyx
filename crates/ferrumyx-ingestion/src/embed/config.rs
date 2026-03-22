@@ -66,3 +66,41 @@ impl EmbeddingConfig {
         self
     }
 }
+
+/// Runtime speed/quality trade-off for the Rust-native embedder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbeddingSpeedMode {
+    Fast,
+    Balanced,
+    Quality,
+}
+
+impl EmbeddingSpeedMode {
+    pub const ENV_VAR: &'static str = "FERRUMYX_EMBED_SPEED_MODE";
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "fast" => Some(Self::Fast),
+            "balanced" => Some(Self::Balanced),
+            "quality" => Some(Self::Quality),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Balanced => "balanced",
+            Self::Quality => "quality",
+        }
+    }
+
+    pub fn max_length(self) -> usize {
+        match self {
+            Self::Fast => 256,
+            Self::Balanced => 384,
+            Self::Quality => 512,
+        }
+    }
+}

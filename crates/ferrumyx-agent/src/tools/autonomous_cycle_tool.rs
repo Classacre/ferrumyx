@@ -69,6 +69,71 @@ impl NoveltyPressureMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmbeddingSpeedMode {
+    Fast,
+    Balanced,
+    Quality,
+}
+
+impl EmbeddingSpeedMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Balanced => "balanced",
+            Self::Quality => "quality",
+        }
+    }
+
+    fn max_length(self) -> usize {
+        match self {
+            Self::Fast => 256,
+            Self::Balanced => 384,
+            Self::Quality => 512,
+        }
+    }
+}
+
+fn resolve_embedding_speed_mode(
+    profile: &RuntimeProfile,
+    requested_max_results: usize,
+    source_profile: &str,
+) -> EmbeddingSpeedMode {
+    if let Ok(raw) = std::env::var("FERRUMYX_EMBED_SPEED_MODE") {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "fast" => return EmbeddingSpeedMode::Fast,
+            "balanced" => return EmbeddingSpeedMode::Balanced,
+            "quality" => return EmbeddingSpeedMode::Quality,
+            _ => {}
+        }
+    }
+
+    let gpu_ready = profile.has_nvidia_gpu && profile.has_cuda_toolkit;
+    if source_profile == "fast" || requested_max_results >= 30 {
+        return EmbeddingSpeedMode::Fast;
+    }
+    if !gpu_ready {
+        return EmbeddingSpeedMode::Fast;
+    }
+    if requested_max_results <= 10 {
+        return EmbeddingSpeedMode::Quality;
+    }
+    EmbeddingSpeedMode::Balanced
+}
+
+fn tuned_embedding_batch_size_for_mode(
+    mode: EmbeddingSpeedMode,
+    profile: &RuntimeProfile,
+    current_batch_size: usize,
+) -> usize {
+    let base = profile.tuned_embedding_batch_size(current_batch_size).max(1);
+    match mode {
+        EmbeddingSpeedMode::Fast => base.saturating_mul(2).clamp(8, 96),
+        EmbeddingSpeedMode::Balanced => base.clamp(8, 64),
+        EmbeddingSpeedMode::Quality => (base / 2).max(8).clamp(8, 48),
+    }
+}
+
 fn config_path() -> PathBuf {
     std::env::var("FERRUMYX_CONFIG")
         .map(PathBuf::from)
@@ -195,22 +260,23 @@ fn resolve_default_embedding_cfg() -> Option<IngestionEmbeddingConfig> {
     let dim = toml_u64(
         &root,
         &["embedding", "embedding_dim"],
-        if backend == "rust_native" || backend == "biomedbert" {
-            768
-        } else {
-            1536
-        },
+            if backend == "rust_native" || backend == "biomedbert" || backend == "fastembed" {
+                768
+            } else {
+                1536
+            },
     )
     .clamp(64, 8192) as usize;
 
     let mapped_backend = match backend.as_str() {
         "openai" => IngestionEmbeddingBackend::OpenAi,
         "gemini" => IngestionEmbeddingBackend::Gemini,
-        "openai_compatible" => IngestionEmbeddingBackend::OpenAiCompatible,
-        "ollama" => IngestionEmbeddingBackend::Ollama,
-        "biomedbert" => IngestionEmbeddingBackend::BiomedBert,
-        _ => IngestionEmbeddingBackend::RustNative,
-    };
+            "openai_compatible" => IngestionEmbeddingBackend::OpenAiCompatible,
+            "ollama" => IngestionEmbeddingBackend::Ollama,
+            "biomedbert" => IngestionEmbeddingBackend::BiomedBert,
+            "fastembed" => IngestionEmbeddingBackend::FastEmbed,
+            _ => IngestionEmbeddingBackend::RustNative,
+        };
 
     let api_key = toml_string(&root, &["embedding", "api_key"])
         .or_else(|| match mapped_backend {
@@ -235,6 +301,18 @@ fn resolve_default_embedding_cfg() -> Option<IngestionEmbeddingConfig> {
         batch_size,
         base_url,
     })
+}
+
+fn resolve_fast_embedding_model() -> Option<String> {
+    if let Ok(v) = std::env::var("FERRUMYX_EMBED_FAST_MODEL") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    let content = fs::read_to_string(config_path()).ok()?;
+    let root = toml::from_str::<toml::Value>(&content).ok()?;
+    toml_string(&root, &["embedding", "fast_model"])
 }
 
 fn build_source_list(
@@ -401,9 +479,33 @@ impl Tool for AutonomousCycleTool {
         let has_semantic_key = semantic_scholar_api_key
             .as_ref()
             .is_some_and(|k| !k.trim().is_empty());
+        let embedding_speed_mode =
+            resolve_embedding_speed_mode(&profile, tuned_max_results, &source_profile);
         let mut embedding_cfg = embedding_cfg;
+        let embedding_fast_model = resolve_fast_embedding_model();
+        let mut embedding_batch_size_effective = 0usize;
         if let Some(cfg) = embedding_cfg.as_mut() {
-            cfg.batch_size = profile.tuned_embedding_batch_size(cfg.batch_size);
+            if matches!(
+                cfg.backend,
+                IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert
+            ) {
+                if cfg.dim != 768 {
+                    cfg.dim = 768;
+                }
+                if embedding_speed_mode == EmbeddingSpeedMode::Fast {
+                    if let Some(ref model) = embedding_fast_model {
+                        cfg.model = model.clone();
+                    }
+                }
+            }
+            cfg.batch_size =
+                tuned_embedding_batch_size_for_mode(embedding_speed_mode, &profile, cfg.batch_size);
+            embedding_batch_size_effective = cfg.batch_size;
+            std::env::set_var("FERRUMYX_EMBED_SPEED_MODE", embedding_speed_mode.as_str());
+            std::env::set_var(
+                "FERRUMYX_EMBED_MAX_LENGTH",
+                embedding_speed_mode.max_length().to_string(),
+            );
         }
 
         let mut cycles = Vec::new();
@@ -752,7 +854,10 @@ impl Tool for AutonomousCycleTool {
                     "cuda_install_attempted": profile.cuda_install_attempted,
                     "source_profile": active_source_profile,
                     "max_results_tuned": tuned_max_results,
-                    "source_timeout_secs": profile.source_timeout_secs()
+                    "source_timeout_secs": profile.source_timeout_secs(),
+                    "embedding_speed_mode": embedding_speed_mode.as_str(),
+                    "embedding_batch_size": embedding_batch_size_effective,
+                    "embedding_max_length": embedding_speed_mode.max_length()
                 }
             }),
             started.elapsed(),

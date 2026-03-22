@@ -6,6 +6,7 @@
 **Repository:** https://github.com/Classacre/ferrumyx  
 **Status:** Active Implementation (Phase 1-3 complete; Phase 4 hardening in active iteration; Phase 5+ in progress; Phase 10 federation bootstrap started)  
 **Date:** 2026-03-21
+**Document ownership:** `ARCHITECTURE.md` is owned by the main agent. Keep this file aligned with the implementation state and the dated task docs under `docs/`.
 
 ---
 
@@ -29,21 +30,22 @@
 
 ---
 
-## Current Implementation Snapshot (2026-03-17)
+## Current Implementation Snapshot (2026-03-21)
 
 - Phase 1-3 functionality is operational end-to-end with Ferrumyx Runtime Core as the orchestrator and Ferrumyx domain tools registered in the runtime tool surface.
 - Chat stack is now async, history-backed, and streaming-capable with markdown rendering and thread management in the web UI.
 - Autonomous lab-team role tooling is now implemented (`lab_planner`, `lab_retriever`, `lab_validator`) with coordinator/status tools (`run_lab_autoresearch`, `lab_run_status`) for dynamic multi-cycle research execution.
 - Lab run-state is persisted to disk (`output/lab_runs.json`, override via `FERRUMYX_LAB_STATE_PATH`) for cross-process monitoring and resilient status views.
 - Settings are tab-organized and now drive secure API configuration for active providers (Ollama, OpenAI, Anthropic, Gemini, OpenAI-compatible), including cached-chat toggle support for compatible providers.
-- Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, canonical DOI/PMID/PMCID/title identity dedupe during source fan-in, early source-abort on unique-target saturation, adaptive worker tuning, and fast-lane/heavy-lane split with optional async enrichment.
+- Ingestion performance hardening is active: source caching, negative + success full-text caches, chunk fingerprint cache, canonical DOI/PMID/PMCID/title identity dedupe during source fan-in, early source-abort on unique-target saturation, adaptive worker tuning, fast-lane/heavy-lane split with optional async enrichment, explicit heavy-lane drain control, DB-side missing-embedding filtering with compatibility fallback, and batch embedding backfill updates.
 - Sci-Hub fallback now includes settings-driven mirror parallelism/cooldown and adaptive fallback controls (deferred launch, failure-streak backoff, probe cadence, and adaptive step budgets) to keep full-text retrieval fast under mirror instability.
 - Metrics include live ingestion performance telemetry (`/api/metrics/perf`) and persisted snapshots for run-to-run benchmarking.
 - KG/query surfaces now use bounded/aggregated paths to avoid large table scans and keep UI/API latency stable under larger corpora.
+- `query_targets` now emits a compact downstream embedding block: top RAG snippets, gene-link edges, novelty signals, dedup/near-dup groups, topic clusters, drift mix, and per-gene numeric feature vectors.
 - KG rendering now uses deterministic topology-derived coordinates (2D projected from Rust 3D layout) with stable seeded fallback (no random jitter path), plus confidence/provenance edge metadata.
 - Target scoring now consumes confidence/provenance-weighted KG evidence so source-backed high-tier facts contribute more than generic mentions.
 - Sci-Hub support is multi-domain and settings-driven (domain list + timeout), aligned to currently active mirrors.
-- Ranker/DepMap web APIs are now dynamic-input driven (no hardcoded cancer defaults) and hardened for web latency via bounded read paths and reduced fanout in hot endpoints.
+- Ranker/DepMap web APIs are now dynamic-input driven (no hardcoded cancer defaults) and hardened for web latency via bounded read paths, reduced fanout in hot endpoints, and batch entity-name resolution to avoid per-row lookup amplification.
 - Web UI information architecture now follows progressive disclosure: dense tables/details are collapsed by default across KG/Query/Targets/DepMap/Molecules, with lightweight summaries first and drill-down evidence on demand.
 - Chat includes a dedicated Live Lab Run Monitor panel backed by `/api/chat/lab-monitor`, with auto run-ID detection from streaming/tool events, KPI snapshots, and recent-run selection.
 - Federated KB bootstrap is implemented: shared contribution manifest schema (`ferrumyx.federation.v1`), DB-side draft generation/validation, JSONL package export + digest verification, and web APIs (`/api/federation/schema`, `/api/federation/manifest/*`, `/api/federation/package/*`).
@@ -610,6 +612,7 @@ Reality check against current codebase (`crates/ferrumyx-*` + vendored `Ferrumyx
 
 - [x] Workspace/crate topology matches Phase 1 modular design (`ferrumyx-agent`, `ferrumyx-db`, `ferrumyx-ingestion`, `ferrumyx-kg`, `ferrumyx-ranker`, `ferrumyx-web`, `Ferrumyx Runtime Core`).
 - [x] LanceDB core tables are present and initialized (`papers`, `chunks`, `entities`, `entity_mentions`, `kg_facts`, `kg_conflicts`, `target_scores`, `ingestion_audit`).
+- [x] DB startup paths are hardened: table presence is resolved from a single table-name snapshot per init/stats call, and vector-index creation is idempotent with duplicate-index tolerance.
 - [x] Target score history semantics are implemented (`score_version`, `is_current`) with backward-compatible handling for legacy tables.
 - [x] Ferrumyx Runtime Core extension model is in active use (custom Ferrumyx tools are registered into Ferrumyx Runtime Core tool registry; no fork-only orchestration path).
 - [x] Web gateway + live event streaming are implemented (`/api/events` SSE), including chat-thread endpoints and history-backed async chat UX.
@@ -1204,7 +1207,7 @@ Overlap is computed at the token level, not character level, to ensure consisten
 
 **Default selection:** `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext` — trained on 14M+ PubMed abstracts + full-text articles; strong performance on biomedical STS benchmarks; freely available via HuggingFace.
 
-**High-precision mode** activates when `embedding_mode = "high_precision"` in Ferrumyx config; uses BiomedBERT-large (1024-dim); embeddings stored in a separate LanceDB column `embedding_large VECTOR(1024)`.
+**High-precision mode** uses the 1024-dim BiomedBERT-large path; enable it by setting `[embedding].backend = "biomedbert"` and `[embedding].embedding_dim = 1024`. Embeddings are stored in the separate LanceDB column `embedding_large VECTOR(1024)`.
 
 ### Embedding Service
 
@@ -1225,6 +1228,70 @@ Output (Rust struct):
 **Throughput estimate:**
 - CPU (8-core): ~50 chunks/sec → 1,000-chunk paper ≈ 20s
 - GPU (RTX 3080): ~800 chunks/sec → 1,000-chunk paper ≈ 1.25s
+
+### Downstream Embedding Uses
+
+Embeddings are not just a storage primitive in Ferrumyx. They feed multiple downstream retrieval and ranking paths:
+
+- **Hybrid retrieval:** vector similarity in LanceDB is fused with full-text search using reciprocal-rank style merging so semantic matches and lexical matches both survive.
+- **RAG context selection:** embeddings help pick the most relevant paper chunks before the LLM receives context, especially when the query terms are sparse or domain-specific.
+- **Semantic reranking:** embedding similarity acts as a second-pass relevance signal for shortlisting and ordering candidates after the coarse retrieval stage.
+- **Novelty and drift checks:** chunk and paper embeddings can be compared over time to detect whether new literature is semantically close to existing evidence or meaningfully drifting into a new subspace.
+- **Deduplication support:** embeddings complement DOI/PMID/title heuristics by catching near-duplicate abstracts, preprint/published variants, and repeated retrieval artifacts.
+- **Query response enrichment:** `query_targets` now packages retrieved evidence into a compact downstream embedding payload with RAG snippet selection, gene similarity links, novelty signals, dedup groups, topic clusters, drift mix, and per-gene feature blocks.
+
+These uses primarily consume `paper_chunks.embedding` today, with `embedding_large` reserved for the high-precision 1024-dim path.
+
+### Embedding Speed Mode and Controls
+
+Ferrumyx now supports embedding speed mode auto-determination (`fast|balanced|quality`) with runtime-profile-aware tuning.
+
+**Auto-determination behavior:**
+
+- `FERRUMYX_INGESTION_PERF_MODE` defaults to `auto` and accepts `throughput`, `balanced`, or `safe`.
+- When `auto` is selected, the runtime profile is loaded from `FERRUMYX_RUNTIME_PROFILE_PATH` or computed from the current host.
+- `RuntimeProfile::detect_and_prepare()` probes RAM, logical CPU count, NVIDIA GPU presence, and CUDA availability.
+- In the ingestion tool path, speed mode defaults to `auto` and resolves to:
+  - `fast` for throughput-heavy CPU paths,
+  - `quality` for smaller GPU-backed runs,
+  - `balanced` otherwise.
+- Effective embedding batch size is mode-aware (`fast` favors throughput, `quality` favors stability/precision).
+- Rust-native embedding max token length is mode-aware:
+  - `fast = 256`, `balanced = 384`, `quality = 512`.
+
+**Primary controls:**
+
+- `[ingestion].enable_embeddings` or `FERRUMYX_INGESTION_ENABLE_EMBEDDINGS`
+- `[embedding].speed_mode` or `FERRUMYX_EMBED_SPEED_MODE` (`auto|fast|balanced|quality`)
+- `[ingestion.performance].embedding_async_backfill` or `FERRUMYX_INGESTION_EMBED_ASYNC_BACKFILL` (non-blocking ingestion completion; vector backfill queued in background)
+- `[embedding].throughput_chunk_cap` or `FERRUMYX_EMBED_THROUGHPUT_MAX_CHUNKS_PER_PAPER` (cap per-paper embedding workload in throughput mode)
+- `[embedding].backend` values: `rust_native`, `fastembed`, `biomedbert`, `openai`, `gemini`, `openai_compatible`, `ollama` (`fastembed` requires building `ferrumyx-ingestion` with feature `fastembed_backend`)
+- `[embedding].embedding_model`
+- `[embedding].fast_model` or `FERRUMYX_EMBED_FAST_MODEL` (optional 768-d fast-path model used in `fast` mode; defaults to a FastEmbed-compatible 768-d model when auto-switching)
+- `[embedding].embedding_dim`
+- `[embedding].batch_size`
+- `[embedding].base_url` for local or compatible services
+- `[embedding].api_key` or provider env vars
+- `FERRUMYX_EMBED_CACHE_DIR` (explicit HF/Candle model cache location)
+- `FERRUMYX_EMBED_AUTO_FASTEMBED` (default `true`; auto-switches Rust-native/biomed configs to FastEmbed in `fast` mode for throughput, but only when `fastembed_backend` is compiled in)
+- `FERRUMYX_INGESTION_EMBED_GLOBAL_BATCH` (default `true`; defers per-paper embedding and executes one global cross-paper batch pass for better utilization)
+
+**Provider env vars:**
+
+- `FERRUMYX_OPENAI_API_KEY` or `OPENAI_API_KEY`
+- `FERRUMYX_GEMINI_API_KEY` or `GEMINI_API_KEY`
+- `FERRUMYX_COMPAT_API_KEY` or `LLM_API_KEY`
+
+**Operational notes:**
+
+- `FERRUMYX_CONFIG` selects the TOML file used for auto-resolution.
+- `FERRUMYX_PAPER_PROCESS_WORKERS` may be tuned by the ingestion runtime when batch processing is active.
+- `FERRUMYX_EMBED_MAX_LENGTH` is set by the tooling to the resolved speed-mode length (`256/384/512`) for runtime transparency.
+- Candle/HF model artifacts are cached on disk; if `FERRUMYX_EMBED_CACHE_DIR` is unset, Ferrumyx defaults to `data/cache/hf-hub`.
+- The safe path is to keep `embedding_dim` aligned with the selected backend and model; mismatches should be treated as configuration errors rather than silently coerced.
+- Query-time downstream semantic rerank can be controlled via `FERRUMYX_QUERY_SEMANTIC_RERANK`, `FERRUMYX_QUERY_SEMANTIC_TOPK`, and `FERRUMYX_QUERY_SEMANTIC_WEIGHT`.
+- Downstream embedding payload generation in `query_targets` can be toggled with `FERRUMYX_QUERY_DOWNSTREAM_EMBEDDING`.
+- Manual catch-up is exposed via the `backfill_embeddings` runtime tool (optional `paper_ids` and/or `scan_limit`).
 
 ### LanceDB Storage
 
@@ -1411,6 +1478,11 @@ Implemented in production code:
 - [x] Chunk-fingerprint cache + TTL controls are active to skip redundant heavy NER/relation passes.
 - [x] Batch DOI/PMID prefetch dedup is implemented to reduce per-paper DB round-trips.
 - [x] Adaptive worker tuning and fast-lane/heavy-lane async enrichment are implemented for higher sustained throughput.
+- [x] Heavy-lane async flow now supports explicit completion draining (`FERRUMYX_INGESTION_HEAVY_LANE_DRAIN`) and corrected process telemetry (`process_ms` reflects process stage, not prefetch time).
+- [x] New-paper prefetch handoff avoids duplicate `PaperMetadata` cloning on the upsert-to-prefetch path.
+- [x] Missing-embedding discovery now uses DB-side `embedding IS NULL` filtering first, with safe fallback when filter execution is unsupported.
+- [x] Embedding backfill updates now use chunk-ID keyed batch merge-upsert (`FERRUMYX_INGESTION_EMBED_UPDATE_BATCH_SIZE`), replacing per-chunk read/delete/reinsert loops in the bulk path.
+- [x] Dedupe decisions persist structured `ingestion_audit` rows (DOI/PMID/title/strict-fuzzy) in addition to trace logs.
 - [x] Sci-Hub fallback is now adaptive and settings-driven (mirror parallelism/cooldown + defer/backoff/probe/budget controls) for better degraded-mode throughput.
 - [x] Ingestion performance snapshots are persisted and exposed via `/api/metrics/perf`.
 
@@ -1964,6 +2036,8 @@ Remaining Phase 4 hardening work:
 - [x] Provider cache freshness controls added (TTL-based reads from persisted signal tables) to avoid stale long-lived values.
 - [x] Large-cohort mode now keeps query latency bounded while asynchronously prewarming top candidates into provider cache tables for subsequent source-backed runs.
 - [x] Explicit staged refresh path added (`refresh_provider_signals`) with bounded batch size, per-provider retries, and refresh telemetry for cBioPortal/COSMIC/TCGA/GTEx/ChEMBL/Reactome.
+- [x] Provider refresh execution now uses bounded concurrent provider calls per gene with deterministic merge ordering (removes fully serial per-provider inner loops).
+- [x] Runtime provider fallback caches (CBIO/COSMIC/GTEx/TCGA/ChEMBL/Reactome paths) are bounded with TTL + pruning to prevent unbounded memory growth.
 - [x] Autonomous cycle now runs provider refresh before ranking so iterative runs progressively replace proxy/semantic fallbacks with source-backed cache signals.
 - [x] `n9` (literature novelty) now derives from paper publication + citation metadata (`papers.raw_json`/`published_at`) when available (`papers_metadata_citations`), with source-missing baseline instead of proxy-only coupling.
 - [x] Staged refresh now persists per-provider run history (`ent_provider_refresh_runs`), applies adaptive cadence (error-rate + staleness aware), and is externalized through a continuous background scheduling/alerting loop (`ranker.phase4.background_refresh`).
@@ -2555,14 +2629,20 @@ Implemented:
 - local Ed25519 manifest signing with trust-registry key resolution (`sign_contribution_package`)
 - merge-gate moderation queue with status transitions (`submit_package_for_merge`, `decide_merge_queue`, `list_merge_queue`)
 - canonical lineage index for approved snapshots (`get_canonical_lineage`)
+- sync transport bootstrap: local/remote snapshot index, sync planning, resumable artifact pull, and push trigger (`/api/federation/sync/*`)
 - web APIs for schema inspection, manifest draft/validation, and package export/validation
+- trust-registry APIs for key listing/upsert/revoke (`/api/federation/trust/*`)
+- merge queue admission policy for trusted signatures (`FERRUMYX_FED_REQUIRE_SIGNATURE_FOR_QUEUE`, default `true`)
+- federation endpoint authn/authz controls with read/write bearer scopes and replay guard (`FERRUMYX_FED_AUTH_ENABLED`, `FERRUMYX_FED_READ_TOKEN`, `FERRUMYX_FED_WRITE_TOKEN`, `FERRUMYX_FED_REPLAY_*`)
+- federation audit logging (`FERRUMYX_FED_AUDIT_LOG_PATH`) and settings-driven runtime env sync
+- Hugging Face distribution bridge: server-side publish/pull/status endpoints (`/api/federation/hf/*`) with settings/env-driven repo, prefix, revision, timeout, pull-root, and optional token
 
 Not yet implemented (next pass):
 
 - Parquet export mode for high-volume snapshots (JSONL is implemented first)
-- remote trust bootstrap and key governance policy (local trust-registry signing/verification is implemented)
+- remote trust bootstrap and key governance policy across independent operators (local trust-registry APIs are implemented)
 - cloud-hosted canonical merge gate service (current moderation queue is local-first bootstrap)
-- differential snapshot sync and resumable pull/push transport
+- content-addressed artifact store + true delta transfer (current transport is resumable chunked artifact transfer)
 
 ## 10.6 API Surface (Bootstrap)
 
@@ -2576,6 +2656,18 @@ Not yet implemented (next pass):
 - `GET /api/federation/merge/queue`
 - `POST /api/federation/merge/decide`
 - `GET /api/federation/canonical/lineage`
+- `GET /api/federation/trust/list`
+- `POST /api/federation/trust/upsert`
+- `POST /api/federation/trust/revoke`
+- `GET /api/federation/sync/index`
+- `GET /api/federation/sync/snapshot`
+- `GET /api/federation/sync/artifact`
+- `POST /api/federation/sync/plan`
+- `POST /api/federation/sync/pull`
+- `POST /api/federation/sync/push`
+- `GET /api/federation/hf/status`
+- `POST /api/federation/hf/publish`
+- `POST /api/federation/hf/pull`
 
 These endpoints intentionally ship as a bootstrap layer so the federation contract can be tested before enabling cross-node write paths.
 

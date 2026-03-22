@@ -6,9 +6,10 @@ use std::time::Instant;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, HiddenAct, PositionEmbeddingType};
-use hf_hub::api::sync::Api;
+use hf_hub::api::sync::ApiBuilder;
 use lru::LruCache;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use tokenizers::Tokenizer;
 use tracing::info;
 
@@ -30,8 +31,24 @@ impl BiomedBertEmbedder {
         let device = Self::select_device(&config)?;
 
         let model_id = config.model_id.clone();
+        let cache_dir = config.cache_dir.clone();
         let (bert_config, tokenizer, weights_path) = tokio::task::spawn_blocking(move || {
-            let api = Api::new().map_err(|e| EmbedError::Download(format!("API init: {}", e)))?;
+            let mut builder = ApiBuilder::new();
+            if let Some(dir) = cache_dir
+                .as_ref()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+            {
+                let path = PathBuf::from(dir);
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::create_dir_all(&path);
+                builder = builder.with_cache_dir(path);
+            }
+            let api = builder
+                .build()
+                .map_err(|e| EmbedError::Download(format!("API init: {}", e)))?;
             let repo = hf_hub::Repo::new(model_id.clone(), hf_hub::RepoType::Model);
             let api_repo = api.repo(repo);
 

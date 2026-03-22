@@ -10,9 +10,11 @@ use tokio::sync::broadcast;
 use tokio::time::{timeout, Instant};
 
 use super::runtime_profile::RuntimeProfile;
+use super::embedding_backfill_tool::backfill_embeddings_for_papers;
 use ferrumyx_db::Database;
 use ferrumyx_ingestion::embedding::{
-    EmbeddingBackend as IngestionEmbeddingBackend, EmbeddingConfig as IngestionEmbeddingConfig,
+    fastembed_enabled, EmbeddingBackend as IngestionEmbeddingBackend,
+    EmbeddingConfig as IngestionEmbeddingConfig,
 };
 use ferrumyx_ingestion::pipeline::{
     run_ingestion, IngestionJob, IngestionProgress, IngestionSourceSpec,
@@ -32,8 +34,8 @@ impl IngestionTool {
 }
 
 #[derive(Debug, Clone)]
-struct IngestionRuntimeDefaults {
-    max_results: usize,
+pub(crate) struct IngestionRuntimeDefaults {
+    pub(crate) max_results: usize,
     idle_timeout_secs: u64,
     max_runtime_secs: u64,
     source_timeout_secs: Option<u64>,
@@ -41,7 +43,7 @@ struct IngestionRuntimeDefaults {
     full_text_total_timeout_secs: Option<u64>,
     full_text_prefetch_workers: Option<usize>,
     paper_process_workers: Option<usize>,
-    perf_mode: String,
+    pub(crate) perf_mode: String,
     source_cache_enabled: bool,
     source_cache_ttl_secs: u64,
     entity_batch_size: usize,
@@ -83,6 +85,11 @@ struct IngestionRuntimeDefaults {
     scihub_adaptive_probe_every: u64,
     scihub_adaptive_min_step_timeout_secs: u64,
     enable_embeddings: bool,
+    embedding_speed_mode: String,
+    embedding_fast_model: Option<String>,
+    embedding_async_backfill: bool,
+    embedding_global_batch: bool,
+    embedding_throughput_chunk_cap: Option<usize>,
     embedding_cfg: Option<IngestionEmbeddingConfig>,
 }
 
@@ -323,6 +330,27 @@ impl Default for IngestionRuntimeDefaults {
             enable_embeddings: std::env::var("FERRUMYX_INGESTION_ENABLE_EMBEDDINGS")
                 .ok()
                 .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            embedding_speed_mode: std::env::var("FERRUMYX_EMBED_SPEED_MODE")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "auto".to_string())
+                .to_lowercase(),
+            embedding_fast_model: std::env::var("FERRUMYX_EMBED_FAST_MODEL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty()),
+            embedding_async_backfill: std::env::var("FERRUMYX_INGESTION_EMBED_ASYNC_BACKFILL")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            embedding_global_batch: std::env::var("FERRUMYX_INGESTION_EMBED_GLOBAL_BATCH")
+                .ok()
+                .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+            embedding_throughput_chunk_cap: std::env::var(
+                "FERRUMYX_EMBED_THROUGHPUT_MAX_CHUNKS_PER_PAPER",
+            )
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|v| v.clamp(1, 4096)),
             embedding_cfg: None,
         }
     }
@@ -390,7 +418,7 @@ fn first_nonempty_toml_string(root: &toml::Value, paths: &[&[&str]]) -> Option<S
     None
 }
 
-fn load_runtime_defaults() -> IngestionRuntimeDefaults {
+pub(crate) fn load_runtime_defaults() -> IngestionRuntimeDefaults {
     let mut defaults = IngestionRuntimeDefaults::default();
     let path = config_path();
     let Ok(content) = fs::read_to_string(path) else {
@@ -653,6 +681,16 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
     defaults.source_profile = toml_string(&root, &["ingestion", "performance", "source_profile"])
         .unwrap_or_else(|| "fast".to_string())
         .to_lowercase();
+    defaults.embedding_async_backfill = toml_bool(
+        &root,
+        &["ingestion", "performance", "embedding_async_backfill"],
+        defaults.embedding_async_backfill,
+    );
+    defaults.embedding_global_batch = toml_bool(
+        &root,
+        &["ingestion", "performance", "embedding_global_batch"],
+        defaults.embedding_global_batch,
+    );
     if defaults.pubmed_api_key.is_none() {
         defaults.pubmed_api_key = first_nonempty_toml_string(
             &root,
@@ -727,6 +765,21 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         &["ingestion", "enable_embeddings"],
         defaults.enable_embeddings,
     );
+    defaults.embedding_speed_mode = toml_string(&root, &["embedding", "speed_mode"])
+        .unwrap_or_else(|| defaults.embedding_speed_mode.clone())
+        .to_lowercase();
+    defaults.embedding_fast_model = toml_string(&root, &["embedding", "fast_model"])
+        .or(defaults.embedding_fast_model);
+    let throughput_chunk_cap = toml_u64(
+        &root,
+        &["embedding", "throughput_chunk_cap"],
+        defaults.embedding_throughput_chunk_cap.unwrap_or(0) as u64,
+    );
+    defaults.embedding_throughput_chunk_cap = if throughput_chunk_cap > 0 {
+        Some(throughput_chunk_cap.clamp(1, 4096) as usize)
+    } else {
+        None
+    };
 
     if defaults.enable_embeddings {
         let backend = toml_string(&root, &["embedding", "backend"])
@@ -740,7 +793,7 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
         let dim = toml_u64(
             &root,
             &["embedding", "embedding_dim"],
-            if backend == "rust_native" || backend == "biomedbert" {
+            if backend == "rust_native" || backend == "biomedbert" || backend == "fastembed" {
                 768
             } else {
                 1536
@@ -754,6 +807,7 @@ fn load_runtime_defaults() -> IngestionRuntimeDefaults {
             "openai_compatible" => IngestionEmbeddingBackend::OpenAiCompatible,
             "ollama" => IngestionEmbeddingBackend::Ollama,
             "biomedbert" => IngestionEmbeddingBackend::BiomedBert,
+            "fastembed" => IngestionEmbeddingBackend::FastEmbed,
             _ => IngestionEmbeddingBackend::RustNative,
         };
 
@@ -804,6 +858,181 @@ fn build_source_list(profile: &str, include_semantic: bool) -> Vec<IngestionSour
         sources.push(IngestionSourceSpec::SemanticScholar);
     }
     sources
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmbeddingSpeedMode {
+    Fast,
+    Balanced,
+    Quality,
+}
+
+impl EmbeddingSpeedMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Balanced => "balanced",
+            Self::Quality => "quality",
+        }
+    }
+
+    fn max_length(self) -> usize {
+        match self {
+            Self::Fast => 256,
+            Self::Balanced => 384,
+            Self::Quality => 512,
+        }
+    }
+}
+
+fn resolve_embedding_speed_mode(
+    defaults: &IngestionRuntimeDefaults,
+    profile: &RuntimeProfile,
+    perf_mode: &str,
+    requested_max_results: usize,
+) -> EmbeddingSpeedMode {
+    let configured = defaults.embedding_speed_mode.trim().to_ascii_lowercase();
+    match configured.as_str() {
+        "fast" => return EmbeddingSpeedMode::Fast,
+        "balanced" => return EmbeddingSpeedMode::Balanced,
+        "quality" => return EmbeddingSpeedMode::Quality,
+        _ => {}
+    }
+
+    let gpu_ready = profile.has_nvidia_gpu && profile.has_cuda_toolkit;
+    if perf_mode == "throughput" {
+        return EmbeddingSpeedMode::Fast;
+    }
+    if !gpu_ready && (perf_mode == "safe" || requested_max_results >= 30) {
+        return EmbeddingSpeedMode::Fast;
+    }
+    if gpu_ready && requested_max_results <= 10 && perf_mode != "safe" {
+        return EmbeddingSpeedMode::Quality;
+    }
+    EmbeddingSpeedMode::Balanced
+}
+
+fn tuned_embedding_batch_size_for_mode(
+    mode: EmbeddingSpeedMode,
+    profile: &RuntimeProfile,
+    current_batch_size: usize,
+) -> usize {
+    let base = profile.tuned_embedding_batch_size(current_batch_size).max(1);
+    match mode {
+        EmbeddingSpeedMode::Fast => base.saturating_mul(2).clamp(8, 96),
+        EmbeddingSpeedMode::Balanced => base.clamp(8, 64),
+        EmbeddingSpeedMode::Quality => (base / 2).max(8).clamp(8, 48),
+    }
+}
+
+fn resolve_sync_embedding_override() -> bool {
+    std::env::var("FERRUMYX_INGESTION_EMBED_SYNC_BLOCKING")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+fn resolve_auto_fastembed_enabled() -> bool {
+    fastembed_enabled()
+        && std::env::var("FERRUMYX_EMBED_AUTO_FASTEMBED")
+        .ok()
+        .is_none_or(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedEmbeddingRuntime {
+    pub cfg: Option<IngestionEmbeddingConfig>,
+    pub speed_mode: String,
+    pub batch_size_effective: usize,
+    pub max_length_effective: usize,
+    pub async_backfill_enabled: bool,
+    pub throughput_chunk_cap: Option<usize>,
+}
+
+pub(crate) fn resolve_embedding_runtime(
+    defaults: &IngestionRuntimeDefaults,
+    profile: &RuntimeProfile,
+    perf_mode: &str,
+    requested_max_results: usize,
+) -> ResolvedEmbeddingRuntime {
+    let force_sync_blocking = resolve_sync_embedding_override();
+    let auto_fastembed_enabled = resolve_auto_fastembed_enabled();
+    let embedding_speed_mode =
+        resolve_embedding_speed_mode(defaults, profile, perf_mode, requested_max_results);
+    let mut embedding_batch_size_effective = 0usize;
+    let mut embedding_max_length_effective = 0usize;
+    let mut embedding_speed_mode_effective = "disabled".to_string();
+    let throughput_chunk_cap = if perf_mode == "throughput" {
+        defaults.embedding_throughput_chunk_cap
+    } else {
+        None
+    };
+    let mut embedding_cfg = defaults.embedding_cfg.clone();
+
+    if let Some(cfg) = embedding_cfg.as_mut() {
+        if matches!(
+            cfg.backend,
+            IngestionEmbeddingBackend::RustNative | IngestionEmbeddingBackend::BiomedBert
+        ) {
+            if cfg.dim != 768 {
+                cfg.dim = 768;
+            }
+            if embedding_speed_mode == EmbeddingSpeedMode::Fast {
+                if let Some(fast_model) = defaults.embedding_fast_model.as_ref() {
+                    cfg.model = fast_model.clone();
+                }
+                if auto_fastembed_enabled {
+                    cfg.backend = IngestionEmbeddingBackend::FastEmbed;
+                    if cfg.model.contains("BiomedNLP-BiomedBERT")
+                        || cfg.model.eq_ignore_ascii_case(
+                            "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
+                        )
+                    {
+                        cfg.model = "BGEBaseENV15Q".to_string();
+                    }
+                }
+            }
+        }
+        cfg.batch_size = tuned_embedding_batch_size_for_mode(
+            embedding_speed_mode,
+            profile,
+            cfg.batch_size,
+        );
+        embedding_batch_size_effective = cfg.batch_size;
+        embedding_max_length_effective = embedding_speed_mode.max_length();
+        embedding_speed_mode_effective = embedding_speed_mode.as_str().to_string();
+        std::env::set_var("FERRUMYX_EMBED_SPEED_MODE", embedding_speed_mode.as_str());
+        std::env::set_var(
+            "FERRUMYX_EMBED_MAX_LENGTH",
+            embedding_speed_mode.max_length().to_string(),
+        );
+        if let Some(cap) = throughput_chunk_cap {
+            std::env::set_var("FERRUMYX_EMBED_THROUGHPUT_MAX_CHUNKS_PER_PAPER", cap.to_string());
+        } else {
+            std::env::remove_var("FERRUMYX_EMBED_THROUGHPUT_MAX_CHUNKS_PER_PAPER");
+        }
+    } else {
+        std::env::remove_var("FERRUMYX_EMBED_SPEED_MODE");
+        std::env::remove_var("FERRUMYX_EMBED_MAX_LENGTH");
+        std::env::remove_var("FERRUMYX_EMBED_THROUGHPUT_MAX_CHUNKS_PER_PAPER");
+    }
+    let auto_async_for_perf =
+        perf_mode == "throughput" || embedding_speed_mode == EmbeddingSpeedMode::Fast;
+    let async_backfill_enabled = defaults.embedding_cfg.is_some()
+        && !force_sync_blocking
+        && (defaults.embedding_async_backfill || auto_async_for_perf);
+    std::env::set_var(
+        "FERRUMYX_INGESTION_EMBED_ASYNC_BACKFILL",
+        if async_backfill_enabled { "1" } else { "0" },
+    );
+
+    ResolvedEmbeddingRuntime {
+        cfg: embedding_cfg,
+        speed_mode: embedding_speed_mode_effective,
+        batch_size_effective: embedding_batch_size_effective,
+        max_length_effective: embedding_max_length_effective,
+        async_backfill_enabled,
+        throughput_chunk_cap,
+    }
 }
 
 fn require_str<'a>(params: &'a serde_json::Value, name: &str) -> Result<&'a str, ToolError> {
@@ -974,6 +1203,14 @@ impl Tool for IngestionTool {
             defaults.heavy_lane_max_inflight.to_string(),
         );
         std::env::set_var(
+            "FERRUMYX_INGESTION_EMBED_GLOBAL_BATCH",
+            if defaults.embedding_global_batch {
+                "1"
+            } else {
+                "0"
+            },
+        );
+        std::env::set_var(
             "FERRUMYX_INGESTION_VALIDATION_MODE",
             match defaults.validation_mode.as_str() {
                 "strict" => "strict",
@@ -1116,10 +1353,14 @@ impl Tool for IngestionTool {
             .semantic_scholar_api_key
             .as_ref()
             .is_some_and(|k| !k.trim().is_empty());
-        let mut embedding_cfg = defaults.embedding_cfg.clone();
-        if let Some(cfg) = embedding_cfg.as_mut() {
-            cfg.batch_size = profile.tuned_embedding_batch_size(cfg.batch_size);
-        }
+        let resolved_embedding =
+            resolve_embedding_runtime(&defaults, &profile, perf_mode, requested_max_results);
+        let embedding_cfg_for_background = resolved_embedding.cfg.clone();
+        let embedding_cfg = if resolved_embedding.async_backfill_enabled {
+            None
+        } else {
+            resolved_embedding.cfg.clone()
+        };
 
         let source_timeout_secs = match perf_mode {
             "throughput" => defaults
@@ -1247,6 +1488,40 @@ impl Tool for IngestionTool {
                 }
             }
         };
+        let queued_backfill_papers = if resolved_embedding.async_backfill_enabled {
+            result.inserted_paper_ids.len()
+        } else {
+            0
+        };
+        if resolved_embedding.async_backfill_enabled {
+            if let Some(embedding_cfg) = embedding_cfg_for_background.clone() {
+                if !result.inserted_paper_ids.is_empty() {
+                    let repo_for_backfill = repo.clone();
+                    let paper_ids = result.inserted_paper_ids.clone();
+                    tokio::spawn(async move {
+                        match backfill_embeddings_for_papers(
+                            repo_for_backfill,
+                            embedding_cfg,
+                            paper_ids,
+                            None,
+                        )
+                        .await
+                        {
+                            Ok(report) => {
+                                tracing::info!(
+                                    papers = report.papers_processed,
+                                    chunks = report.chunks_embedded,
+                                    "Background embedding backfill completed"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!("Background embedding backfill failed: {e}");
+                            }
+                        }
+                    });
+                }
+            }
+        }
         let mut recomputed = 0u32;
         let mut provider_refreshed_genes = 0usize;
         let mut provider_errors = 0u64;
@@ -1331,17 +1606,23 @@ impl Tool for IngestionTool {
         };
 
         let output_text = format!(
-            "Ingestion completed in {}ms. Source fetch returned {} papers, {} unique after cross-source dedupe. Inserted {} new papers and {} knowledge chunks into LanceDB. Skipped {} existing duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Post-ingestion scoring mode={}. Watchdog policy: idle={}s, max_runtime={}s. Runtime profile: ram={:.1}GB, cpu_logical={}, nvidia_gpu={}, cuda_toolkit={}, cuda_install_attempted={}, perf_mode={}, tuned_max_results={}, full_text_enabled={}, source_timeout_secs={}, prefetch_workers={:?}, paper_workers={:?}, source_cache_enabled={}, source_cache_ttl_secs={}, entity_batch_size={}, fact_batch_size={}. Source telemetry: {}",
+            "Ingestion completed in {}ms. Source fetch returned {} papers, {} unique after cross-source dedupe. Inserted {} new papers and {} knowledge chunks ({} embedded) into LanceDB. Skipped {} existing duplicates. Recomputed {} target scores. Provider refresh processed {} genes (errors={}). Post-ingestion scoring mode={}. Embedding mode={}, async_backfill={}, global_embedding_batch={}, queued_backfill_papers={}, throughput_chunk_cap={:?}. Watchdog policy: idle={}s, max_runtime={}s. Runtime profile: ram={:.1}GB, cpu_logical={}, nvidia_gpu={}, cuda_toolkit={}, cuda_install_attempted={}, perf_mode={}, tuned_max_results={}, full_text_enabled={}, source_timeout_secs={}, prefetch_workers={:?}, paper_workers={:?}, source_cache_enabled={}, source_cache_ttl_secs={}, entity_batch_size={}, fact_batch_size={}, embedding_batch_size={}, embedding_max_length={}. Source telemetry: {}",
             result.duration_ms,
             result.papers_found_raw,
             result.papers_found,
             result.papers_inserted,
             result.chunks_inserted,
+            result.chunks_embedded,
             result.papers_duplicate,
             recomputed,
             provider_refreshed_genes,
             provider_errors,
             scoring_mode,
+            resolved_embedding.speed_mode,
+            resolved_embedding.async_backfill_enabled,
+            defaults.embedding_global_batch,
+            queued_backfill_papers,
+            resolved_embedding.throughput_chunk_cap,
             idle_timeout.as_secs(),
             max_runtime.as_secs(),
             profile.ram_gb,
@@ -1359,6 +1640,8 @@ impl Tool for IngestionTool {
             defaults.source_cache_ttl_secs,
             defaults.entity_batch_size,
             defaults.fact_batch_size,
+            resolved_embedding.batch_size_effective,
+            resolved_embedding.max_length_effective,
             result
                 .source_telemetry
                 .iter()

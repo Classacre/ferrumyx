@@ -38,6 +38,7 @@ const DEFAULT_TRUST_REGISTRY_PATH: &str = "./output/federation/trust_registry.js
 const DEFAULT_MERGE_QUEUE_PATH: &str = "./output/federation/merge_queue.json";
 const DEFAULT_CANONICAL_LINEAGE_PATH: &str = "./output/federation/canonical_lineage.json";
 const SIGNATURE_ALGORITHM_ED25519: &str = "ed25519";
+const DEFAULT_REQUIRE_SIGNATURE_FOR_QUEUE: bool = true;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ManifestDraftRequest {
@@ -109,6 +110,25 @@ pub struct PackageSignResult {
     pub public_key_base64: String,
     pub signature_base64: String,
     pub signed_manifest_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustKeyRecord {
+    pub key_id: String,
+    pub algorithm: String,
+    pub public_key_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustKeyUpsertRequest {
+    pub key_id: String,
+    pub algorithm: String,
+    pub public_key_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustKeyRevokeRequest {
+    pub key_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -454,7 +474,25 @@ pub fn submit_package_for_merge(request: MergeSubmitRequest) -> Result<MergeSubm
     let manifest = read_manifest_from_package(&package_path)?;
     let validation = validate_contribution_package(&package_path)?;
 
-    let is_valid = validation.valid;
+    let require_signature = require_signature_for_queue();
+    let signature_ok = validation.signature_validation.present && validation.signature_validation.valid;
+    let mut effective_validation = validation.clone();
+    let is_valid = if require_signature {
+        let ok = validation.valid && signature_ok;
+        if !ok && (!validation.signature_validation.present || !validation.signature_validation.valid) {
+            effective_validation
+                .manifest_validation
+                .issues
+                .push(ValidationIssue::error(
+                    "signature_required",
+                    "signed manifest from trusted key is required for merge queue admission",
+                ));
+            effective_validation.valid = false;
+        }
+        ok
+    } else {
+        validation.valid
+    };
     let status = if is_valid {
         MergeQueueStatus::PendingReview
     } else {
@@ -471,7 +509,7 @@ pub fn submit_package_for_merge(request: MergeSubmitRequest) -> Result<MergeSubm
         parent_snapshot_id: manifest.parent_snapshot_id.clone(),
         manifest_id: manifest.manifest_id.to_string(),
         status,
-        validation,
+        validation: effective_validation,
         decision_at: if !is_valid { Some(now) } else { None },
         decision_by: if is_valid {
             None
@@ -481,7 +519,12 @@ pub fn submit_package_for_merge(request: MergeSubmitRequest) -> Result<MergeSubm
         decision_reason: if is_valid {
             None
         } else {
-            Some("package failed validation; cannot enter moderation queue".to_string())
+            Some(if require_signature {
+                "package failed validation/signature policy; cannot enter moderation queue"
+                    .to_string()
+            } else {
+                "package failed validation; cannot enter moderation queue".to_string()
+            })
         },
     };
 
@@ -575,6 +618,76 @@ pub fn decide_merge_queue(request: MergeDecisionRequest) -> Result<MergeDecision
 
 pub fn get_canonical_lineage() -> Result<CanonicalLineageStore> {
     load_canonical_lineage(&federation_canonical_lineage_path())
+}
+
+pub fn list_trusted_signing_keys() -> Result<Vec<TrustKeyRecord>> {
+    let registry = load_trust_registry(&federation_trust_registry_path())?;
+    Ok(registry
+        .keys
+        .into_iter()
+        .map(|entry| TrustKeyRecord {
+            key_id: entry.key_id,
+            algorithm: entry.algorithm,
+            public_key_base64: entry.public_key_base64,
+        })
+        .collect())
+}
+
+pub fn upsert_trusted_signing_key(request: TrustKeyUpsertRequest) -> Result<TrustKeyRecord> {
+    let key_id = request.key_id.trim().to_string();
+    if key_id.is_empty() {
+        return Err(crate::error::DbError::InvalidQuery(
+            "key_id is required".to_string(),
+        ));
+    }
+    let algorithm = request.algorithm.trim().to_ascii_lowercase();
+    if algorithm != SIGNATURE_ALGORITHM_ED25519 {
+        return Err(crate::error::DbError::InvalidQuery(format!(
+            "unsupported algorithm '{}'; expected '{}'",
+            request.algorithm, SIGNATURE_ALGORITHM_ED25519
+        )));
+    }
+    let encoded = request.public_key_base64.trim().to_string();
+    if encoded.is_empty() {
+        return Err(crate::error::DbError::InvalidQuery(
+            "public_key_base64 is required".to_string(),
+        ));
+    }
+    let _ = decode_base64_fixed::<32>(&encoded)?;
+
+    let entry = TrustRegistryEntry {
+        key_id: key_id.clone(),
+        algorithm,
+        public_key_base64: encoded.clone(),
+    };
+    upsert_trust_registry_key(&federation_trust_registry_path(), entry)?;
+    Ok(TrustKeyRecord {
+        key_id,
+        algorithm: SIGNATURE_ALGORITHM_ED25519.to_string(),
+        public_key_base64: encoded,
+    })
+}
+
+pub fn revoke_trusted_signing_key(request: TrustKeyRevokeRequest) -> Result<bool> {
+    let key_id = request.key_id.trim();
+    if key_id.is_empty() {
+        return Err(crate::error::DbError::InvalidQuery(
+            "key_id is required".to_string(),
+        ));
+    }
+    let path = federation_trust_registry_path();
+    let mut registry = load_trust_registry(&path)?;
+    let before = registry.keys.len();
+    registry.keys.retain(|entry| entry.key_id != key_id);
+    let removed = registry.keys.len() != before;
+    if removed {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let pretty = serde_json::to_string_pretty(&registry)?;
+        std::fs::write(path, pretty)?;
+    }
+    Ok(removed)
 }
 
 pub fn validate_contribution_manifest(manifest: &ContributionManifest) -> ManifestValidationReport {
@@ -705,6 +818,13 @@ fn default_keys_dir() -> String {
 
 fn default_merge_queue_path() -> String {
     DEFAULT_MERGE_QUEUE_PATH.to_string()
+}
+
+fn require_signature_for_queue() -> bool {
+    std::env::var("FERRUMYX_FED_REQUIRE_SIGNATURE_FOR_QUEUE")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(DEFAULT_REQUIRE_SIGNATURE_FOR_QUEUE)
 }
 
 fn federation_keys_dir_path() -> PathBuf {
@@ -1395,9 +1515,16 @@ fn is_sha256_hex(value: &str) -> bool {
 mod tests {
     use super::*;
     use ferrumyx_common::federation::{ArtifactDigest, ContributionManifest};
+    use std::sync::{Mutex, OnceLock};
+
+    fn federation_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn validate_rejects_bad_schema() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let mut manifest = ContributionManifest::template();
         manifest.schema_version = "wrong.schema".to_string();
         let report = validate_contribution_manifest(&manifest);
@@ -1407,6 +1534,7 @@ mod tests {
 
     #[test]
     fn validate_accepts_template_manifest() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let manifest = ContributionManifest::template();
         let report = validate_contribution_manifest(&manifest);
         assert!(report.valid);
@@ -1414,6 +1542,7 @@ mod tests {
 
     #[test]
     fn package_validation_checks_artifact_hashes() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let base = std::env::temp_dir().join(format!("ferrumyx-fed-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base).expect("temp dir");
 
@@ -1449,6 +1578,7 @@ mod tests {
 
     #[tokio::test]
     async fn export_package_writes_manifest_and_artifacts() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let base = std::env::temp_dir().join(format!("ferrumyx-fed-export-{}", uuid::Uuid::new_v4()));
         let db_dir = base.join("db");
         let export_dir = base.join("export");
@@ -1478,6 +1608,7 @@ mod tests {
 
     #[tokio::test]
     async fn sign_and_verify_package_manifest() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let base = std::env::temp_dir().join(format!("ferrumyx-fed-sign-{}", uuid::Uuid::new_v4()));
         let db_dir = base.join("db");
         let export_dir = base.join("export");
@@ -1537,16 +1668,24 @@ mod tests {
 
     #[tokio::test]
     async fn merge_queue_submit_and_approve_updates_lineage() {
+        let _guard = federation_test_lock().lock().expect("lock federation tests");
         let base = std::env::temp_dir().join(format!(
             "ferrumyx-fed-merge-{}",
             uuid::Uuid::new_v4()
         ));
         let db_dir = base.join("db");
         let export_dir = base.join("export");
+        let keys_dir = base.join("keys");
+        let trust_registry = base.join("trust_registry.json");
         let merge_queue = base.join("merge_queue.json");
         let lineage = base.join("canonical_lineage.json");
         std::fs::create_dir_all(&db_dir).expect("create db dir");
         std::fs::create_dir_all(&export_dir).expect("create export dir");
+        std::env::set_var("FERRUMYX_FED_KEYS_DIR", keys_dir.to_string_lossy().to_string());
+        std::env::set_var(
+            "FERRUMYX_FED_TRUST_REGISTRY_PATH",
+            trust_registry.to_string_lossy().to_string(),
+        );
         std::env::set_var(
             "FERRUMYX_FED_MERGE_QUEUE_PATH",
             merge_queue.to_string_lossy().to_string(),
@@ -1567,6 +1706,11 @@ mod tests {
         )
         .await
         .expect("export package");
+        sign_contribution_package(PackageSignRequest {
+            package_dir: export.package_dir.clone(),
+            key_name: Some("merge-key".to_string()),
+        })
+        .expect("sign package");
 
         let submitted = submit_package_for_merge(MergeSubmitRequest {
             package_dir: export.package_dir.clone(),
@@ -1591,6 +1735,8 @@ mod tests {
             .iter()
             .any(|snap| snap.snapshot_id == submitted.entry.snapshot_id));
 
+        std::env::remove_var("FERRUMYX_FED_KEYS_DIR");
+        std::env::remove_var("FERRUMYX_FED_TRUST_REGISTRY_PATH");
         std::env::remove_var("FERRUMYX_FED_MERGE_QUEUE_PATH");
         std::env::remove_var("FERRUMYX_FED_CANONICAL_LINEAGE_PATH");
         let _ = std::fs::remove_dir_all(&base);

@@ -8,6 +8,7 @@ use crate::schema::Chunk;
 use crate::schema_arrow::{chunk_to_record, record_to_chunk};
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Repository for chunk operations.
@@ -110,6 +111,42 @@ impl ChunkRepository {
         }
 
         Ok(chunks)
+    }
+
+    /// Find chunks by IDs in one query.
+    pub async fn find_by_ids(&self, ids: &[uuid::Uuid]) -> Result<HashMap<uuid::Uuid, Chunk>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut uniq = ids.to_vec();
+        uniq.sort_unstable();
+        uniq.dedup();
+
+        let mut quoted = Vec::with_capacity(uniq.len());
+        for id in &uniq {
+            quoted.push(format!("'{}'", id));
+        }
+        let filter = format!("id IN ({})", quoted.join(","));
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_CHUNKS)
+            .execute()
+            .await?;
+
+        let mut stream = table.query().only_if(&filter).execute().await?;
+        let mut out = HashMap::with_capacity(uniq.len());
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            for i in 0..batch.num_rows() {
+                let chunk = record_to_chunk(&batch, i)?;
+                out.insert(chunk.id, chunk);
+            }
+        }
+
+        Ok(out)
     }
 
     /// Delete all chunks for a paper.
@@ -273,5 +310,67 @@ impl ChunkRepository {
 
         self.insert(&updated).await?;
         Ok(())
+    }
+
+    /// Batch-update chunk embeddings using a single merge-upsert operation.
+    pub async fn update_embeddings_batch(
+        &self,
+        updates: &[(uuid::Uuid, Vec<f32>)],
+    ) -> Result<usize> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        let mut latest_by_id: HashMap<uuid::Uuid, Vec<f32>> = HashMap::with_capacity(updates.len());
+        for (id, embedding) in updates {
+            latest_by_id.insert(*id, embedding.clone());
+        }
+
+        let ids: Vec<uuid::Uuid> = latest_by_id.keys().copied().collect();
+        let existing = self.find_by_ids(&ids).await?;
+        if existing.is_empty() {
+            return Ok(0);
+        }
+
+        let mut rows = Vec::with_capacity(existing.len());
+        for (id, embedding) in latest_by_id {
+            if let Some(chunk) = existing.get(&id) {
+                let updated = Chunk {
+                    id: chunk.id,
+                    paper_id: chunk.paper_id,
+                    chunk_index: chunk.chunk_index,
+                    token_count: chunk.token_count,
+                    content: chunk.content.clone(),
+                    embedding: Some(embedding),
+                    embedding_large: None,
+                    section: chunk.section.clone(),
+                    page: chunk.page,
+                    created_at: chunk.created_at,
+                };
+                rows.push(updated);
+            }
+        }
+
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        let table = self
+            .db
+            .connection()
+            .open_table(crate::schema::TABLE_CHUNKS)
+            .execute()
+            .await?;
+
+        let records: Vec<arrow_array::RecordBatch> =
+            rows.iter().map(chunk_to_record).collect::<Result<_>>()?;
+        let schema = records[0].schema();
+        let iter = arrow_array::RecordBatchIterator::new(records.into_iter().map(Ok), schema);
+
+        let mut builder = table.merge_insert(&["id"]);
+        builder.when_matched_update_all(None);
+        builder.execute(Box::new(iter)).await?;
+
+        Ok(rows.len())
     }
 }
