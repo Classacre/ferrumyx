@@ -5,11 +5,9 @@
 use crate::database::Database;
 use crate::error::Result;
 use crate::schema::EntityMention;
-use crate::schema_arrow::{entity_mention_to_record, record_to_entity_mention};
-use arrow_array::Array;
-use futures::StreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio_postgres::{Row, types::ToSql};
 
 /// Repository for entity mention operations.
 #[derive(Clone)]
@@ -24,18 +22,22 @@ impl EntityMentionRepository {
 
     /// Insert a new entity mention.
     pub async fn insert(&self, mention: &EntityMention) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let record = entity_mention_to_record(mention)?;
-        let schema = record.schema();
-        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
-
-        table.add(iter).execute().await?;
+        let client = self.db.client();
+        client.execute(
+            "INSERT INTO entity_mentions (id, entity_id, chunk_id, paper_id, start_offset, end_offset, text, confidence, context, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())",
+            &[
+                &mention.id,
+                &mention.entity_id,
+                &mention.chunk_id,
+                &mention.paper_id,
+                &mention.start_offset,
+                &mention.end_offset,
+                &mention.text,
+                &mention.confidence,
+                &mention.context,
+            ],
+        ).await?;
         Ok(())
     }
 
@@ -44,224 +46,93 @@ impl EntityMentionRepository {
         if mentions.is_empty() {
             return Ok(());
         }
-
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let records: Vec<arrow_array::RecordBatch> = mentions
-            .iter()
-            .map(entity_mention_to_record)
-            .collect::<Result<_>>()?;
-
-        let schema = records[0].schema();
-        let iter = arrow_array::RecordBatchIterator::new(records.into_iter().map(Ok), schema);
-
-        table.add(iter).execute().await?;
+        for mention in mentions {
+            self.insert(mention).await?;
+        }
         Ok(())
     }
 
     /// Find a mention by ID.
     pub async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<EntityMention>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("id = '{}'", id))
-            .execute()
-            .await?;
-
-        if let Some(batch) = stream.next().await {
-            let batch = batch?;
-            if batch.num_rows() > 0 {
-                return Ok(Some(record_to_entity_mention(&batch, 0)?));
-            }
-        }
-
-        Ok(None)
+        let client = self.db.client();
+        let row = client.query_opt("SELECT * FROM entity_mentions WHERE id = $1", &[&id]).await?;
+        Ok(row.map(mention_from_row))
     }
 
     /// Find all mentions for a chunk.
     pub async fn find_by_chunk_id(&self, chunk_id: uuid::Uuid) -> Result<Vec<EntityMention>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("chunk_id = '{}'", chunk_id))
-            .execute()
-            .await?;
-
-        let mut mentions = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                mentions.push(record_to_entity_mention(&batch, i)?);
-            }
-        }
-
-        Ok(mentions)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM entity_mentions WHERE chunk_id = $1", &[&chunk_id]).await?;
+        Ok(rows.into_iter().map(mention_from_row).collect())
     }
 
     /// Find all mentions for an entity.
     pub async fn find_by_entity_id(&self, entity_id: uuid::Uuid) -> Result<Vec<EntityMention>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("entity_id = '{}'", entity_id))
-            .execute()
-            .await?;
-
-        let mut mentions = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                mentions.push(record_to_entity_mention(&batch, i)?);
-            }
-        }
-
-        Ok(mentions)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM entity_mentions WHERE entity_id = $1", &[&entity_id]).await?;
+        Ok(rows.into_iter().map(mention_from_row).collect())
     }
 
     /// Find all mentions for a paper (via chunks).
     pub async fn find_by_paper_id(&self, paper_id: uuid::Uuid) -> Result<Vec<EntityMention>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("paper_id = '{}'", paper_id))
-            .execute()
-            .await?;
-
-        let mut mentions = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                mentions.push(record_to_entity_mention(&batch, i)?);
-            }
-        }
-
-        Ok(mentions)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM entity_mentions WHERE paper_id = $1", &[&paper_id]).await?;
+        Ok(rows.into_iter().map(mention_from_row).collect())
     }
 
     /// Delete all mentions for a chunk.
     pub async fn delete_by_chunk_id(&self, chunk_id: uuid::Uuid) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        table.delete(&format!("chunk_id = '{}'", chunk_id)).await?;
+        let client = self.db.client();
+        client.execute("DELETE FROM entity_mentions WHERE chunk_id = $1", &[&chunk_id]).await?;
         Ok(())
     }
 
     /// Delete all mentions for a paper.
     pub async fn delete_by_paper_id(&self, paper_id: uuid::Uuid) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        table.delete(&format!("paper_id = '{}'", paper_id)).await?;
+        let client = self.db.client();
+        client.execute("DELETE FROM entity_mentions WHERE paper_id = $1", &[&paper_id]).await?;
         Ok(())
     }
 
     /// Delete a mention by ID.
     pub async fn delete(&self, id: uuid::Uuid) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        table.delete(&format!("id = '{}'", id)).await?;
+        let client = self.db.client();
+        client.execute("DELETE FROM entity_mentions WHERE id = $1", &[&id]).await?;
         Ok(())
     }
 
     /// Count total mentions.
     pub async fn count(&self) -> Result<u64> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        Ok(table.count_rows(None).await? as u64)
+        let client = self.db.client();
+        let row = client.query_one("SELECT COUNT(*) FROM entity_mentions", &[]).await?;
+        Ok(row.get::<_, i64>(0) as u64)
     }
 
     /// Count mentions for an entity.
     pub async fn count_by_entity_id(&self, entity_id: uuid::Uuid) -> Result<u64> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        let count = table
-            .count_rows(Some(format!("entity_id = '{}'", entity_id)))
-            .await?;
-        Ok(count as u64)
+        let client = self.db.client();
+        let row = client.query_one(
+            "SELECT COUNT(*) FROM entity_mentions WHERE entity_id = $1",
+            &[&entity_id],
+        ).await?;
+        Ok(row.get::<_, i64>(0) as u64)
     }
 
     /// Count mentions for a paper.
     pub async fn count_by_paper_id(&self, paper_id: uuid::Uuid) -> Result<u64> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-        let count = table
-            .count_rows(Some(format!("paper_id = '{}'", paper_id)))
-            .await?;
-        Ok(count as u64)
+        let client = self.db.client();
+        let row = client.query_one(
+            "SELECT COUNT(*) FROM entity_mentions WHERE paper_id = $1",
+            &[&paper_id],
+        ).await?;
+        Ok(row.get::<_, i64>(0) as u64)
     }
 
     /// List mentions with pagination.
-    pub async fn list(&self, offset: usize, limit: usize) -> Result<Vec<EntityMention>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table.query().limit(limit).offset(offset).execute().await?;
-
-        let mut mentions = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                mentions.push(record_to_entity_mention(&batch, i)?);
-            }
-        }
-
-        Ok(mentions)
+    pub async fn list(&self, _offset: usize, _limit: usize) -> Result<Vec<EntityMention>> {
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM entity_mentions ORDER BY created_at DESC", &[]).await?;
+        Ok(rows.into_iter().map(mention_from_row).collect())
     }
 
     /// Get entity co-occurrence counts (entities mentioned in the same chunk).
@@ -270,76 +141,38 @@ impl EntityMentionRepository {
         entity_id: uuid::Uuid,
         limit: usize,
     ) -> Result<Vec<(uuid::Uuid, u64)>> {
-        // First get all chunks where this entity is mentioned
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_ENTITY_MENTIONS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("entity_id = '{}'", entity_id))
-            .select(lancedb::query::Select::columns(&["chunk_id"]))
-            .execute()
-            .await?;
-
-        let mut chunk_ids = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            let schema = batch.schema();
-            if let Ok(idx) = schema.index_of("chunk_id") {
-                let arr = batch
-                    .column(idx)
-                    .as_any()
-                    .downcast_ref::<arrow_array::StringArray>()
-                    .unwrap();
-                for i in 0..arr.len() {
-                    if let Ok(id) = uuid::Uuid::parse_str(arr.value(i)) {
-                        chunk_ids.push(id);
-                    }
-                }
-            }
+        let client = self.db.client();
+        let sql = "SELECT entity_id FROM entity_mentions WHERE chunk_id IN (\
+            SELECT chunk_id FROM entity_mentions WHERE entity_id = $1\
+        ) AND entity_id != $2";
+        let params = [
+            &entity_id as &(dyn ToSql + Sync),
+            &entity_id as &(dyn ToSql + Sync),
+        ];
+        let rows = client.query(sql, &params).await?;
+        let mut counts: HashMap<uuid::Uuid, u64> = HashMap::new();
+        for row in rows {
+            let other_id: uuid::Uuid = row.get("entity_id");
+            *counts.entry(other_id).or_insert(0) += 1;
         }
-
-        // Now find other entities in those chunks
-        let mut cooccurrence: std::collections::HashMap<uuid::Uuid, u64> =
-            std::collections::HashMap::new();
-
-        for chunk_id in chunk_ids {
-            let mut stream = table
-                .query()
-                .only_if(&format!("chunk_id = '{}'", chunk_id))
-                .select(lancedb::query::Select::columns(&["entity_id"]))
-                .execute()
-                .await?;
-
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                let schema = batch.schema();
-                if let Ok(idx) = schema.index_of("entity_id") {
-                    let arr = batch
-                        .column(idx)
-                        .as_any()
-                        .downcast_ref::<arrow_array::StringArray>()
-                        .unwrap();
-                    for i in 0..arr.len() {
-                        if let Ok(other_id) = uuid::Uuid::parse_str(arr.value(i)) {
-                            if other_id != entity_id {
-                                *cooccurrence.entry(other_id).or_insert(0) += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Sort by count and take top N
-        let mut sorted: Vec<(uuid::Uuid, u64)> = cooccurrence.into_iter().collect();
+        let mut sorted: Vec<(uuid::Uuid, u64)> = counts.into_iter().collect();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
         sorted.truncate(limit);
-
         Ok(sorted)
+    }
+}
+
+fn mention_from_row(row: Row) -> EntityMention {
+    EntityMention {
+        id: row.get("id"),
+        entity_id: row.get("entity_id"),
+        chunk_id: row.get("chunk_id"),
+        paper_id: row.get("paper_id"),
+        start_offset: row.get("start_offset"),
+        end_offset: row.get("end_offset"),
+        text: row.get("text"),
+        confidence: row.get("confidence"),
+        context: row.get("context"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
     }
 }

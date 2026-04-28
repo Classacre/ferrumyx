@@ -26,7 +26,7 @@ reqwest         = { version = "0.12", features = ["json"] }
 # Web framework
 axum            = { version = "0.8", features = ["ws", "macros"] }
 axum-extra      = { version = "0.10", features = ["typed-header"] }
-tower           = { version = "0.5", features = ["full"] }
+tower           = "0.5"
 tower-http      = { version = "0.6", features = ["fs", "cors", "compression-gzip", "trace"] }
 
 # SSE for streaming

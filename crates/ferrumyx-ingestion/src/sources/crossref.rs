@@ -7,13 +7,8 @@
 //! API: https://api.crossref.org/works/{doi}
 //! Polite pool: set User-Agent with mailto (see CrossRef etiquette)
 
-use async_trait::async_trait;
 use chrono::NaiveDate;
-use reqwest::Client;
-use tracing::{debug, instrument};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const CR_API_BASE: &str = "https://api.crossref.org/works";
 const CR_SEARCH_URL: &str = "https://api.crossref.org/works";

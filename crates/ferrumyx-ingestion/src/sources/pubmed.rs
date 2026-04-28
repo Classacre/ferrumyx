@@ -6,14 +6,9 @@
 //!   efetch:  https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi
 //!   elink:   for PMC ID resolution
 
-use async_trait::async_trait;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use reqwest::Client;
-use tracing::{debug, instrument, warn};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const ESEARCH_URL: &str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const EFETCH_URL: &str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";

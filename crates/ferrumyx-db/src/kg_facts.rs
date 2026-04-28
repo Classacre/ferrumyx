@@ -5,12 +5,9 @@
 use crate::database::Database;
 use crate::error::Result;
 use crate::schema::KgFact;
-use crate::schema_arrow::{kg_fact_to_record, record_to_kg_fact};
-use arrow_array::Array;
-use futures::StreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio_postgres::{Row, types::ToSql};
 
 /// Repository for knowledge graph fact operations.
 #[derive(Clone)]
@@ -25,19 +22,27 @@ impl KgFactRepository {
 
     /// Insert a new fact.
     pub async fn insert(&self, fact: &KgFact) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let record = kg_fact_to_record(fact)?;
-        let schema = record.schema();
-        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
-
-        table.add(iter).execute().await?;
-
+        let client = self.db.client();
+        client.execute(
+            "INSERT INTO kg_facts (id, paper_id, subject_id, subject_name, predicate, object_id, object_name, confidence, evidence, evidence_type, study_type, sample_size, valid_from, valid_until, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())",
+            &[
+                &fact.id,
+                &fact.paper_id,
+                &fact.subject_id,
+                &fact.subject_name,
+                &fact.predicate,
+                &fact.object_id,
+                &fact.object_name,
+                &fact.confidence,
+                &fact.evidence,
+                &fact.evidence_type,
+                &fact.study_type,
+                &fact.sample_size,
+                &fact.valid_from,
+                &fact.valid_until,
+            ],
+        ).await?;
         Ok(())
     }
 
@@ -46,100 +51,31 @@ impl KgFactRepository {
         if facts.is_empty() {
             return Ok(());
         }
-
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let records: Vec<arrow_array::RecordBatch> =
-            facts.iter().map(kg_fact_to_record).collect::<Result<_>>()?;
-
-        let schema = records[0].schema();
-        let iter = arrow_array::RecordBatchIterator::new(records.into_iter().map(Ok), schema);
-
-        table.add(iter).execute().await?;
-
+        for fact in facts {
+            self.insert(fact).await?;
+        }
         Ok(())
     }
 
     /// Find a fact by ID.
     pub async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("id = '{}'", id))
-            .execute()
-            .await?;
-
-        if let Some(batch) = stream.next().await {
-            let batch = batch?;
-            if batch.num_rows() > 0 {
-                return Ok(Some(record_to_kg_fact(&batch, 0)?));
-            }
-        }
-
-        Ok(None)
+        let client = self.db.client();
+        let row = client.query_opt("SELECT * FROM kg_facts WHERE id = $1", &[&id]).await?;
+        Ok(row.map(fact_from_row))
     }
 
     /// Find all facts for a paper.
     pub async fn find_by_paper_id(&self, paper_id: uuid::Uuid) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("paper_id = '{}'", paper_id))
-            .execute()
-            .await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM kg_facts WHERE paper_id = $1", &[&paper_id]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Find all facts where the entity is the subject.
     pub async fn find_by_subject(&self, subject_id: uuid::Uuid) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("subject_id = '{}'", subject_id))
-            .execute()
-            .await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM kg_facts WHERE subject_id = $1", &[&subject_id]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Find all facts where subject_id is within a bounded set.
@@ -151,38 +87,16 @@ impl KgFactRepository {
         if subject_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut uniq = subject_ids.to_vec();
-        uniq.sort_unstable();
-        uniq.dedup();
-        let chunk = chunk_size.max(1).min(200);
-
+        let client = self.db.client();
         let mut facts = Vec::new();
-        for group in uniq.chunks(chunk) {
-            let filter = group
-                .iter()
-                .map(|id| format!("subject_id = '{}'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            if filter.is_empty() {
-                continue;
-            }
-            let mut stream = table
-                .query()
-                .only_if(&format!("({filter})"))
-                .execute()
-                .await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for i in 0..batch.num_rows() {
-                    facts.push(record_to_kg_fact(&batch, i)?);
-                }
+        for group in subject_ids.chunks(chunk_size.max(1).min(200)) {
+            if group.is_empty() { continue; }
+            let placeholders = (1..=group.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT * FROM kg_facts WHERE subject_id IN ({})", placeholders);
+            let params: Vec<&(dyn ToSql + Sync)> = group.iter().map(|id| id as &(dyn ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                facts.push(fact_from_row(row));
             }
         }
         Ok(facts)
@@ -190,85 +104,24 @@ impl KgFactRepository {
 
     /// Find all facts where the entity is the object.
     pub async fn find_by_object(&self, object_id: uuid::Uuid) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("object_id = '{}'", object_id))
-            .execute()
-            .await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM kg_facts WHERE object_id = $1", &[&object_id]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Find all facts with a specific predicate.
     pub async fn find_by_predicate(&self, predicate: &str) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let escaped = predicate.replace('\'', "''");
-
-        let mut stream = table
-            .query()
-            .only_if(&format!("predicate = '{}'", escaped))
-            .execute()
-            .await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM kg_facts WHERE predicate = $1", &[&predicate]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Find all facts involving an entity (as subject or object).
     pub async fn find_by_entity(&self, entity_id: uuid::Uuid) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .only_if(&format!(
-                "subject_id = '{}' OR object_id = '{}'",
-                entity_id, entity_id
-            ))
-            .execute()
-            .await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let sql = "SELECT * FROM kg_facts WHERE subject_id = $1 OR object_id = $1";
+        let rows = client.query(sql, &[&entity_id]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Find facts by subject and predicate.
@@ -277,87 +130,40 @@ impl KgFactRepository {
         subject_id: uuid::Uuid,
         predicate: &str,
     ) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let escaped = predicate.replace('\'', "''");
-        let filter = format!(
-            "subject_id = '{}' AND predicate = '{}'",
-            subject_id, escaped
-        );
-
-        let mut stream = table.query().only_if(&filter).execute().await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+        let client = self.db.client();
+        let rows = client.query(
+            "SELECT * FROM kg_facts WHERE subject_id = $1 AND predicate = $2",
+            &[&subject_id, &predicate],
+        ).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Delete a fact by ID.
     pub async fn delete(&self, id: uuid::Uuid) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-        table.delete(&format!("id = '{}'", id)).await?;
+        let client = self.db.client();
+        client.execute("DELETE FROM kg_facts WHERE id = $1", &[&id]).await?;
         Ok(())
     }
 
     /// Delete all facts for a paper.
     pub async fn delete_by_paper_id(&self, paper_id: uuid::Uuid) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-        table.delete(&format!("paper_id = '{}'", paper_id)).await?;
+        let client = self.db.client();
+        client.execute("DELETE FROM kg_facts WHERE paper_id = $1", &[&paper_id]).await?;
         Ok(())
     }
 
     /// Count total facts.
     pub async fn count(&self) -> Result<u64> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-        Ok(table.count_rows(None).await? as u64)
+        let client = self.db.client();
+        let row = client.query_one("SELECT COUNT(*) FROM kg_facts", &[]).await?;
+        Ok(row.get::<_, i64>(0) as u64)
     }
 
     /// List facts with pagination.
-    pub async fn list(&self, offset: usize, limit: usize) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table.query().limit(limit).offset(offset).execute().await?;
-
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-
-        Ok(facts)
+    pub async fn list(&self, _offset: usize, _limit: usize) -> Result<Vec<KgFact>> {
+        let client = self.db.client();
+        let rows = client.query("SELECT * FROM kg_facts ORDER BY created_at DESC", &[]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// List facts with optional DB-side filtering for performance.
@@ -368,86 +174,35 @@ impl KgFactRepository {
         predicate: Option<&str>,
         limit: usize,
     ) -> Result<Vec<KgFact>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
+        let client = self.db.client();
         let mut conditions = Vec::new();
         if let Some(g) = gene_term.map(str::trim).filter(|s| !s.is_empty()) {
-            let esc = g.replace('\'', "''");
-            conditions.push(format!(
-                "(subject_name LIKE '%{esc}%' OR object_name LIKE '%{esc}%' OR predicate LIKE '%{esc}%')"
-            ));
+            conditions.push(format!("(subject_name ILIKE '%{}%' OR object_name ILIKE '%{}%' OR predicate ILIKE '%{}%')", g, g, g));
         }
-
         if let Some(q) = query_term.map(str::trim).filter(|s| !s.is_empty()) {
-            let esc = q.replace('\'', "''");
-            conditions.push(format!(
-                "(subject_name LIKE '%{esc}%' OR object_name LIKE '%{esc}%' OR predicate LIKE '%{esc}%')"
-            ));
+            conditions.push(format!("(subject_name ILIKE '%{}%' OR object_name ILIKE '%{}%' OR predicate ILIKE '%{}%')", q, q, q));
         }
-
-        if let Some(p) = predicate
-            .map(str::trim)
-            .filter(|s| !s.is_empty() && *s != "all")
-        {
-            let esc = p.replace('\'', "''");
-            conditions.push(format!("predicate = '{esc}'"));
+        if let Some(p) = predicate.map(str::trim).filter(|s| !s.is_empty() && *s != "all") {
+            conditions.push(format!("predicate = '{}'", p));
         }
-
-        let mut query = table.query().limit(limit);
-        if !conditions.is_empty() {
-            query = query.only_if(&conditions.join(" AND "));
-        }
-
-        let mut stream = query.execute().await?;
-        let mut facts = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            for i in 0..batch.num_rows() {
-                facts.push(record_to_kg_fact(&batch, i)?);
-            }
-        }
-        Ok(facts)
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            "WHERE ".to_owned() + &conditions.join(" AND ")
+        };
+        let sql = format!("SELECT * FROM kg_facts {} ORDER BY created_at DESC LIMIT {}", where_clause, limit);
+        let rows = client.query(&sql, &[]).await?;
+        Ok(rows.into_iter().map(fact_from_row).collect())
     }
 
     /// Get distinct predicates.
     pub async fn get_predicates(&self) -> Result<Vec<String>> {
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut stream = table
-            .query()
-            .select(lancedb::query::Select::columns(&["predicate"]))
-            .execute()
-            .await?;
-
-        let mut predicates = std::collections::HashSet::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            let schema = batch.schema();
-            if let Ok(idx) = schema.index_of("predicate") {
-                let arr = batch
-                    .column(idx)
-                    .as_any()
-                    .downcast_ref::<arrow_array::StringArray>()
-                    .unwrap();
-                for i in 0..arr.len() {
-                    if !arr.is_null(i) {
-                        predicates.insert(arr.value(i).to_string());
-                    }
-                }
-            }
-        }
-
-        Ok(predicates.into_iter().collect())
+        let client = self.db.client();
+        let rows = client.query("SELECT DISTINCT predicate FROM kg_facts", &[]).await?;
+        let mut predicates = rows.iter().map(|row| row.get::<_, String>("predicate")).collect::<Vec<_>>();
+        predicates.sort();
+        predicates.dedup();
+        Ok(predicates)
     }
 
     /// Count facts per subject_id for a bounded set of subjects.
@@ -459,60 +214,40 @@ impl KgFactRepository {
         if subject_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(crate::schema::TABLE_KG_FACTS)
-            .execute()
-            .await?;
-
-        let mut uniq = subject_ids.to_vec();
-        uniq.sort_unstable();
-        uniq.dedup();
-        let chunk = chunk_size.max(1).min(500);
-
-        let mut out: HashMap<uuid::Uuid, u32> = HashMap::new();
-        for group in uniq.chunks(chunk) {
-            let filter = group
-                .iter()
-                .map(|id| format!("subject_id = '{}'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            if filter.is_empty() {
-                continue;
-            }
-            let mut stream = table
-                .query()
-                .only_if(&format!("({filter})"))
-                .select(lancedb::query::Select::columns(&["subject_id"]))
-                .execute()
-                .await?;
-
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                let schema = batch.schema();
-                let subj_idx = match schema.index_of("subject_id") {
-                    Ok(i) => i,
-                    Err(_) => continue,
-                };
-                let subj_arr = match batch
-                    .column(subj_idx)
-                    .as_any()
-                    .downcast_ref::<arrow_array::StringArray>()
-                {
-                    Some(a) => a,
-                    None => continue,
-                };
-                for row in 0..batch.num_rows() {
-                    if subj_arr.is_null(row) {
-                        continue;
-                    }
-                    if let Ok(id) = uuid::Uuid::parse_str(subj_arr.value(row)) {
-                        *out.entry(id).or_insert(0) += 1;
-                    }
-                }
+        let client = self.db.client();
+        let mut out = HashMap::new();
+        for group in subject_ids.chunks(chunk_size.max(1).min(500)) {
+            if group.is_empty() { continue; }
+            let placeholders = (1..=group.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT subject_id, COUNT(*) as cnt FROM kg_facts WHERE subject_id IN ({}) GROUP BY subject_id", placeholders);
+            let params: Vec<&(dyn ToSql + Sync)> = group.iter().map(|id| id as &(dyn ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                let subject_id: uuid::Uuid = row.get("subject_id");
+                let cnt: i64 = row.get("cnt");
+                out.insert(subject_id, cnt as u32);
             }
         }
         Ok(out)
+    }
+}
+
+fn fact_from_row(row: Row) -> KgFact {
+    KgFact {
+        id: row.get("id"),
+        paper_id: row.get("paper_id"),
+        subject_id: row.get("subject_id"),
+        subject_name: row.get("subject_name"),
+        predicate: row.get("predicate"),
+        object_id: row.get("object_id"),
+        object_name: row.get("object_name"),
+        confidence: row.get::<_, f32>("confidence"),
+        evidence: row.get("evidence"),
+        evidence_type: row.get("evidence_type"),
+        study_type: row.get("study_type"),
+        sample_size: row.get::<_, Option<i32>>("sample_size"),
+        valid_from: row.get::<_, chrono::DateTime<chrono::Utc>>("valid_from"),
+        valid_until: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>("valid_until"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
     }
 }

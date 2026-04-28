@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::ingestion_tool::{
+use super::embedding_runtime::{
     load_runtime_defaults, resolve_embedding_runtime, ResolvedEmbeddingRuntime,
 };
 use super::runtime_profile::RuntimeProfile;

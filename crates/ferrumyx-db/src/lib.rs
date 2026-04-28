@@ -40,11 +40,10 @@ pub mod kg_facts;
 pub mod papers;
 pub mod phase4_signals;
 pub mod schema;
-pub mod schema_arrow;
 pub mod target_scores;
 
 pub use chunks::ChunkRepository;
-pub use database::{Database, DatabaseStats};
+pub use database::{Database, };
 pub use ent_stage::{EntEnrichment, EntStageRepository};
 pub use entities::EntityRepository;
 pub use entity_mentions::EntityMentionRepository;
@@ -75,3 +74,5 @@ pub use schema::{
     EntReactomeGene, EntTcgaSurvival,
 };
 pub use target_scores::TargetScoreRepository;
+
+

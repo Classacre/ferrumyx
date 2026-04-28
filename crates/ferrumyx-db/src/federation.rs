@@ -1387,8 +1387,8 @@ async fn collect_table_counts(db: &Database) -> Result<BTreeMap<String, u64>> {
     let mut out = BTreeMap::new();
     for name in names {
         let count = if db.table_exists(name).await.unwrap_or(false) {
-            let table = db.connection().open_table(name).execute().await?;
-            table.count_rows(None).await? as u64
+            let row = db.client().query_one(&format!("SELECT COUNT(*) FROM {}", name), &[]).await?;
+            row.get::<_, i64>(0) as u64
         } else {
             0
         };
@@ -1742,3 +1742,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 }
+

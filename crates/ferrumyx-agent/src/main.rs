@@ -1,22 +1,25 @@
 //! Ferrumyx — Autonomous Oncology Drug Discovery Engine
 //! Entry point for the agent binary.
 
+// Standard library
 use std::collections::{HashMap, HashSet};
-use std::io::IsTerminal;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-mod config;
-mod tools;
-use ferrumyx_runtime::llm::{CooldownConfig, FailoverProvider};
-use rig::client::CompletionClient;
-use rig::providers::anthropic::Client as AnthropicClient;
-use rig::providers::gemini::Client as GeminiClient;
-use rig::providers::openai::Client as OpenAiClient;
-use rig::providers::openai::CompletionsClient as OpenAiCompletionsClient;
+// Third-party
+use rig::providers::{anthropic::Client as AnthropicClient, gemini::Client as GeminiClient, openai::{Client as OpenAiClient, CompletionsClient as OpenAiCompletionsClient}};
 use serde::Deserialize;
 use tokio::process::Command;
+use tracing::info;
+use tracing_subscriber::EnvFilter;
+
+// Ferrumyx internal crates
+use ferrumyx_runtime::agent::SessionManager;
+use ferrumyx_runtime::llm::{CooldownConfig, FailoverProvider};
+
+mod config;
+mod tools;
 
 /// Returns a Boxed CompletionModel to inject into the Agent.
 /// It natively maps the Ferrumyx config directly to `rig-core` LLM clients.
@@ -748,10 +751,6 @@ fn spawn_background_provider_refresh_scheduler(db: Arc<ferrumyx_db::Database>) {
         }
     });
 }
-
-use ferrumyx_runtime::agent::SessionManager;
-use tracing::info;
-use tracing_subscriber::EnvFilter;
 
 fn main() -> anyhow::Result<()> {
     // Slightly larger per-thread stacks reduce risk of overflow under

@@ -2,15 +2,10 @@
 //!
 //! Endpoint: http://export.arxiv.org/api/query
 
-use async_trait::async_trait;
 use chrono::NaiveDate;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use reqwest::Client;
-use tracing::{debug, instrument, warn};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const ARXIV_API_URL: &str = "http://export.arxiv.org/api/query";
 

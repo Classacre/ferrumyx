@@ -9,19 +9,13 @@
 use crate::dedup::{check_fuzzy_duplicate, hamming_distance, simhash, DedupResult};
 use crate::models::{Author, DocumentChunk, IngestionSource, PaperMetadata};
 use anyhow::Result;
-use arrow_array::{RecordBatch, RecordBatchIterator, StringArray};
-use arrow_schema::{DataType, Field, Schema};
 use ferrumyx_db::{
     chunks::ChunkRepository,
     papers::PaperRepository,
-    schema::{Chunk, Paper, TABLE_CHUNKS, TABLE_INGESTION_AUDIT},
-    schema_arrow::record_to_chunk,
+    schema::{Chunk, Paper},
     Database,
 };
-use futures::StreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
 use serde_json::{json, Value};
-use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -440,34 +434,6 @@ impl IngestionRepository {
         paper_id: Uuid,
     ) -> Result<Vec<(Uuid, String)>> {
         let chunk_repo = ChunkRepository::new(self.db.clone());
-        let table = self
-            .db
-            .connection()
-            .open_table(TABLE_CHUNKS)
-            .execute()
-            .await?;
-        let missing_filter = format!("paper_id = '{}' AND embedding IS NULL", paper_id);
-        match table.query().only_if(&missing_filter).execute().await {
-            Ok(mut stream) => {
-                let mut pending = Vec::new();
-                while let Some(batch) = stream.next().await {
-                    let batch = batch?;
-                    for i in 0..batch.num_rows() {
-                        let chunk = record_to_chunk(&batch, i)?;
-                        pending.push((chunk.id, chunk.content));
-                    }
-                }
-                return Ok(pending);
-            }
-            Err(err) => {
-                tracing::debug!(
-                    paper_id = %paper_id,
-                    error = %err,
-                    "Chunk embedding-null DB filter unsupported; falling back to client-side filtering"
-                );
-            }
-        }
-
         let chunks = chunk_repo.find_by_paper_id(paper_id).await?;
         Ok(chunks
             .into_iter()
@@ -476,48 +442,12 @@ impl IngestionRepository {
             .collect())
     }
 
-    /// Find paper IDs that still have chunks without embeddings, using a bounded
-    /// paper scan as a fallback for manual backfill jobs.
+    /// Find paper IDs that still have chunks without embeddings.
     pub async fn pending_embedding_paper_ids(&self, scan_limit: usize) -> Result<Vec<Uuid>> {
         if scan_limit == 0 {
             return Ok(Vec::new());
         }
 
-        let table = self
-            .db
-            .connection()
-            .open_table(TABLE_CHUNKS)
-            .execute()
-            .await?;
-        let max_chunk_scan = scan_limit.saturating_mul(128).clamp(64, 20_000);
-        if let Ok(mut stream) = table
-            .query()
-            .only_if("embedding IS NULL")
-            .limit(max_chunk_scan)
-            .execute()
-            .await
-        {
-            let mut seen = HashSet::new();
-            let mut out = Vec::new();
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for i in 0..batch.num_rows() {
-                    let chunk = record_to_chunk(&batch, i)?;
-                    if seen.insert(chunk.paper_id) {
-                        out.push(chunk.paper_id);
-                        if out.len() >= scan_limit {
-                            return Ok(out);
-                        }
-                    }
-                }
-            }
-            if !out.is_empty() {
-                return Ok(out);
-            }
-        }
-
-        // Fallback for backends that cannot execute the `embedding IS NULL`
-        // predicate reliably.
         let paper_repo = PaperRepository::new(self.db.clone());
         let papers = paper_repo.list(0, scan_limit).await?;
         let mut out = Vec::new();
@@ -587,38 +517,10 @@ impl IngestionRepository {
         &self,
         action: &str,
         detail: String,
-        paper_id: Option<Uuid>,
+        _paper_id: Option<Uuid>,
     ) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(TABLE_INGESTION_AUDIT)
-            .execute()
-            .await?;
-
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("job_id", DataType::Utf8, true),
-            Field::new("paper_id", DataType::Utf8, true),
-            Field::new("action", DataType::Utf8, false),
-            Field::new("detail", DataType::Utf8, false),
-            Field::new("created_at", DataType::Utf8, false),
-        ]));
-
-        let now = chrono::Utc::now().to_rfc3339();
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(StringArray::from(vec![Uuid::new_v4().to_string()])),
-                Arc::new(StringArray::from(vec![Option::<String>::None])),
-                Arc::new(StringArray::from(vec![paper_id.map(|v| v.to_string())])),
-                Arc::new(StringArray::from(vec![action.to_string()])),
-                Arc::new(StringArray::from(vec![detail])),
-                Arc::new(StringArray::from(vec![now])),
-            ],
-        )?;
-        let iter = RecordBatchIterator::new(vec![Ok(batch)], schema);
-        table.add(iter).execute().await?;
+        // STUBBED: Would write to ingestion_audit table via LanceDB
+        tracing::debug!(action = action, detail = %detail, "Ingestion audit (stubbed)");
         Ok(())
     }
 }

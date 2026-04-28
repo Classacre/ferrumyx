@@ -1,8 +1,10 @@
 //! Knowledge graph fact extraction from text.
 //! Ported from Python scripts/build_kg.py and extended for typed pair extraction.
 
+use crate::ner::builtin_lexicons::{CELL_LINE_HINTS, CHEMICAL_HINTS, PATHWAY_HINTS};
 use regex::Regex;
 use std::collections::HashSet;
+use std::sync::OnceLock;
 
 /// Cancer type mappings from keywords to TCGA codes.
 const CANCER_KEYWORDS: &[(&str, &str)] = &[
@@ -34,62 +36,7 @@ const CANCER_KEYWORDS: &[(&str, &str)] = &[
     ("sarcoma", "SARC"),
 ];
 
-/// Built-in short lexicon for common targeted therapeutics.
-const CHEMICAL_HINTS: &[&str] = &[
-    "erlotinib",
-    "gefitinib",
-    "osimertinib",
-    "afatinib",
-    "sotorasib",
-    "adagrasib",
-    "trametinib",
-    "selumetinib",
-    "imatinib",
-    "dasatinib",
-    "nilotinib",
-    "palbociclib",
-    "ribociclib",
-    "abemaciclib",
-    "olaparib",
-    "niraparib",
-    "talazoparib",
-    "cisplatin",
-    "carboplatin",
-    "paclitaxel",
-    "docetaxel",
-    "bevacizumab",
-];
 
-/// Built-in short lexicon for common pathways.
-const PATHWAY_HINTS: &[&str] = &[
-    "mapk pathway",
-    "pi3k pathway",
-    "jak stat pathway",
-    "m tor pathway",
-    "wnt pathway",
-    "nf kb pathway",
-    "tgf beta pathway",
-    "hedgehog pathway",
-    "ras pathway",
-    "erk signaling pathway",
-    "akt signaling pathway",
-    "egfr signaling pathway",
-    "vegf pathway",
-];
-
-/// Built-in short lexicon for common cell lines.
-const CELL_LINE_HINTS: &[&str] = &[
-    "hela",
-    "hek293",
-    "a549",
-    "h1975",
-    "pc9",
-    "panc1",
-    "mia paca 2",
-    "bxpc3",
-    "ht29",
-    "hct116",
-];
 
 /// Extract cancer type from text.
 pub fn extract_cancer_type(text: &str) -> Option<String> {
@@ -123,7 +70,6 @@ pub fn extract_mutations(text: &str) -> Vec<MutationMention> {
 }
 
 fn lazy_mutation_regex() -> &'static Regex {
-    use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         // Match patterns like: G12D, V600E, KRAS G12C, KRAS_G12D
@@ -132,13 +78,11 @@ fn lazy_mutation_regex() -> &'static Regex {
 }
 
 fn lazy_sentence_split_regex() -> &'static Regex {
-    use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"[.!?;\n]+").unwrap())
 }
 
 fn lazy_drug_suffix_regex() -> &'static Regex {
-    use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
@@ -149,7 +93,6 @@ fn lazy_drug_suffix_regex() -> &'static Regex {
 }
 
 fn lazy_pathway_phrase_regex() -> &'static Regex {
-    use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
@@ -160,7 +103,6 @@ fn lazy_pathway_phrase_regex() -> &'static Regex {
 }
 
 fn lazy_cell_line_regex() -> &'static Regex {
-    use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\b([A-Z]{1,5}-?\d{2,4}[A-Z0-9]*)\b").unwrap())
 }
@@ -378,7 +320,6 @@ fn env_dictionary_terms(var: &str, max_terms: usize) -> Vec<String> {
 }
 
 fn lazy_chemical_terms() -> &'static Vec<String> {
-    use std::sync::OnceLock;
     static TERMS: OnceLock<Vec<String>> = OnceLock::new();
     TERMS.get_or_init(|| {
         let mut terms: Vec<String> = CHEMICAL_HINTS.iter().map(|s| s.to_string()).collect();
@@ -398,7 +339,6 @@ fn lazy_chemical_terms() -> &'static Vec<String> {
 }
 
 fn lazy_pathway_terms() -> &'static Vec<String> {
-    use std::sync::OnceLock;
     static TERMS: OnceLock<Vec<String>> = OnceLock::new();
     TERMS.get_or_init(|| {
         let mut terms: Vec<String> = PATHWAY_HINTS.iter().map(|s| s.to_string()).collect();
@@ -418,7 +358,6 @@ fn lazy_pathway_terms() -> &'static Vec<String> {
 }
 
 fn lazy_cell_line_terms() -> &'static Vec<String> {
-    use std::sync::OnceLock;
     static TERMS: OnceLock<Vec<String>> = OnceLock::new();
     TERMS.get_or_init(|| {
         let mut terms: Vec<String> = CELL_LINE_HINTS.iter().map(|s| s.to_string()).collect();

@@ -3,12 +3,7 @@
 //!
 //! Endpoint: https://www.ebi.ac.uk/europepmc/webservices/rest/search
 
-use async_trait::async_trait;
-use reqwest::Client;
-use tracing::{debug, instrument};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const EPMC_SEARCH_URL: &str = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 

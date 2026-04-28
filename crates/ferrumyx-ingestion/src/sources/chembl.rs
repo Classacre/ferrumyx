@@ -15,13 +15,8 @@
 //!   - target: Protein target with organism and type
 //!   - activity: IC50, Ki, etc. with assay details
 
-use async_trait::async_trait;
-use reqwest::Client;
+use super::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument};
-
-use super::LiteratureSource;
-use crate::models::PaperMetadata;
 
 const CHEMBL_API_URL: &str = "https://www.ebi.ac.uk/chembl/api/data";
 

@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "ferrumyx"
+name = "ferrumyx-agent"
 path = "src/main.rs"
 
 [dependencies]

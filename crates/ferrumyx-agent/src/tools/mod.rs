@@ -1,5 +1,6 @@
 pub mod autonomous_cycle_tool;
 pub mod embedding_backfill_tool;
+pub mod embedding_runtime;
 pub mod ingestion_tool;
 pub mod lab_autoresearch_tool;
 pub mod lab_planner_tool;

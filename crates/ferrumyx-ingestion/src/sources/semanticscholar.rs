@@ -2,14 +2,10 @@
 //!
 //! Docs: https://api.semanticscholar.org/api-docs/graph
 
-use async_trait::async_trait;
 use chrono::NaiveDate;
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{debug, instrument};
-
-use crate::models::{Author, IngestionSource, PaperMetadata};
-use crate::sources::LiteratureSource;
+use super::prelude::*;
 
 const S2_SEARCH_URL: &str = "https://api.semanticscholar.org/graph/v1/paper/search";
 const S2_PAPER_URL: &str = "https://api.semanticscholar.org/graph/v1/paper";

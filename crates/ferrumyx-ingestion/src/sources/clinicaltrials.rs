@@ -10,12 +10,7 @@
 //!   - doi         = nct_id (e.g. NCT04956640)
 //!   - source      = ClinicalTrials
 
-use async_trait::async_trait;
-use reqwest::Client;
-use tracing::{debug, instrument};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const CT_API_URL: &str = "https://clinicaltrials.gov/api/v2/studies";
 

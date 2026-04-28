@@ -36,9 +36,6 @@ url = "2.5.8"
 strsim = "0.11.1"
 sha2.workspace = true
 futures = "0.3"
-lancedb = "0.26"
-arrow-array = "57"
-arrow-schema = "57"
 
 [features]
 default = []

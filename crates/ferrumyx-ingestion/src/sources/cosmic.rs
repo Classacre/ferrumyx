@@ -7,16 +7,11 @@
 //!
 //! The remote API response schema is normalized leniently because deployments vary.
 
-use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tracing::{debug, warn};
-
-use super::LiteratureSource;
-use crate::models::PaperMetadata;
+use super::prelude::*;
 
 const DEFAULT_BASE_URL: &str = "https://cancer.sanger.ac.uk/cosmic/api";
 const DEFAULT_TIMEOUT_SECS: u64 = 10;

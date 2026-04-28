@@ -6,15 +6,9 @@
 use crate::database::Database;
 use crate::error::Result;
 use crate::schema;
-use crate::schema_arrow::{
-    ent_druggability_to_record, ent_structure_to_record, record_to_ent_compound,
-    record_to_ent_druggability, record_to_ent_gene, record_to_ent_mutation, record_to_ent_pathway,
-    record_to_ent_structure,
-};
-use futures::StreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio_postgres::Row;
 
 #[derive(Debug, Clone, Default)]
 pub struct EntEnrichment {
@@ -54,7 +48,6 @@ impl EntStageRepository {
         for g in genes {
             gene_id_by_symbol.insert(g.symbol.to_uppercase(), g.id);
         }
-
         let gene_ids: Vec<uuid::Uuid> = gene_id_by_symbol.values().copied().collect();
         let mut_by_gene = self.count_mutations_by_gene_ids(&gene_ids).await?;
         let (pdb_by_gene, plddt_by_gene, structure_ids_by_gene) =
@@ -91,7 +84,6 @@ impl EntStageRepository {
             e.pathway_count = *pathways_by_symbol.get(&symbol).unwrap_or(&0);
             out.insert(symbol, e);
         }
-
         Ok(out)
     }
 
@@ -107,7 +99,6 @@ impl EntStageRepository {
         if clean_symbols.is_empty() {
             return Ok(HashMap::new());
         }
-
         let rows = self.fetch_genes_by_symbol(&clean_symbols).await?;
         let mut out = HashMap::new();
         for row in rows {
@@ -120,18 +111,22 @@ impl EntStageRepository {
         &self,
         structure: &crate::schema::EntStructure,
     ) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_STRUCTURES)
-            .execute()
-            .await?;
-        let record = ent_structure_to_record(structure)?;
-        let schema = record.schema();
-        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
-        let mut builder = table.merge_insert(&["gene_id"]);
-        builder.when_matched_update_all(None);
-        builder.execute(Box::new(iter)).await?;
+        let client = self.db.client();
+        client.execute(
+            "INSERT INTO ent_structures (id, gene_id, pdb_ids, best_resolution, exp_method, af_accession, af_plddt_mean, af_plddt_active, has_pdb, has_alphafold, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) \
+             ON CONFLICT (gene_id) DO UPDATE SET \
+             pdb_ids = EXCLUDED.pdb_ids, best_resolution = EXCLUDED.best_resolution, \
+             exp_method = EXCLUDED.exp_method, af_accession = EXCLUDED.af_accession, \
+             af_plddt_mean = EXCLUDED.af_plddt_mean, af_plddt_active = EXCLUDED.af_plddt_active, \
+             has_pdb = EXCLUDED.has_pdb, has_alphafold = EXCLUDED.has_alphafold, updated_at = EXCLUDED.updated_at",
+            &[
+                &structure.id, &structure.gene_id, &structure.pdb_ids,
+                &structure.best_resolution, &structure.exp_method,
+                &structure.af_accession, &structure.af_plddt_mean,
+                &structure.af_plddt_active, &structure.has_pdb, &structure.has_alphafold,
+            ],
+        ).await?;
         Ok(())
     }
 
@@ -139,18 +134,20 @@ impl EntStageRepository {
         &self,
         druggability: &crate::schema::EntDruggability,
     ) -> Result<()> {
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_DRUGGABILITY)
-            .execute()
-            .await?;
-        let record = ent_druggability_to_record(druggability)?;
-        let schema = record.schema();
-        let iter = arrow_array::RecordBatchIterator::new(vec![Ok(record)], schema);
-        let mut builder = table.merge_insert(&["structure_id"]);
-        builder.when_matched_update_all(None);
-        builder.execute(Box::new(iter)).await?;
+        let client = self.db.client();
+        client.execute(
+            "INSERT INTO ent_druggability (id, structure_id, fpocket_score, fpocket_volume, fpocket_pocket_count, dogsitescorer, overall_assessment, assessed_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) \
+             ON CONFLICT (structure_id) DO UPDATE SET \
+             fpocket_score = EXCLUDED.fpocket_score, fpocket_volume = EXCLUDED.fpocket_volume, \
+             fpocket_pocket_count = EXCLUDED.fpocket_pocket_count, dogsitescorer = EXCLUDED.dogsitescorer, \
+             overall_assessment = EXCLUDED.overall_assessment, assessed_at = EXCLUDED.assessed_at",
+            &[
+                &druggability.id, &druggability.structure_id, &druggability.fpocket_score,
+                &druggability.fpocket_volume, &druggability.fpocket_pocket_count,
+                &druggability.dogsitescorer, &druggability.overall_assessment,
+            ],
+        ).await?;
         Ok(())
     }
 
@@ -161,25 +158,16 @@ impl EntStageRepository {
         if !self.db.table_exists(schema::TABLE_ENT_GENES).await? {
             return Ok(Vec::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_GENES)
-            .execute()
-            .await?;
+        let client = self.db.client();
         let mut out = Vec::new();
         for chunk in symbols.chunks(150) {
-            let filter = chunk
-                .iter()
-                .map(|s| format!("symbol = '{}'", escape_sql(s)))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    out.push(record_to_ent_gene(&batch, row)?);
-                }
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT * FROM ent_genes WHERE symbol IN ({})", placeholders);
+            let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = chunk.iter().map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                out.push(row_to_ent_gene(&row));
             }
         }
         Ok(out)
@@ -192,26 +180,18 @@ impl EntStageRepository {
         if gene_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_MUTATIONS).await? {
             return Ok(HashMap::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_MUTATIONS)
-            .execute()
-            .await?;
-        let mut counts: HashMap<uuid::Uuid, u32> = HashMap::new();
+        let client = self.db.client();
+        let mut counts = HashMap::new();
         for chunk in gene_ids.chunks(150) {
-            let filter = chunk
-                .iter()
-                .map(|id| format!("gene_id = '{}'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    let m = record_to_ent_mutation(&batch, row)?;
-                    *counts.entry(m.gene_id).or_insert(0) += 1;
-                }
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT gene_id, COUNT(*) as cnt FROM ent_mutations WHERE gene_id IN ({}) GROUP BY gene_id", placeholders);
+            let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = chunk.iter().map(|id| id as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                let gene_id: uuid::Uuid = row.get("gene_id");
+                let cnt: i64 = row.get("cnt");
+                *counts.entry(gene_id).or_insert(0) += cnt as u32;
             }
         }
         Ok(counts)
@@ -228,42 +208,33 @@ impl EntStageRepository {
         if gene_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_STRUCTURES).await? {
             return Ok((HashMap::new(), HashMap::new(), HashMap::new()));
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_STRUCTURES)
-            .execute()
-            .await?;
-        let mut pdb_count: HashMap<uuid::Uuid, u32> = HashMap::new();
-        let mut plddt_mean: HashMap<uuid::Uuid, Option<f64>> = HashMap::new();
+        let client = self.db.client();
+        let mut pdb_count = HashMap::new();
+        let mut plddt_mean = HashMap::new();
         let mut structure_ids: HashMap<uuid::Uuid, Vec<uuid::Uuid>> = HashMap::new();
         for chunk in gene_ids.chunks(150) {
-            let filter = chunk
-                .iter()
-                .map(|id| format!("gene_id = '{}'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    let s = record_to_ent_structure(&batch, row)?;
-                    if s.has_pdb {
-                        *pdb_count.entry(s.gene_id).or_insert(0) += 1;
-                    }
-                    let incoming = s.af_plddt_mean.map(|v| v as f64);
-                    plddt_mean
-                        .entry(s.gene_id)
-                        .and_modify(|cur| {
-                            *cur = match (*cur, incoming) {
-                                (Some(a), Some(b)) => Some(a.max(b)),
-                                (None, Some(b)) => Some(b),
-                                (x, None) => x,
-                            }
-                        })
-                        .or_insert(incoming);
-                    structure_ids.entry(s.gene_id).or_default().push(s.id);
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT * FROM ent_structures WHERE gene_id IN ({})", placeholders);
+            let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = chunk.iter().map(|id| id as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                let s = row_to_ent_structure(&row);
+                if s.has_pdb {
+                    *pdb_count.entry(s.gene_id).or_insert(0) += 1;
                 }
+                let incoming = s.af_plddt_mean.map(|v| v as f64);
+                plddt_mean
+                    .entry(s.gene_id)
+                    .and_modify(|cur: &mut Option<f64>| {
+                        *cur = match (*cur, incoming) {
+                            (Some(a), Some(b)) => Some(a.max(b)),
+                            (None, Some(b)) => Some(b),
+                            (x, None) => x,
+                        }
+                    })
+                    .or_insert(incoming);
+                structure_ids.entry(s.gene_id).or_default().push(s.id);
             }
         }
         Ok((pdb_count, plddt_mean, structure_ids))
@@ -273,33 +244,24 @@ impl EntStageRepository {
         &self,
         structure_ids: &[uuid::Uuid],
     ) -> Result<HashMap<uuid::Uuid, f64>> {
-        if structure_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_DRUGGABILITY).await?
-        {
+        if structure_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_DRUGGABILITY).await? {
             return Ok(HashMap::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_DRUGGABILITY)
-            .execute()
-            .await?;
-        let mut out: HashMap<uuid::Uuid, f64> = HashMap::new();
+        let client = self.db.client();
+        let mut out = HashMap::new();
         for chunk in structure_ids.chunks(150) {
-            let filter = chunk
-                .iter()
-                .map(|id| format!("structure_id = '{}'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    let d = record_to_ent_druggability(&batch, row)?;
-                    if let Some(score) = d.fpocket_score {
-                        out.entry(d.structure_id)
-                            .and_modify(|v| *v = v.max(score as f64))
-                            .or_insert(score as f64);
-                    }
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT structure_id, fpocket_score FROM ent_druggability WHERE structure_id IN ({})", placeholders);
+            let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = chunk.iter().map(|id| id as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+            let rows = client.query(&sql, params.as_slice()).await?;
+            for row in rows {
+                let structure_id: uuid::Uuid = row.get("structure_id");
+                let score: Option<f32> = row.get("fpocket_score");
+                if let Some(score) = score {
+                    out.entry(structure_id)
+                        .and_modify(|v: &mut f64| *v = v.max(score as f64))
+                        .or_insert(score as f64);
                 }
             }
         }
@@ -313,36 +275,22 @@ impl EntStageRepository {
         if gene_ids.is_empty() || !self.db.table_exists(schema::TABLE_ENT_COMPOUNDS).await? {
             return Ok(HashMap::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_COMPOUNDS)
-            .execute()
-            .await?;
+        let client = self.db.client();
         let wanted: HashSet<uuid::Uuid> = gene_ids.iter().copied().collect();
-        let mut seen_pairs: HashSet<(uuid::Uuid, uuid::Uuid)> = HashSet::new();
-        let mut counts: HashMap<uuid::Uuid, u32> = HashMap::new();
+        let mut counts = HashMap::new();
         for chunk in gene_ids.chunks(80) {
-            let filter = chunk
-                .iter()
-                .map(|id| format!("target_gene_ids LIKE '%{}%'", id))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    let c = record_to_ent_compound(&batch, row)?;
-                    let Some(targets) = c.target_gene_ids else {
-                        continue;
-                    };
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT id, target_gene_ids FROM ent_compounds WHERE target_gene_ids IS NOT NULL");
+            let rows = client.query(&sql, &[]).await?;
+            for row in rows {
+                let c = row_to_ent_compound(&row);
+                if let Some(targets) = c.target_gene_ids {
                     for gid in targets {
                         if !wanted.contains(&gid) {
                             continue;
                         }
-                        if seen_pairs.insert((c.id, gid)) {
-                            *counts.entry(gid).or_insert(0) += 1;
-                        }
+                        *counts.entry(gid).or_insert(0) += 1;
                     }
                 }
             }
@@ -354,28 +302,17 @@ impl EntStageRepository {
         if symbols.is_empty() || !self.db.table_exists(schema::TABLE_ENT_PATHWAYS).await? {
             return Ok(HashMap::new());
         }
-        let table = self
-            .db
-            .connection()
-            .open_table(schema::TABLE_ENT_PATHWAYS)
-            .execute()
-            .await?;
-        let mut counts: HashMap<String, u32> = HashMap::new();
+        let client = self.db.client();
+        let mut counts = HashMap::new();
         let wanted: HashSet<String> = symbols.iter().cloned().collect();
         for chunk in symbols.chunks(80) {
-            let filter = chunk
-                .iter()
-                .map(|s| format!("gene_members LIKE '%\"{}\"%'", escape_sql(s)))
-                .collect::<Vec<_>>()
-                .join(" OR ");
-            let mut stream = table.query().only_if(&filter).execute().await?;
-            while let Some(batch) = stream.next().await {
-                let batch = batch?;
-                for row in 0..batch.num_rows() {
-                    let p = record_to_ent_pathway(&batch, row)?;
-                    let Some(members) = p.gene_members else {
-                        continue;
-                    };
+            if chunk.is_empty() { continue; }
+            let placeholders = (1..=chunk.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT gene_members FROM ent_pathways WHERE gene_members IS NOT NULL");
+            let rows = client.query(&sql, &[]).await?;
+            for row in rows {
+                let p = row_to_ent_pathway(&row);
+                if let Some(members) = p.gene_members {
                     for m in members {
                         let key = m.trim().to_uppercase();
                         if wanted.contains(&key) {
@@ -391,4 +328,98 @@ impl EntStageRepository {
 
 fn escape_sql(input: &str) -> String {
     input.replace('\'', "''")
+}
+
+// Row conversion helpers
+fn row_to_ent_gene(row: &Row) -> crate::schema::EntGene {
+    crate::schema::EntGene {
+        id: row.get("id"),
+        hgnc_id: row.get("hgnc_id"),
+        symbol: row.get("symbol"),
+        name: row.get("name"),
+        uniprot_id: row.get("uniprot_id"),
+        ensembl_id: row.get("ensembl_id"),
+        entrez_id: row.get("entrez_id"),
+        gene_biotype: row.get("gene_biotype"),
+        chromosome: row.get("chromosome"),
+        strand: Some(row.get::<_, i16>("strand")),
+        aliases: row.get("aliases"),
+        oncogene_flag: row.get::<_, bool>("oncogene_flag"),
+        tsg_flag: row.get::<_, bool>("tsg_flag"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
+    }
+}
+
+fn row_to_ent_mutation(row: &Row) -> crate::schema::EntMutation {
+    crate::schema::EntMutation {
+        id: row.get("id"),
+        gene_id: row.get("gene_id"),
+        hgvs_p: row.get("hgvs_p"),
+        hgvs_c: row.get("hgvs_c"),
+        rs_id: row.get("rs_id"),
+        aa_ref: row.get("aa_ref"),
+        aa_alt: row.get("aa_alt"),
+        aa_position: Some(row.get::<_, i32>("aa_position")),
+        oncogenicity: row.get("oncogenicity"),
+        hotspot_flag: row.get::<_, bool>("hotspot_flag"),
+        vaf_context: row.get("vaf_context"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
+    }
+}
+
+fn row_to_ent_structure(row: &Row) -> crate::schema::EntStructure {
+    crate::schema::EntStructure {
+        id: row.get("id"),
+        gene_id: row.get("gene_id"),
+        pdb_ids: row.get("pdb_ids"),
+        best_resolution: row.get("best_resolution"),
+        exp_method: row.get("exp_method"),
+        af_accession: row.get("af_accession"),
+        af_plddt_mean: row.get("af_plddt_mean"),
+        af_plddt_active: row.get("af_plddt_active"),
+        has_pdb: row.get::<_, bool>("has_pdb"),
+        has_alphafold: row.get::<_, bool>("has_alphafold"),
+        updated_at: row.get::<_, chrono::DateTime<chrono::Utc>>("updated_at"),
+    }
+}
+
+fn row_to_ent_druggability(row: &Row) -> crate::schema::EntDruggability {
+    crate::schema::EntDruggability {
+        id: row.get("id"),
+        structure_id: row.get("structure_id"),
+        fpocket_score: row.get("fpocket_score"),
+        fpocket_volume: row.get("fpocket_volume"),
+        fpocket_pocket_count: Some(row.get::<_, i32>("fpocket_pocket_count")),
+        dogsitescorer: row.get("dogsitescorer"),
+        overall_assessment: row.get("overall_assessment"),
+        assessed_at: row.get::<_, chrono::DateTime<chrono::Utc>>("assessed_at"),
+    }
+}
+
+fn row_to_ent_compound(row: &Row) -> crate::schema::EntCompound {
+    crate::schema::EntCompound {
+        id: row.get("id"),
+        chembl_id: row.get("chembl_id"),
+        name: row.get("name"),
+        smiles: row.get("smiles"),
+        inchi_key: row.get("inchi_key"),
+        moa: row.get("moa"),
+        patent_status: row.get("patent_status"),
+        max_phase: Some(row.get::<_, i32>("max_phase")),
+        target_gene_ids: row.get::<_, Option<Vec<uuid::Uuid>>>("target_gene_ids"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
+    }
+}
+
+fn row_to_ent_pathway(row: &Row) -> crate::schema::EntPathway {
+    crate::schema::EntPathway {
+        id: row.get("id"),
+        kegg_id: row.get("kegg_id"),
+        reactome_id: row.get("reactome_id"),
+        go_term: row.get("go_term"),
+        name: row.get("name"),
+        gene_members: row.get::<_, Option<Vec<String>>>("gene_members"),
+        source: row.get("source"),
+        created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
+    }
 }

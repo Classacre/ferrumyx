@@ -6,13 +6,8 @@
 //! For search-by-term we fall back to the bioRxiv search endpoint
 //! which returns article metadata matching a query string.
 
-use async_trait::async_trait;
 use chrono::NaiveDate;
-use reqwest::Client;
-use tracing::{debug, instrument, warn};
-
-use super::LiteratureSource;
-use crate::models::{Author, IngestionSource, PaperMetadata};
+use super::prelude::*;
 
 const BIORXIV_SEARCH_URL: &str = "https://api.biorxiv.org/details/biorxiv";
 const MEDRXIV_SEARCH_URL: &str = "https://api.biorxiv.org/details/medrxiv";

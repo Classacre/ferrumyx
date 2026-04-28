@@ -11,6 +11,7 @@ pub mod depmap;
 pub mod depmap_cache;
 pub mod europepmc;
 pub mod gtex;
+pub mod prelude;
 pub mod pubmed;
 pub mod scihub;
 pub mod semanticscholar;

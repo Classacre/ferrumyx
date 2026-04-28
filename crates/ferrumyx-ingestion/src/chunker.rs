@@ -4,8 +4,6 @@
 use crate::models::{DocumentChunk, SectionType};
 use uuid::Uuid;
 
-use uuid; // Ensure uuid is available for Uuid::new_v4() calls
-
 /// Configuration for the chunker.
 #[derive(Debug, Clone)]
 pub struct ChunkerConfig {

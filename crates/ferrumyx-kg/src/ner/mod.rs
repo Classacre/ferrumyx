@@ -1,3 +1,4 @@
+pub mod builtin_lexicons;
 pub mod cancer_normaliser;
 pub mod entity_aggregator;
 pub mod entity_db;
