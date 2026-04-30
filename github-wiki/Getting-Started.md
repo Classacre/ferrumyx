@@ -43,3 +43,10 @@
 - Build failures around protobuf: set `PROTOC` env var.
 - Web starts but chat is offline: chat handler auto-attempts launching `ferrumyx` and falls back gracefully when gateway unavailable.
 - Slow startup during first embedding use: model downloads/cache warm-up occur during initial runs.
+
+## Next Steps
+
+- Learn about [User Guides](User-Guides) for research workflows
+- Integrate via [API Reference](API-Reference) or [CLI Reference](CLI-Reference)
+- For development, see [Developer Setup](Developer-Setup)
+- If issues persist, check [Troubleshooting](Troubleshooting)

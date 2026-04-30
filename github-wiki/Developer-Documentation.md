@@ -463,6 +463,9 @@ cargo flamegraph --bin ferrumyx-agent
 
 # Profile specific function
 cargo flamegraph --bin ferrumyx-agent -- test_target_scoring
+
+# Profile with custom sampling rate
+cargo flamegraph --bin ferrumyx-agent --rate 1000 -- test_integration
 ```
 
 #### Memory Profiling
@@ -472,6 +475,159 @@ cargo build --release --features heap-profiling
 
 # Run with valgrind
 valgrind --tool=massif ./target/release/ferrumyx-agent
+
+# Memory leak detection
+valgrind --tool=memcheck --leak-check=full ./target/release/ferrumyx-agent
+
+# Cache profiling
+valgrind --tool=cachegrind ./target/release/ferrumyx-agent
+```
+
+#### Async Profiling
+```rust
+use tokio::time::{Duration, Instant};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+// Async operation profiling
+pub struct Profiler {
+    start_times: Arc<Mutex<HashMap<String, Instant>>>,
+}
+
+impl Profiler {
+    pub async fn start_operation(&self, operation: &str) {
+        let mut times = self.start_times.lock().await;
+        times.insert(operation.to_string(), Instant::now());
+    }
+
+    pub async fn end_operation(&self, operation: &str) -> Duration {
+        let mut times = self.start_times.lock().await;
+        let start = times.remove(operation).unwrap_or_else(|| Instant::now());
+        start.elapsed()
+    }
+}
+```
+
+### Advanced Optimization Techniques
+
+#### SIMD Vectorization
+```rust
+use std::arch::x86_64::*;
+
+// SIMD-accelerated vector similarity calculation
+#[target_feature(enable = "avx2")]
+unsafe fn cosine_similarity_avx2(a: &[f32], b: &[f32]) -> f32 {
+    let mut sum_ab = _mm256_setzero_ps();
+    let mut sum_aa = _mm256_setzero_ps();
+    let mut sum_bb = _mm256_setzero_ps();
+
+    for i in (0..a.len()).step_by(8) {
+        let va = _mm256_loadu_ps(a.as_ptr().add(i));
+        let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+        sum_ab = _mm256_fmadd_ps(va, vb, sum_ab);
+        sum_aa = _mm256_fmadd_ps(va, va, sum_aa);
+        sum_bb = _mm256_fmadd_ps(vb, vb, sum_bb);
+    }
+
+    let ab = _mm256_reduce_add_ps(sum_ab);
+    let aa = _mm256_reduce_add_ps(sum_aa);
+    let bb = _mm256_reduce_add_ps(sum_bb);
+
+    ab / (aa.sqrt() * bb.sqrt())
+}
+```
+
+#### Lock-Free Data Structures
+```rust
+use crossbeam::queue::SegQueue;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+// Lock-free job queue for high-throughput processing
+pub struct JobQueue<T> {
+    queue: SegQueue<T>,
+    size: AtomicUsize,
+}
+
+impl<T> JobQueue<T> {
+    pub fn push(&self, item: T) {
+        self.queue.push(item);
+        self.size.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn pop(&self) -> Option<T> {
+        let item = self.queue.pop()?;
+        self.size.fetch_sub(1, Ordering::Relaxed);
+        Some(item)
+    }
+
+    pub fn len(&self) -> usize {
+        self.size.load(Ordering::Relaxed)
+    }
+}
+```
+
+#### Memory Pool Allocation
+```rust
+use std::alloc::{alloc, dealloc, Layout};
+use std::ptr::NonNull;
+
+// Custom memory pool for frequent allocations
+pub struct MemoryPool {
+    blocks: Vec<NonNull<u8>>,
+    free_list: Vec<NonNull<u8>>,
+    block_size: usize,
+    layout: Layout,
+}
+
+impl MemoryPool {
+    pub fn new(block_size: usize, initial_blocks: usize) -> Self {
+        let layout = Layout::from_size_align(block_size, 8).unwrap();
+
+        let mut blocks = Vec::with_capacity(initial_blocks);
+        let mut free_list = Vec::with_capacity(initial_blocks);
+
+        for _ in 0..initial_blocks {
+            unsafe {
+                let ptr = alloc(layout);
+                if !ptr.is_null() {
+                    let block = NonNull::new_unchecked(ptr);
+                    blocks.push(block);
+                    free_list.push(block);
+                }
+            }
+        }
+
+        Self {
+            blocks,
+            free_list,
+            block_size,
+            layout,
+        }
+    }
+
+    pub fn allocate(&mut self) -> Option<NonNull<u8>> {
+        if let Some(block) = self.free_list.pop() {
+            Some(block)
+        } else {
+            // Allocate new block
+            unsafe {
+                let ptr = alloc(self.layout);
+                if !ptr.is_null() {
+                    let block = NonNull::new_unchecked(ptr);
+                    self.blocks.push(block);
+                    Some(block)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn deallocate(&mut self, block: NonNull<u8>) {
+        self.free_list.push(block);
+    }
+}
 ```
 
 ### Optimization Techniques
@@ -535,6 +691,234 @@ impl CacheManager {
 }
 ```
 
+## Custom Tool Development
+
+### Tool Architecture
+
+Ferrumyx's extensible tool system allows developers to create custom bioinformatics tools that integrate seamlessly with the agent framework.
+
+#### Tool Interface
+
+```rust
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+#[async_trait]
+pub trait Tool: Send + Sync {
+    /// Tool metadata
+    fn metadata(&self) -> ToolMetadata;
+
+    /// Execute the tool with given parameters
+    async fn execute(&self, params: ToolParams) -> Result<ToolResult, ToolError>;
+
+    /// Validate tool parameters
+    fn validate_params(&self, params: &ToolParams) -> Result<(), ToolError>;
+
+    /// Tool capabilities and requirements
+    fn capabilities(&self) -> ToolCapabilities;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolMetadata {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+    pub security_domain: SecurityDomain,
+}
+
+#[derive(Debug, Clone)]
+pub enum SecurityDomain {
+    Orchestrator,  // Safe for main process
+    Container,     // Requires Docker sandbox
+    BioClaw,       // Specialized bioinformatics
+}
+```
+
+#### Example Custom Tool
+
+```rust
+use ferrumyx_runtime_core::tools::{Tool, ToolParams, ToolResult, ToolError};
+
+pub struct CustomGeneAnalyzer {
+    metadata: ToolMetadata,
+    llm_client: Arc<dyn LlmBackend>,
+}
+
+#[async_trait]
+impl Tool for CustomGeneAnalyzer {
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata {
+            name: "custom_gene_analyzer".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Advanced gene expression analysis tool".to_string(),
+            author: "Research Team".to_string(),
+            security_domain: SecurityDomain::BioClaw,
+        }
+    }
+
+    async fn execute(&self, params: ToolParams) -> Result<ToolResult, ToolError> {
+        // Extract parameters
+        let gene_symbol = params.get_string("gene_symbol")?;
+        let cancer_type = params.get_string("cancer_type")?;
+
+        // Perform analysis
+        let expression_data = self.analyze_expression(&gene_symbol, &cancer_type).await?;
+        let pathways = self.identify_pathways(&expression_data).await?;
+
+        // Generate LLM-powered insights
+        let insights = self.llm_client.complete(LlmRequest {
+            prompt: format!("Analyze gene expression data for {} in {} cancer: {}", gene_symbol, cancer_type, expression_data),
+            max_tokens: 500,
+            temperature: 0.7,
+        }).await?;
+
+        Ok(ToolResult::Json(serde_json::json!({
+            "gene_symbol": gene_symbol,
+            "cancer_type": cancer_type,
+            "expression_levels": expression_data,
+            "affected_pathways": pathways,
+            "insights": insights.content
+        })))
+    }
+
+    fn validate_params(&self, params: &ToolParams) -> Result<(), ToolError> {
+        if !params.has_key("gene_symbol") {
+            return Err(ToolError::Validation("gene_symbol parameter required".to_string()));
+        }
+        if !params.has_key("cancer_type") {
+            return Err(ToolError::Validation("cancer_type parameter required".to_string()));
+        }
+        Ok(())
+    }
+
+    fn capabilities(&self) -> ToolCapabilities {
+        ToolCapabilities {
+            requires_gpu: false,
+            max_execution_time: Duration::from_secs(300),
+            memory_limit_mb: 1024,
+        }
+    }
+}
+```
+
+#### Tool Registration
+
+```rust
+// Register custom tool with the agent
+pub async fn register_custom_tools(registry: &mut ToolRegistry) -> Result<(), ToolError> {
+    // Register bioinformatics tools
+    registry.register(Box::new(CustomGeneAnalyzer::new(llm_client.clone()))).await?;
+    registry.register(Box::new(ProteinStructurePredictor::new())).await?;
+
+    // Register orchestrator tools
+    registry.register(Box::new(DataExportTool::new())).await?;
+
+    Ok(())
+}
+```
+
+### Plugin Architecture
+
+#### Plugin Interface
+
+```rust
+#[async_trait]
+pub trait Plugin: Send + Sync {
+    /// Plugin initialization
+    async fn initialize(&self, config: &PluginConfig) -> Result<(), PluginError>;
+
+    /// Plugin hooks
+    fn hooks(&self) -> Vec<PluginHook>;
+
+    /// Plugin metadata
+    fn metadata(&self) -> PluginMetadata;
+}
+
+pub enum PluginHook {
+    PreToolExecution(Box<dyn Fn(&ToolParams) -> Result<(), PluginError> + Send + Sync>),
+    PostToolExecution(Box<dyn Fn(&ToolResult) -> Result<(), PluginError> + Send + Sync>),
+    PreAgentLoop(Box<dyn Fn(&AgentContext) -> Result<(), PluginError> + Send + Sync>),
+    Custom(String, Box<dyn Fn(&serde_json::Value) -> Result<(), PluginError> + Send + Sync>),
+}
+```
+
+#### Example Plugin
+
+```rust
+pub struct AuditPlugin {
+    audit_logger: Arc<AuditLogger>,
+}
+
+#[async_trait]
+impl Plugin for AuditPlugin {
+    async fn initialize(&self, config: &PluginConfig) -> Result<(), PluginError> {
+        // Initialize audit logging
+        self.audit_logger.initialize(config.audit_config.clone()).await?;
+        Ok(())
+    }
+
+    fn hooks(&self) -> Vec<PluginHook> {
+        vec![
+            PluginHook::PreToolExecution(Box::new(|params| {
+                self.audit_logger.log_tool_execution_start(params).await?;
+                Ok(())
+            })),
+            PluginHook::PostToolExecution(Box::new(|result| {
+                self.audit_logger.log_tool_execution_end(result).await?;
+                Ok(())
+            })),
+        ]
+    }
+
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata {
+            name: "audit_plugin".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Comprehensive audit logging plugin".to_string(),
+        }
+    }
+}
+```
+
+### Federated Learning Integration
+
+#### Federated Training Protocol
+
+```rust
+#[async_trait]
+pub trait FederatedLearner: Send + Sync {
+    /// Initialize federated learning
+    async fn initialize_federation(&self, config: FederationConfig) -> Result<(), FederationError>;
+
+    /// Train on local data
+    async fn train_local(&self, data: &[TrainingSample]) -> Result<ModelUpdate, TrainingError>;
+
+    /// Aggregate updates from peers
+    async fn aggregate_updates(&self, updates: Vec<ModelUpdate>) -> Result<ModelUpdate, AggregationError>;
+
+    /// Update local model
+    async fn update_model(&self, update: ModelUpdate) -> Result<(), UpdateError>;
+}
+
+pub struct SecureAggregation {
+    crypto: Arc<CryptoProvider>,
+    peers: Vec<PeerInfo>,
+}
+
+impl SecureAggregation {
+    /// Secure multi-party computation for model aggregation
+    pub async fn aggregate_secure(&self, updates: Vec<ModelUpdate>) -> Result<ModelUpdate, AggregationError> {
+        // Use MPC to aggregate without revealing individual updates
+        let masked_updates = self.mask_updates(updates).await?;
+        let aggregated = self.compute_sum(masked_updates).await?;
+        let unmasked = self.unmask_result(aggregated).await?;
+
+        Ok(unmasked)
+    }
+}
+```
+
 ## Deployment
 
 ### Development Deployment
@@ -545,6 +929,9 @@ docker-compose -f docker-compose.dev.yml up -d
 
 # Run with live reload
 cargo watch -x 'run --bin ferrumyx-web'
+
+# Development with custom tools
+cargo run --bin ferrumyx-agent -- --config dev-config.toml --enable-custom-tools
 ```
 
 ### Production Deployment
@@ -559,11 +946,15 @@ services:
     environment:
       - RUST_LOG=warn
       - DATABASE_URL=${DATABASE_URL}
+      - FERRUMYX_PLUGINS=audit_plugin,metrics_plugin
     secrets:
       - ironclaw_api_key
       - encryption_key
+      - custom_tool_keys
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+    volumes:
+      - ./plugins:/app/plugins:ro
 ```
 
 #### Kubernetes Deployment

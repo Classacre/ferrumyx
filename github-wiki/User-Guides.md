@@ -407,9 +407,12 @@ Develop specialized analysis pipelines:
 
 Explore advanced capabilities:
 
-1. **API Integration**: Build custom applications
-2. **Team Collaboration**: Set up shared research workspaces
-3. **Custom Workflows**: Develop specialized analysis pipelines
-4. **Performance Optimization**: Advanced query techniques
+1. **API Integration**: Build custom applications ([API Reference](API-Reference))
+2. **Team Collaboration**: Set up shared research workspaces ([User Multi-Channel Usage](User-Multi-Channel-Usage))
+3. **Custom Workflows**: Develop specialized analysis pipelines ([User Research Workflows](User-Research-Workflows))
+4. **Performance Optimization**: Advanced query techniques ([Performance & Scaling](Performance-&-Scaling))
 
-For technical details, see the [API Reference](API-Reference) and [Developer Documentation](Developer-Documentation).
+For more details, see:
+- [User Data Analysis](User-Data-Analysis) - In-depth data analysis techniques
+- [CLI Reference](CLI-Reference) - Command-line usage
+- [Developer Documentation](Developer-Documentation) - For custom integrations

@@ -471,6 +471,239 @@ pub trait Channel: Send + Sync {
 - **Security Context**: Request-scoped authentication and authorization
 - **Resource Management**: Connection pooling and rate limiting
 
+## Advanced Architecture Patterns
+
+### Event-Driven Architecture
+
+#### Event Sourcing Pattern
+
+Ferrumyx implements event sourcing for audit trails and system state management:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SystemEvent {
+    UserAction(UserActionEvent),
+    ToolExecution(ToolExecutionEvent),
+    DataIngestion(DataIngestionEvent),
+    SecurityIncident(SecurityEvent),
+}
+
+#[async_trait]
+pub trait EventStore {
+    async fn append(&self, events: Vec<SystemEvent>) -> Result<(), EventStoreError>;
+    async fn load(&self, aggregate_id: Uuid, from_version: u64) -> Result<Vec<SystemEvent>, EventStoreError>;
+    async fn snapshot(&self, aggregate_id: Uuid, state: serde_json::Value) -> Result<(), EventStoreError>;
+}
+
+// Event-sourced aggregate for research sessions
+pub struct ResearchSession {
+    id: Uuid,
+    version: u64,
+    events: Vec<ResearchEvent>,
+    state: ResearchSessionState,
+}
+
+impl ResearchSession {
+    pub fn apply_event(&mut self, event: ResearchEvent) {
+        self.state = self.state.apply(&event);
+        self.events.push(event);
+        self.version += 1;
+    }
+
+    pub async fn save(&self, event_store: &EventStore) -> Result<(), Error> {
+        event_store.append(self.events.clone()).await?;
+        event_store.snapshot(self.id, serde_json::to_value(&self.state)?).await?;
+        Ok(())
+    }
+}
+```
+
+#### CQRS Implementation
+
+Command Query Responsibility Segregation for optimized read/write operations:
+
+```rust
+// Commands (Write Model)
+pub enum ResearchCommand {
+    StartResearchSession { title: String, user_id: Uuid },
+    AddFinding { session_id: Uuid, finding: Finding },
+    UpdateTarget { session_id: Uuid, target_id: Uuid, updates: TargetUpdates },
+}
+
+// Queries (Read Model)
+pub enum ResearchQuery {
+    GetSessionSummary { session_id: Uuid },
+    ListActiveSessions { user_id: Uuid },
+    SearchFindings { query: String, filters: FindingFilters },
+}
+
+// CQRS Handler
+pub struct ResearchCommandHandler {
+    event_store: Arc<EventStore>,
+    read_model: Arc<ReadModel>,
+}
+
+impl ResearchCommandHandler {
+    pub async fn handle(&self, command: ResearchCommand) -> Result<(), CommandError> {
+        match command {
+            ResearchCommand::StartResearchSession { title, user_id } => {
+                let session_id = Uuid::new_v4();
+                let event = ResearchEvent::SessionStarted { session_id, title, user_id };
+
+                // Write to event store
+                self.event_store.append(vec![event]).await?;
+
+                // Update read model
+                self.read_model.update_session_summary(session_id, title, user_id).await?;
+            }
+            // ... other commands
+        }
+        Ok(())
+    }
+}
+```
+
+### Microservices Decomposition
+
+#### Service Boundaries
+
+```rust
+// Service interfaces for loose coupling
+#[async_trait]
+pub trait LiteratureService {
+    async fn search(&self, query: SearchQuery) -> Result<SearchResults, ServiceError>;
+    async fn ingest(&self, source: IngestionSource) -> Result<IngestionResult, ServiceError>;
+}
+
+#[async_trait]
+pub trait KnowledgeGraphService {
+    async fn query(&self, query: KgQuery) -> Result<KgResults, ServiceError>;
+    async fn update(&self, updates: Vec<KgUpdate>) -> Result<(), ServiceError>;
+}
+
+#[async_trait]
+pub trait TargetRankingService {
+    async fn rank(&self, criteria: RankingCriteria) -> Result<RankedTargets, ServiceError>;
+    async fn update_scores(&self, updates: Vec<ScoreUpdate>) -> Result<(), ServiceError>;
+}
+```
+
+#### Service Mesh Integration
+
+```yaml
+# Istio service mesh configuration
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ferrumyx-mesh
+spec:
+  http:
+  - match:
+    - uri:
+        prefix: "/api/literature"
+    route:
+    - destination:
+        host: literature-service
+  - match:
+    - uri:
+        prefix: "/api/kg"
+    route:
+    - destination:
+        host: kg-service
+  - match:
+    - uri:
+        prefix: "/api/ranker"
+    route:
+    - destination:
+        host: ranking-service
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: literature-auth
+spec:
+  selector:
+    matchLabels:
+      app: literature-service
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/default/sa/ferrumyx-web"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+```
+
+### Data Mesh Architecture
+
+#### Domain-Driven Data Ownership
+
+```rust
+// Data product definition
+pub struct DataProduct {
+    pub id: Uuid,
+    pub domain: DataDomain,
+    pub schema: DataSchema,
+    pub quality_gates: Vec<QualityGate>,
+    pub consumers: Vec<DataConsumer>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DataDomain {
+    Literature,
+    KnowledgeGraph,
+    Targets,
+    ClinicalTrials,
+    Genomics,
+}
+
+// Data contract for interoperability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataContract {
+    pub version: String,
+    pub schema: serde_json::Value,
+    pub quality_checks: Vec<String>,
+    pub sla: ServiceLevelAgreement,
+    pub deprecation_policy: DeprecationPolicy,
+}
+```
+
+#### Data Pipeline Orchestration
+
+```rust
+#[async_trait]
+pub trait DataPipeline {
+    async fn execute(&self, config: PipelineConfig) -> Result<PipelineResult, PipelineError>;
+    async fn validate(&self) -> Result<(), ValidationError>;
+    async fn monitor(&self) -> Result<PipelineMetrics, MonitoringError>;
+}
+
+pub struct LiteratureIngestionPipeline {
+    extractors: Vec<Box<dyn DataExtractor>>,
+    transformers: Vec<Box<dyn DataTransformer>>,
+    loaders: Vec<Box<dyn DataLoader>>,
+    monitors: Vec<Box<dyn PipelineMonitor>>,
+}
+
+impl LiteratureIngestionPipeline {
+    pub async fn run(&self) -> Result<(), PipelineError> {
+        // Extract phase
+        let raw_data = self.run_extractors().await?;
+
+        // Transform phase
+        let transformed_data = self.run_transformers(raw_data).await?;
+
+        // Load phase
+        self.run_loaders(transformed_data).await?;
+
+        // Monitor and report
+        self.run_monitors().await?;
+
+        Ok(())
+    }
+}
+```
+
 ## Technology Stack
 
 ### Core Technologies
@@ -636,3 +869,10 @@ services:
 - **Environment Variables**: Runtime configuration management
 
 This architecture provides a solid foundation for Ferrumyx v2.0.0, combining enterprise-grade security with powerful bioinformatics capabilities. The modular design supports both research and production workloads while maintaining strict privacy and compliance requirements.
+
+## Related Documentation
+
+- [Technical Architecture](technical/architecture) - Detailed technical implementation
+- [Security & Compliance](Security-&-Compliance) - Security measures and HIPAA compliance
+- [Performance & Scaling](Performance-&-Scaling) - Scaling and optimization details
+- [Operations Guide](Operations-Guide) - Deployment and maintenance procedures
