@@ -30,7 +30,7 @@ uuid.workspace = true
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "chrono", "uuid", "json"] }
 
 # HTTP client for API checks
-
+axum.workspace = true
 
 # File system operations
 

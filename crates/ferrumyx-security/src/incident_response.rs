@@ -18,7 +18,7 @@ pub struct IncidentResponseEngine {
     /// Response playbooks
     playbooks: Arc<RwLock<HashMap<String, ResponsePlaybook>>>,
     /// Response actions (simplified)
-    response_actions: Arc<RwLock<Vec<Box<dyn Fn(&ResponseStep, &Incident) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> + Send + Sync>>>>,
+    response_actions: Arc<RwLock<Vec<Box<dyn for<'a> Fn(&'a ResponseStep, &'a Incident) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + 'a>> + Send + Sync>>>>,
 }
 
 impl IncidentResponseEngine {
@@ -328,7 +328,7 @@ impl IncidentResponseEngine {
         tracing::info!("Executing action: {} for incident {}", step.name, incident.id);
 
         // Execute action using registered action handlers
-        let actions = self.response_actions.read().await;
+        let actions: tokio::sync::RwLockReadGuard<'_, Vec<Box<dyn for<'a> Fn(&'a ResponseStep, &'a Incident) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + 'a>> + Send + Sync>>> = self.response_actions.read().await;
         let mut executed = false;
 
         for action in actions.iter() {
@@ -495,7 +495,7 @@ impl IncidentResponseEngine {
     }
 
     /// Add response action handler
-    pub async fn add_response_action(&self, action: Box<dyn Fn(&ResponseStep, &Incident) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> + Send + Sync>) {
+    pub async fn add_response_action(&self, action: Box<dyn for<'a> Fn(&'a ResponseStep, &'a Incident) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + 'a>> + Send + Sync>) {
         self.response_actions.write().await.push(action);
     }
 

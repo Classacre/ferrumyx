@@ -6,6 +6,7 @@ use argon2::{Argon2, PasswordHasher};
 use argon2::password_hash::{PasswordHash, PasswordVerifier, SaltString};
 use ring::digest::{Context, SHA256};
 use rand::Rng;
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 
 /// Encryption manager for handling cryptographic operations
 pub struct EncryptionManager {
@@ -41,13 +42,13 @@ impl EncryptionManager {
         let mut result = nonce_bytes.to_vec();
         result.extend(ciphertext);
 
-        Ok(base64::encode(result))
+        Ok(BASE64.encode(result))
     }
 
     /// Decrypt data
     pub fn decrypt(&self, encrypted_data: &str) -> anyhow::Result<Vec<u8>> {
         let cipher = Aes256Gcm::new(&self.key);
-        let data = base64::decode(encrypted_data)?;
+        let data = BASE64.decode(encrypted_data)?;
 
         if data.len() < 12 {
             return Err(anyhow::anyhow!("Invalid encrypted data"));

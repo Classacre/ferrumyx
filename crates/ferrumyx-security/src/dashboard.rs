@@ -69,6 +69,8 @@ impl SecurityDashboard {
         let alerts = self.security_state.correlation_engine.get_active_alerts().await;
         let incidents = self.security_state.incident_response.get_active_incidents().await;
 
+        let system_health = self.calculate_system_health(&monitoring_stats, &correlation_stats, &incident_stats);
+
         let dashboard_data = DashboardData {
             timestamp: Utc::now(),
             monitoring_stats,
@@ -78,7 +80,7 @@ impl SecurityDashboard {
             detection_stats,
             active_alerts: alerts,
             active_incidents: incidents,
-            system_health: self.calculate_system_health(&monitoring_stats, &correlation_stats, &incident_stats),
+            system_health,
         };
 
         *self.dashboard_data.write().await = dashboard_data;
@@ -345,8 +347,9 @@ pub struct SystemHealth {
 }
 
 /// Health status levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum HealthStatus {
+    #[default]
     Healthy,
     Warning,
     Critical,

@@ -30,6 +30,22 @@ pub enum AuditEventType {
     PhiBlocking,
 }
 
+impl std::fmt::Display for AuditEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuditEventType::Authentication => write!(f, "Authentication"),
+            AuditEventType::Authorization => write!(f, "Authorization"),
+            AuditEventType::DataAccess => write!(f, "DataAccess"),
+            AuditEventType::DataModification => write!(f, "DataModification"),
+            AuditEventType::Security => write!(f, "Security"),
+            AuditEventType::Compliance => write!(f, "Compliance"),
+            AuditEventType::PhiAccess => write!(f, "PhiAccess"),
+            AuditEventType::PhiDetection => write!(f, "PhiDetection"),
+            AuditEventType::PhiBlocking => write!(f, "PhiBlocking"),
+        }
+    }
+}
+
 /// Audit event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -271,7 +287,7 @@ impl AuditManager {
         action_taken: String,
         detection_details: serde_json::Value,
     ) -> anyhow::Result<()> {
-        let mut details = serde_json::Map::new();
+        let mut details = HashMap::new();
         details.insert("channel".to_string(), serde_json::Value::String(channel));
         details.insert("content_snippet".to_string(), serde_json::Value::String(content_snippet));
         details.insert("risk_score".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(risk_score).unwrap()));
@@ -304,7 +320,7 @@ impl AuditManager {
         reason: String,
         blocked_content_length: usize,
     ) -> anyhow::Result<()> {
-        let mut details = serde_json::Map::new();
+        let mut details = HashMap::new();
         details.insert("channel".to_string(), serde_json::Value::String(channel));
         details.insert("reason".to_string(), serde_json::Value::String(reason));
         details.insert("blocked_content_length".to_string(), serde_json::Value::Number(blocked_content_length.into()));

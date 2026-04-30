@@ -159,7 +159,11 @@ impl RuntimeSecurityMonitor {
                     severity: Severity::High,
                     description: format!("Security threat detected: {:?}", threats),
                     source: request.source.clone(),
-                    details: serde_json::to_value(&threats).unwrap_or_default(),
+                    details: {
+                        let mut details = HashMap::new();
+                        details.insert("threats".to_string(), serde_json::to_value(&threats).unwrap_or_default());
+                        details
+                    },
                     status: IncidentStatus::Active,
                 }
             ).await;

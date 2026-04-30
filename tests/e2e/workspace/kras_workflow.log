@@ -1,0 +1,11 @@
+Initializing KRAS G12D PDAC discovery cycle...
+Target: KRAS G12D mutation in pancreatic adenocarcinoma
+Data sources: PubMed, EuropePMC, ChEMBL, COSMIC
+Expected results: Top 5 drug targets with confidence >0.8
+Searching PubMed for: KRAS G12D mutation pancreatic cancer
+Searching EuropePMC for: KRAS G12D inhibitors clinical trials
+Building knowledge graph with entities and relations...
+Applying multi-signal scoring algorithm...
+Signals: literature frequency, pathway impact, druggability, clinical evidence
+Top 5 prioritized targets:
+- KRAS: 0.95 (confidence > 0.8)

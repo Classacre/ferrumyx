@@ -197,10 +197,12 @@ impl CorrelationEngine {
 
         for condition in &rule.conditions {
             let result = self.evaluate_condition(condition, events).await;
+            let confidence = result.confidence;
+
             condition_results.push(result);
 
-            if let Some(confidence) = result.confidence {
-                overall_confidence += confidence;
+            if let Some(conf) = confidence {
+                overall_confidence += conf;
             } else {
                 // If any condition fails, the rule doesn't match
                 return None;
@@ -216,7 +218,7 @@ impl CorrelationEngine {
         Some(CorrelationResult {
             rule_id: rule.id.clone(),
             confidence: overall_confidence,
-            matched_conditions: condition_results,
+            matched_conditions: condition_results.clone(),
             evidence: self.gather_evidence(&condition_results, events),
         })
     }

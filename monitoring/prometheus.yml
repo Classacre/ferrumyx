@@ -66,38 +66,38 @@ scrape_configs:
     scrape_interval: 15s
     metrics_path: /metrics
 
-   - job_name: 'bioclaw-wasm'
-     static_configs:
-       - targets: ['bioclaw-wasm:8082']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'bioclaw-wasm'
+    static_configs:
+      - targets: ['bioclaw-wasm:8082']
+    scrape_interval: 15s
+    metrics_path: /metrics
 
-   - job_name: 'ferrumyx-ingestion'
-     static_configs:
-       - targets: ['ferrumyx-ingestion:8083']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'ferrumyx-ingestion'
+    static_configs:
+      - targets: ['ferrumyx-ingestion:8083']
+    scrape_interval: 15s
+    metrics_path: /metrics
 
-   - job_name: 'ferrumyx-kg'
-     static_configs:
-       - targets: ['ferrumyx-kg:8084']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'ferrumyx-kg'
+    static_configs:
+      - targets: ['ferrumyx-kg:8084']
+    scrape_interval: 15s
+    metrics_path: /metrics
 
-   - job_name: 'ferrumyx-ranker'
-     static_configs:
-       - targets: ['ferrumyx-ranker:8085']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'ferrumyx-ranker'
+    static_configs:
+      - targets: ['ferrumyx-ranker:8085']
+    scrape_interval: 15s
+    metrics_path: /metrics
 
-   - job_name: 'ferrumyx-molecules'
-     static_configs:
-       - targets: ['ferrumyx-molecules:8086']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'ferrumyx-molecules'
+    static_configs:
+      - targets: ['ferrumyx-molecules:8086']
+    scrape_interval: 15s
+    metrics_path: /metrics
 
-   - job_name: 'cadvisor'
-     static_configs:
-       - targets: ['cadvisor:8080']
-     scrape_interval: 15s
-     metrics_path: /metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics

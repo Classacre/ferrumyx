@@ -537,7 +537,7 @@ impl UserProfile {
         // Convert to patterns
         for (key, count) in action_counts {
             let pattern = ActivityPattern {
-                action: key,
+                action: key.clone(),
                 average_count: count as f64 / 24.0, // Average per hour over 24 hours
                 standard_deviation: 1.0, // Simplified
             };
