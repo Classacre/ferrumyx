@@ -1,7 +1,15 @@
 * [Home](Home)
-* [Getting Started](Getting-Started)
-* [Workflows and Architecture](Workflows-and-Architecture)
-* [API Reference](API-Reference)
-* [CLI Reference](CLI-Reference)
-* [Configuration and Tunable Parameters](Configuration-and-Tunable-Parameters)
-* [Developer Guide](Developer-Guide)
+* **User Documentation**
+  * [Getting Started](Getting-Started)
+  * [User Guides](User-Guides)
+  * [API Reference](API-Reference)
+  * [CLI Reference](CLI-Reference)
+* **Technical Documentation**
+  * [Architecture & Design](Architecture-&-Design)
+  * [Developer Documentation](Developer-Documentation)
+  * [Security & Compliance](Security-&-Compliance)
+  * [Performance & Scaling](Performance-&-Scaling)
+  * [Configuration and Tunable Parameters](Configuration-and-Tunable-Parameters)
+* **Operations & Maintenance**
+  * [Operations Guide](Operations-Guide)
+  * [Troubleshooting](Troubleshooting)

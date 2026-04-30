@@ -1,99 +1,43 @@
-# Ferrumyx IronClaw Integration E2E Test Suite
+# Tests Directory
 
-This directory contains comprehensive end-to-end tests for the IronClaw-integrated Ferrumyx system, focusing on oncology queries and workflows.
+This directory contains comprehensive testing infrastructure for Ferrumyx.
 
-## Test Structure
+## Files
 
-```
-tests/
-├── e2e/                          # End-to-end test suite
-│   ├── config/                   # Test configurations
-│   ├── data/                     # Sample oncology data
-│   ├── scripts/                  # Test execution scripts
-│   ├── reports/                  # Validation reports
-│   └── scenarios/                # Test scenarios
-├── integration/                  # Component integration tests
-├── performance/                  # Performance benchmarks
-└── security/                     # Security validation tests
-```
+### Test Scripts
+- final_validation_test.py - End-to-end validation testing
+- multi_channel_test.py - Multi-channel interface testing
+- ci_test.yml - CI/CD pipeline testing
 
-## Test Scenarios Covered
+### Performance Testing
+- database_performance_analyzer.py - Database performance analysis
+- deep_performance_analyzer.py - Advanced performance metrics
+- gpu_acceleration_benchmark.py - GPU performance benchmarking
+- performance_optimization_advisor.py - Performance optimization recommendations
+- performance_regression_test.py - Regression detection
+- run_performance_benchmark.py - Benchmark execution
+- scalability_test.py - Load testing and scaling analysis
+- test_benchmark.py - Basic performance testing
+- validate_memory_leaks.py - Memory leak detection
 
-1. **Setup & Environment**
-   - Database initialization
-   - Service startup verification
-   - Sample data ingestion
+## Test Categories
 
-2. **Literature Ingestion**
-   - PubMed/EuropePMC source integration
-   - PDF parsing and chunking
-   - Entity extraction and NER
-   - Embedding generation
+- Unit tests in crates/*/tests/
+- Integration tests in tests/integration/
+- Performance tests in tests/performance/
+- End-to-end tests in tests/e2e/
 
-3. **Knowledge Graph Construction**
-   - Entity normalization
-   - Relation extraction
-   - Fact validation
-   - Graph integrity checks
+## Usage
 
-4. **Target Discovery & Ranking**
-   - Multi-signal scoring
-   - Provider enrichment (DepMap, etc.)
-   - Query processing
-   - Result ranking
+`ash
+# Run all tests
+cargo test --workspace
 
-5. **Multi-Channel Interactions**
-   - Web API endpoints
-   - WhatsApp integration
-   - Chat workflows
+# Run performance tests
+python tests/performance_regression_test.py
 
-6. **WASM Sandboxing**
-   - Tool isolation
-   - Security boundaries
-   - Container orchestration
+# Run E2E tests
+python tests/final_validation_test.py
+`
 
-7. **Autonomous Discovery**
-   - Scheduled tasks
-   - Cycle execution
-   - State persistence
-
-8. **Security Features**
-   - Secrets management
-   - Audit logging
-   - Data classification
-
-9. **Performance Testing**
-   - Workload simulation
-   - Throughput measurements
-   - Resource monitoring
-
-## Running Tests
-
-```bash
-# Run all E2E tests
-./tests/e2e/scripts/run_all_tests.sh
-
-# Run specific test category
-./tests/e2e/scripts/test_ingestion.sh
-./tests/e2e/scripts/test_ranking.sh
-
-# Generate reports
-./tests/e2e/scripts/generate_reports.sh
-```
-
-## Sample Data
-
-Test data includes:
-- Oncology papers (KRAS, pancreatic cancer)
-- Mock clinical trials
-- Sample entities and relations
-- Performance test datasets
-
-## Validation Reports
-
-Tests generate detailed reports including:
-- Test execution logs
-- Performance metrics
-- Coverage analysis
-- Security audit results
-- Integration verification
+See TESTING.md for comprehensive testing documentation.

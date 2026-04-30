@@ -1,14 +1,400 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  blast:
+  ferrumyx-web:
     build:
       context: .
-      dockerfile: Dockerfile.blast
-    container_name: ferrumyx-blast
+      dockerfile: Dockerfile.web
+    ports:
+      - "3000:3000"
+    environment:
+      - FERRUMYX_WEB_ADDR=0.0.0.0:3000
+      - FERRUMYX_DATABASE_URL=${DATABASE_URL}
+      - FERRUMYX_REDIS_URL=${REDIS_URL}
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+      - BIOCLAW_TOOLS_ENABLED=${BIOCLAW_TOOLS_ENABLED}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ironclaw-agent:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # IronClaw Agent Service
+  ironclaw-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+      - IRONCLAW_ENDPOINT=${IRONCLAW_ENDPOINT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - BIOCLAW_WASM_PATH=${BIOCLAW_WASM_PATH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - READONLY_PASSWORD=${READONLY_PASSWORD}
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./seed-dev-data.sql:/docker-entrypoint-initdb.d/seed-dev-data.sql
+      - ./backup-restore.sh:/usr/local/bin/backup-restore.sh
+      - postgres_backup:/var/backups/ferrumyx
+    ports:
+      - "5432:5432"  # PostgreSQL direct access
+      - "6432:6432"  # PgBouncer connection pool
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Redis for Caching/Session Management
+  redis:
+    build:
+      context: .
+      dockerfile: Dockerfile.redis
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Nginx Reverse Proxy
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.webui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - ferrumyx-web
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  # BioClaw Skills as WASM Containers
+  bioclaw-wasm:
+    build:
+      context: .
+      dockerfile: Dockerfile.wasm
+    environment:
+      - BIOCLAW_WASM_PATH=${BIOCLAW_WASM_PATH}
+      - BIOCLAW_TOOLS_ENABLED=${BIOCLAW_TOOLS_ENABLED}
+    volumes:
+      - ./wasm:/app/wasm:ro
+      - bioclaw_cache:/app/cache
+    networks:
+      - ferrumyx-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Multi-channel Gateway Services
+  gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - WHATSAPP_API_KEY=${WHATSAPP_API_KEY}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+    depends_on:
+      - ironclaw-agent
+    networks:
+      - ferrumyx-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Data Ingestion Service
+  ferrumyx-ingestion:
+    build:
+      context: ./crates/ferrumyx-ingestion
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - FERRUMYX_EMBED_USE_GPU=${FERRUMYX_EMBED_USE_GPU:-false}
+      - FERRUMYX_EMBED_BATCH_SIZE=${FERRUMYX_EMBED_BATCH_SIZE:-32}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '2.0'
+        reservations:
+          memory: 4G
+          cpus: '1.0'
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Knowledge Graph Service
+  ferrumyx-kg:
+    build:
+      context: ./crates/ferrumyx-kg
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '3.0'
+        reservations:
+          memory: 2G
+          cpus: '1.5'
+
+  # Target Ranking Service
+  ferrumyx-ranker:
+    build:
+      context: ./crates/ferrumyx-ranker
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Molecule Processing Service
+  ferrumyx-molecules:
+    build:
+      context: ./crates/ferrumyx-molecules
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 1G
+          cpus: '0.75'
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - ferrumyx-network
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
@@ -16,113 +402,194 @@ services:
           memory: 2G
           cpus: '1.0'
         reservations:
-          memory: 512M
+          memory: 1G
           cpus: '0.5'
 
-  pymol:
-    build:
-      context: .
-      dockerfile: Dockerfile.pymol
-    container_name: ferrumyx-pymol
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
           memory: 1G
-          cpus: '1.0'
-
-  fastqc:
-    build:
-      context: .
-      dockerfile: Dockerfile.fastqc
-    container_name: ferrumyx-fastqc
-    volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 2G
           cpus: '1.0'
         reservations:
           memory: 512M
           cpus: '0.5'
 
-  fpocket:
-    build:
-      context: .
-      dockerfile: Dockerfile.fpocket
-    container_name: ferrumyx-fpocket
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '2.0'
+          memory: 512M
+          cpus: '0.5'
         reservations:
-          memory: 1G
-          cpus: '1.0'
+          memory: 256M
+          cpus: '0.25'
 
-  vina:
-    build:
-      context: .
-      dockerfile: Dockerfile.vina
-    container_name: ferrumyx-vina
+    # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+    # NVIDIA GPU Exporter for GPU metrics
+  nvidia-gpu-exporter:
+    image: nvidia/dcgm-exporter:latest
+    volumes:
+      - /var/run/nvidia-container-runtime.sock:/var/run/nvidia-container-runtime.sock:ro
+    ports:
+      - "9400:9400"
+    environment:
+      - DCGM_EXPORTER_LISTEN=:9400
+      - DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/dcp-metrics-included.csv
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # PostgreSQL Exporter for database metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # Loki for log aggregation
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
           cpus: '1.0'
         reservations:
           memory: 512M
           cpus: '0.5'
 
-  rdkit:
-    build:
-      context: .
-      dockerfile: Dockerfile.rdkit
-    container_name: ferrumyx-rdkit
+  # cAdvisor for container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '2.0'
+          memory: 512M
+          cpus: '0.5'
         reservations:
-          memory: 1G
-          cpus: '1.0'
+          memory: 256M
+          cpus: '0.25'
+    privileged: true
 
-  admet:
-    build:
-      context: .
-      dockerfile: Dockerfile.admet
-    container_name: ferrumyx-admet
+  # Promtail for log shipping to Loki
+  promtail:
+    image: grafana/promtail:latest
     volumes:
-      - ./data:/workspace/data:ro
-      - ./output:/workspace/output:rw
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '2.0'
+          memory: 256M
+          cpus: '0.5'
         reservations:
-          memory: 1G
-          cpus: '1.0'
+          memory: 128M
+          cpus: '0.25'
+
+volumes:
+  postgres_data:
+  postgres_backup:
+  redis_data:
+  bioclaw_cache:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  nginx_logs:
+  loki_data:
+
+networks:
+  ferrumyx-network:
+    driver: bridge
+  monitoring-network:
+    driver: bridge
+    internal: true

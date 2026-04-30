@@ -329,5 +329,5 @@ Now that you're familiar with basic usage, explore:
 3. **Team Collaboration**: Set up shared research workspaces
 4. **Custom Workflows**: Develop specialized analysis pipelines
 
-For more detailed information, see the [Developer Guide](Developer-Guide) and [API Reference](API-Reference).</content>
+For more detailed information, see the [Developer Guide](../developer/developer-guide.md) and [API Reference](../developer/api-reference.md).</content>
 <parameter name="filePath">D:\AI\Ferrumyx\USER_GUIDE.md
