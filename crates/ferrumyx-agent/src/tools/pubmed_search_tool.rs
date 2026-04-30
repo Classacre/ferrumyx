@@ -3,6 +3,7 @@
 
 use ferrumyx_runtime::{Tool, ToolError, ToolOutput, Value};
 use std::sync::Arc;
+use async_trait::async_trait;
 
 pub struct PubMedSearchTool {
     db: Arc<ferrumyx_db::Database>,

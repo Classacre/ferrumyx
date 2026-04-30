@@ -1,0 +1,27 @@
+[package]
+name = "ferrumyx-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Async runtime
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# TOML parsing
+toml.workspace = true
+
+# Time handling
+chrono.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true

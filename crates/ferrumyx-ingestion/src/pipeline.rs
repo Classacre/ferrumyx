@@ -37,6 +37,7 @@ use crate::chunker::{chunk_document, ChunkerConfig, DocumentSection};
 use crate::embedding::{
     embed_pending_chunks, embed_pending_chunks_for_papers, EmbeddingClient, EmbeddingConfig,
 };
+
 use crate::models::SectionType;
 use crate::pdf_parser::parse_pdf_sections;
 use crate::repository::IngestionRepository;
@@ -54,6 +55,7 @@ use ferrumyx_db::papers::PaperRepository;
 use ferrumyx_db::schema::{Entity as DbEntity, EntityType as DbEntityType, KgFact};
 use ferrumyx_kg::extraction::build_facts_batch;
 use ferrumyx_kg::ner::{EntityType as NerEntityType, TrieNer};
+
 use sha2::{Digest, Sha256};
 
 static SHARED_NER: OnceCell<Arc<TrieNer>> = OnceCell::const_new();
@@ -331,6 +333,17 @@ pub async fn run_ingestion(
     job: IngestionJob,
     repo: Arc<IngestionRepository>,
     progress_tx: Option<broadcast::Sender<IngestionProgress>>,
+) -> IngestionResult {
+    run_ingestion_with_workers(job, repo, progress_tx, None).await
+}
+
+/// Internal function that can use IronClaw worker pool (placeholder for future implementation)
+#[instrument(skip(repo, progress_tx, _worker_pool))]
+pub async fn run_ingestion_with_workers(
+    job: IngestionJob,
+    repo: Arc<IngestionRepository>,
+    progress_tx: Option<broadcast::Sender<IngestionProgress>>,
+    _worker_pool: Option<()>,
 ) -> IngestionResult {
     let job_id = Uuid::new_v4();
     let t0 = std::time::Instant::now();
@@ -780,6 +793,9 @@ pub async fn run_ingestion(
             let embed_client_clone = embed_client.clone();
             let query_gene_hint_clone = query_gene_hint.clone();
             let defer_embedding_to_global_batch_clone = defer_embedding_to_global_batch;
+
+            // For now, use standard tokio spawn. In full IronClaw integration,
+            // this would use worker pools for distributed processing
             processing_set.spawn(async move {
                 process_single_paper(
                     paper,
@@ -897,9 +913,16 @@ pub async fn run_ingestion(
     let heavy_lane_pending_for_telemetry = !drain_heavy_lane && !heavy_tasks.is_empty();
     if drain_heavy_lane {
         let heavy_total = heavy_tasks.len();
+        let heavy_timeout = std::time::Duration::from_secs(300); // 5 minute timeout per heavy task
         for (heavy_idx, task) in heavy_tasks.into_iter().enumerate() {
             let mut task = task;
+            let task_start = std::time::Instant::now();
             loop {
+                if task_start.elapsed() > heavy_timeout {
+                    warn!("Heavy task {} timed out after {}s, abandoning", heavy_idx + 1, heavy_timeout.as_secs());
+                    task.abort();
+                    break;
+                }
                 match timeout(processing_heartbeat_interval, &mut task).await {
                     Ok(joined) => {
                         match joined {

@@ -1,10 +1,95 @@
 use thiserror::Error;
+use uuid::Uuid;
+use std::time::Duration;
 
+/// Top-level error type for Ferrumyx.
 #[derive(Debug, Error)]
 pub enum FerrumyxError {
-    #[error("Database error: {0}")]
-    Database(String),
+    /// Configuration-related errors.
+    #[error("Configuration error: {0}")]
+    Config(#[from] ConfigError),
 
+    /// Database-related errors.
+    #[error("Database error: {0}")]
+    Database(#[from] DatabaseError),
+
+    /// Channel-related errors.
+    #[error("Channel error: {0}")]
+    Channel(#[from] ChannelError),
+
+    /// LLM provider errors.
+    #[error("LLM error: {0}")]
+    Llm(#[from] LlmError),
+
+    /// Tool execution errors.
+    #[error("Tool error: {0}")]
+    Tool(#[from] ToolError),
+
+    /// Safety/sanitization errors.
+    #[error("Safety error: {0}")]
+    Safety(#[from] SafetyError),
+
+    /// Job-related errors.
+    #[error("Job error: {0}")]
+    Job(#[from] JobError),
+
+    /// Estimation errors.
+    #[error("Estimation error: {0}")]
+    Estimation(#[from] EstimationError),
+
+    /// Evaluation errors.
+    #[error("Evaluation error: {0}")]
+    Evaluation(#[from] EvaluationError),
+
+    /// Self-repair errors.
+    #[error("Repair error: {0}")]
+    Repair(#[from] RepairError),
+
+    /// Workspace/memory errors.
+    #[error("Workspace error: {0}")]
+    Workspace(#[from] WorkspaceError),
+
+    /// Orchestrator errors.
+    #[error("Orchestrator error: {0}")]
+    Orchestrator(#[from] OrchestratorError),
+
+    /// Worker errors.
+    #[error("Worker error: {0}")]
+    Worker(#[from] WorkerError),
+
+    /// Routine-related errors.
+    #[error("Routine error: {0}")]
+    Routine(#[from] RoutineError),
+
+    /// Hook errors.
+    #[error("Hook error: {0}")]
+    Hook(#[from] HookError),
+
+    /// Common errors.
+    #[error("Common error: {0}")]
+    Common(#[from] CommonError),
+
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+pub type Result<T> = std::result::Result<T, FerrumyxError>;
+
+impl From<std::io::Error> for FerrumyxError {
+    fn from(e: std::io::Error) -> Self {
+        FerrumyxError::Common(CommonError::Io(e))
+    }
+}
+
+impl From<serde_json::Error> for FerrumyxError {
+    fn from(e: serde_json::Error) -> Self {
+        FerrumyxError::Common(CommonError::Serialization(e))
+    }
+}
+
+/// Common/general errors.
+#[derive(Debug, Error)]
+pub enum CommonError {
     #[error("HTTP request error: {0}")]
     Http(#[from] reqwest::Error),
 
@@ -20,23 +105,437 @@ pub enum FerrumyxError {
     #[error("Pipeline error: {0}")]
     Pipeline(String),
 
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("Security error: {0}")]
-    SecurityError(String),
-
     #[error("Ingestion error: {0}")]
     IngestionError(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    #[error("Security error: {0}")]
+    SecurityError(String),
 }
 
-pub type Result<T> = std::result::Result<T, FerrumyxError>;
+/// Configuration-related errors.
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("Missing required environment variable: {0}")]
+    MissingEnvVar(String),
+
+    #[error("Missing required configuration: {key}. {hint}")]
+    MissingRequired { key: String, hint: String },
+
+    #[error("Invalid configuration value for {key}: {message}")]
+    InvalidValue { key: String, message: String },
+
+    #[error("Failed to parse configuration: {0}")]
+    ParseError(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("YAML parsing error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
+
+    #[error("TOML parsing error: {0}")]
+    Toml(#[from] toml::de::Error),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Migration error: {0}")]
+    Migration(String),
+
+    #[error("Database error: {0}")]
+    Database(String),
+
+    #[error("Environment variable error: {0}")]
+    Environment(String),
+
+    #[error("Schema validation error: {0}")]
+    Schema(String),
+}
+
+/// Database-related errors.
+#[derive(Debug, Error)]
+pub enum DatabaseError {
+    #[error("Connection pool error: {0}")]
+    Pool(String),
+
+    #[error("Query failed: {0}")]
+    Query(String),
+
+    #[error("Entity not found: {0}")]
+    NotFound(String),
+
+    #[error("Constraint violation: {0}")]
+    Constraint(String),
+
+    #[error("Migration failed: {0}")]
+    Migration(String),
+
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    #[error("Invalid embedding dimension: expected {expected}, got {actual}")]
+    InvalidEmbeddingDimension { expected: usize, actual: usize },
+
+    #[error("Database not initialized")]
+    NotInitialized,
+
+    #[error("Table not found: {0}")]
+    TableNotFound(String),
+
+    #[error("Invalid query: {0}")]
+    InvalidQuery(String),
+
+    #[error("Duplicate entry: {0}")]
+    Duplicate(String),
+
+    #[cfg(feature = "postgres")]
+    #[error("PostgreSQL error: {0}")]
+    Postgres(#[from] tokio_postgres::Error),
+
+    #[cfg(feature = "postgres")]
+    #[error("Pool build error: {0}")]
+    PoolBuild(#[from] deadpool_postgres::BuildError),
+
+    #[cfg(feature = "postgres")]
+    #[error("Pool runtime error: {0}")]
+    PoolRuntime(#[from] deadpool_postgres::PoolError),
+
+    #[cfg(feature = "libsql")]
+    #[error("LibSQL error: {0}")]
+    LibSql(#[from] libsql::Error),
+}
+
+/// Channel-related errors.
+#[derive(Debug, Error)]
+pub enum ChannelError {
+    #[error("Channel {name} failed to start: {reason}")]
+    StartupFailed { name: String, reason: String },
+
+    #[error("Channel {name} disconnected: {reason}")]
+    Disconnected { name: String, reason: String },
+
+    #[error("Failed to send response on channel {name}: {reason}")]
+    SendFailed { name: String, reason: String },
+
+    #[error("Invalid message format: {0}")]
+    InvalidMessage(String),
+
+    #[error("Authentication failed for channel {name}: {reason}")]
+    AuthFailed { name: String, reason: String },
+
+    #[error("Rate limited on channel {name}")]
+    RateLimited { name: String },
+
+    #[error("HTTP error: {0}")]
+    Http(String),
+
+    #[error("Channel health check failed: {name}")]
+    HealthCheckFailed { name: String },
+}
+
+/// LLM provider errors.
+#[derive(Debug, Error)]
+pub enum LlmError {
+    #[error("Provider {provider} request failed: {reason}")]
+    RequestFailed { provider: String, reason: String },
+
+    #[error("Provider {provider} rate limited, retry after {retry_after:?}")]
+    RateLimited {
+        provider: String,
+        retry_after: Option<Duration>,
+    },
+
+    #[error("Invalid response from {provider}: {reason}")]
+    InvalidResponse { provider: String, reason: String },
+
+    #[error("Context length exceeded: {used} tokens used, {limit} allowed")]
+    ContextLengthExceeded { used: usize, limit: usize },
+
+    #[error("Model {model} not available on provider {provider}")]
+    ModelNotAvailable { provider: String, model: String },
+
+    #[error("Authentication failed for provider {provider}")]
+    AuthFailed { provider: String },
+
+    #[error("Session expired for provider {provider}")]
+    SessionExpired { provider: String },
+
+    #[error("Session renewal failed for provider {provider}: {reason}")]
+    SessionRenewalFailed { provider: String, reason: String },
+
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Tool execution errors.
+#[derive(Debug, Error)]
+pub enum ToolError {
+    #[error("Tool {name} not found")]
+    NotFound { name: String },
+
+    #[error("Tool {name} execution failed: {reason}")]
+    ExecutionFailed { name: String, reason: String },
+
+    #[error("Tool {name} timed out after {timeout:?}")]
+    Timeout { name: String, timeout: Duration },
+
+    #[error("Invalid parameters for tool {name}: {reason}")]
+    InvalidParameters { name: String, reason: String },
+
+    #[error("Tool {name} is disabled: {reason}")]
+    Disabled { name: String, reason: String },
+
+    #[error("Sandbox error for tool {name}: {reason}")]
+    Sandbox { name: String, reason: String },
+
+    #[error("Tool {name} requires authentication")]
+    AuthRequired { name: String },
+
+    #[error("Tool {name} is rate limited, retry after {retry_after:?}")]
+    RateLimited {
+        name: String,
+        retry_after: Option<Duration>,
+    },
+
+    #[error("Tool builder failed: {0}")]
+    BuilderFailed(String),
+}
+
+/// Safety/sanitization errors.
+#[derive(Debug, Error)]
+pub enum SafetyError {
+    #[error("Potential prompt injection detected: {pattern}")]
+    InjectionDetected { pattern: String },
+
+    #[error("Output exceeded maximum length: {length} > {max}")]
+    OutputTooLarge { length: usize, max: usize },
+
+    #[error("Blocked content pattern detected: {pattern}")]
+    BlockedContent { pattern: String },
+
+    #[error("Validation failed: {reason}")]
+    ValidationFailed { reason: String },
+
+    #[error("Policy violation: {rule}")]
+    PolicyViolation { rule: String },
+}
+
+/// Job-related errors.
+#[derive(Debug, Error)]
+pub enum JobError {
+    #[error("Job {id} not found")]
+    NotFound { id: Uuid },
+
+    #[error("Job {id} already in state {state}, cannot transition to {target}")]
+    InvalidTransition {
+        id: Uuid,
+        state: String,
+        target: String,
+    },
+
+    #[error("Job {id} failed: {reason}")]
+    Failed { id: Uuid, reason: String },
+
+    #[error("Job {id} stuck for {duration:?}")]
+    Stuck { id: Uuid, duration: Duration },
+
+    #[error("Maximum parallel jobs ({max}) exceeded")]
+    MaxJobsExceeded { max: usize },
+
+    #[error("Job {id} context error: {reason}")]
+    ContextError { id: Uuid, reason: String },
+}
+
+/// Estimation errors.
+#[derive(Debug, Error)]
+pub enum EstimationError {
+    #[error("Insufficient data for estimation: need {needed} samples, have {have}")]
+    InsufficientData { needed: usize, have: usize },
+
+    #[error("Estimation calculation failed: {reason}")]
+    CalculationFailed { reason: String },
+
+    #[error("Invalid estimation parameters: {reason}")]
+    InvalidParameters { reason: String },
+}
+
+/// Evaluation errors.
+#[derive(Debug, Error)]
+pub enum EvaluationError {
+    #[error("Evaluation failed for job {job_id}: {reason}")]
+    Failed { job_id: Uuid, reason: String },
+
+    #[error("Missing required evaluation data: {field}")]
+    MissingData { field: String },
+
+    #[error("Invalid evaluation criteria: {reason}")]
+    InvalidCriteria { reason: String },
+}
+
+/// Self-repair errors.
+#[derive(Debug, Error)]
+pub enum RepairError {
+    #[error("Repair failed for {target_type} {target_id}: {reason}")]
+    Failed {
+        target_type: String,
+        target_id: Uuid,
+        reason: String,
+    },
+
+    #[error("Maximum repair attempts ({max}) exceeded for {target_type} {target_id}")]
+    MaxAttemptsExceeded {
+        target_type: String,
+        target_id: Uuid,
+        max: u32,
+    },
+
+    #[error("Cannot diagnose issue for {target_type} {target_id}: {reason}")]
+    DiagnosisFailed {
+        target_type: String,
+        target_id: Uuid,
+        reason: String,
+    },
+}
+
+/// Workspace/memory errors.
+#[derive(Debug, Error)]
+pub enum WorkspaceError {
+    #[error("Document not found: {doc_type} for user {user_id}")]
+    DocumentNotFound { doc_type: String, user_id: String },
+
+    #[error("Search failed: {reason}")]
+    SearchFailed { reason: String },
+
+    #[error("Embedding generation failed: {reason}")]
+    EmbeddingFailed { reason: String },
+
+    #[error("Document chunking failed: {reason}")]
+    ChunkingFailed { reason: String },
+
+    #[error("Invalid document type: {doc_type}")]
+    InvalidDocType { doc_type: String },
+
+    #[error("Workspace not initialized for user {user_id}")]
+    NotInitialized { user_id: String },
+
+    #[error("Heartbeat error: {reason}")]
+    HeartbeatError { reason: String },
+
+    #[error("I/O error: {reason}")]
+    IoError { reason: String },
+}
+
+/// Orchestrator errors (internal API, container management).
+#[derive(Debug, Error)]
+pub enum OrchestratorError {
+    #[error("Container creation failed for job {job_id}: {reason}")]
+    ContainerCreationFailed { job_id: Uuid, reason: String },
+
+    #[error("Container not found for job {job_id}")]
+    ContainerNotFound { job_id: Uuid },
+
+    #[error("Container for job {job_id} is in unexpected state: {state}")]
+    InvalidContainerState { job_id: Uuid, state: String },
+
+    #[error("Internal API error: {reason}")]
+    ApiError { reason: String },
+
+    #[error("Docker error: {reason}")]
+    Docker { reason: String },
+}
+
+/// Worker errors (container-side execution).
+#[derive(Debug, Error)]
+pub enum WorkerError {
+    #[error("Failed to connect to orchestrator at {url}: {reason}")]
+    ConnectionFailed { url: String, reason: String },
+
+    #[error("LLM proxy request failed: {reason}")]
+    LlmProxyFailed { reason: String },
+
+    #[error("Secret resolution failed for {secret_name}: {reason}")]
+    SecretResolveFailed { secret_name: String, reason: String },
+
+    #[error("Orchestrator returned error for job {job_id}: {reason}")]
+    OrchestratorRejected { job_id: Uuid, reason: String },
+
+    #[error("Worker execution failed: {reason}")]
+    ExecutionFailed { reason: String },
+
+    #[error("Missing worker token (FERRUMYX_RUNTIME_CORE_WORKER_TOKEN not set)")]
+    MissingToken,
+}
+
+/// Routine-related errors.
+#[derive(Debug, Error)]
+pub enum RoutineError {
+    #[error("Unknown trigger type: {trigger_type}")]
+    UnknownTriggerType { trigger_type: String },
+
+    #[error("Unknown action type: {action_type}")]
+    UnknownActionType { action_type: String },
+
+    #[error("Missing field in {context}: {field}")]
+    MissingField { context: String, field: String },
+
+    #[error("Invalid cron expression: {reason}")]
+    InvalidCron { reason: String },
+
+    #[error("Unknown run status: {status}")]
+    UnknownRunStatus { status: String },
+
+    #[error("Routine {name} is disabled")]
+    Disabled { name: String },
+
+    #[error("Routine not found: {id}")]
+    NotFound { id: Uuid },
+
+    #[error("Not authorized to trigger routine {id}")]
+    NotAuthorized { id: Uuid },
+
+    #[error("Routine {name} at max concurrent runs")]
+    MaxConcurrent { name: String },
+
+    #[error("Database error: {reason}")]
+    Database { reason: String },
+
+    #[error("LLM call failed: {reason}")]
+    LlmFailed { reason: String },
+
+    #[error("Failed to dispatch full job: {reason}")]
+    JobDispatchFailed { reason: String },
+
+    #[error("LLM returned empty content")]
+    EmptyResponse,
+
+    #[error("LLM response truncated (finish_reason=length) with no content")]
+    TruncatedResponse,
+}
+
+/// Hook errors.
+#[derive(Debug, Error)]
+pub enum HookError {
+    #[error("Hook execution failed: {reason}")]
+    ExecutionFailed { reason: String },
+
+    #[error("Hook not found: {name}")]
+    NotFound { name: String },
+
+    #[error("Hook validation failed: {reason}")]
+    ValidationFailed { reason: String },
+
+    #[error("Hook timeout: {name}")]
+    Timeout { name: String },
+}
 
 /// API error type for HTTP responses
 #[derive(Debug, Error)]

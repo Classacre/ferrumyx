@@ -5,6 +5,7 @@ pub mod chunker;
 pub mod dedup;
 pub mod embed;
 pub mod embedding;
+pub mod ironclaw_integration;
 pub mod models;
 pub mod normalise;
 pub mod pdf_parser;

@@ -541,9 +541,9 @@ This document tracks feature parity between Ferrumyx Runtime Core (Rust implemen
 - ✅ OpenAI-compatible / OpenRouter provider support
 
 ### P1 - High Priority
-- ❌ Slack channel (real implementation)
+- ✅ Slack channel (WASM implementation)
 - ✅ Telegram channel (WASM, DM pairing, caption, /start)
-- ❌ WhatsApp channel
+- ✅ WhatsApp channel (WASM implementation)
 - ✅ Multi-provider failover (`FailoverProvider` with retryable error classification)
 - ✅ Hooks system (core lifecycle hooks + bundled/plugin/workspace hooks + outbound webhooks)
 
@@ -556,7 +556,7 @@ This document tracks feature parity between Ferrumyx Runtime Core (Rust implemen
 - ❌ Partial output preservation on abort
 
 ### P3 - Lower Priority
-- ❌ Discord channel
+- ✅ Discord channel (WASM implementation)
 - ❌ Matrix channel
 - ❌ Other messaging platforms
 - ❌ TTS/audio features

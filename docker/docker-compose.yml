@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  blast:
+    build:
+      context: .
+      dockerfile: Dockerfile.blast
+    container_name: ferrumyx-blast
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  pymol:
+    build:
+      context: .
+      dockerfile: Dockerfile.pymol
+    container_name: ferrumyx-pymol
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  fastqc:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastqc
+    container_name: ferrumyx-fastqc
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  fpocket:
+    build:
+      context: .
+      dockerfile: Dockerfile.fpocket
+    container_name: ferrumyx-fpocket
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  vina:
+    build:
+      context: .
+      dockerfile: Dockerfile.vina
+    container_name: ferrumyx-vina
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  rdkit:
+    build:
+      context: .
+      dockerfile: Dockerfile.rdkit
+    container_name: ferrumyx-rdkit
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  admet:
+    build:
+      context: .
+      dockerfile: Dockerfile.admet
+    container_name: ferrumyx-admet
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./output:/workspace/output:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'

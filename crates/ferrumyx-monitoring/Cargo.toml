@@ -1,0 +1,61 @@
+[package]
+name = "ferrumyx-monitoring"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+
+
+# Metrics collection
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+
+
+# System resource monitoring
+sysinfo = "0.32"
+
+# Async runtime
+tokio.workspace = true
+
+# HTTP client for health checks
+reqwest.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+
+# Logging
+tracing.workspace = true
+
+# Time handling
+
+
+# Caching
+moka = { version = "0.12", features = ["future"] }
+sha2.workspace = true
+
+# Database connection pooling for health checks
+deadpool-postgres = "0.14"
+
+# Performance profiling
+pprof = { version = "0.13", features = ["flamegraph", "protobuf-codec"], optional = true }
+
+
+# Web framework for dashboards
+
+
+# Futures for async utilities
+futures = "0.3"
+
+# UUID for request tracking
+
+
+[features]
+default = []
+profiling = ["pprof"]

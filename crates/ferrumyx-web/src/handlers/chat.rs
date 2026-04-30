@@ -21,7 +21,7 @@ const GATEWAY_AUTH_TOKEN: &str = "Bearer ferrumyx-local-dev-token";
 const AGENT_BOOT_MIN_INTERVAL_SECS: u64 = 12;
 const AGENT_BOOT_WAIT_STEPS: usize = 12;
 const AGENT_BOOT_WAIT_STEP_MS: u64 = 350;
-const AGENT_AUTOBIND_DEFAULT: &str = "127.0.0.1:0";
+const AGENT_AUTOBIND_DEFAULT: &str = "127.0.0.1:3002";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LocalThreadInfo {
@@ -53,6 +53,20 @@ fn local_chat_state() -> &'static Mutex<LocalChatState> {
         });
         Mutex::new(state)
     })
+}
+
+fn cleanup_old_chat_threads() {
+    let mut state = local_chat_state().lock().unwrap();
+    const MAX_THREADS: usize = 100;
+    if state.threads.len() > MAX_THREADS {
+        // Sort by updated_at descending, keep the most recent
+        state.threads.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        state.threads.truncate(MAX_THREADS);
+        // Also clean turns for removed threads
+        let kept_ids: HashSet<String> = state.threads.iter().map(|t| t.id.clone()).collect();
+        state.turns.retain(|id, _| kept_ids.contains(id));
+        tracing::info!("Cleaned up chat threads, kept {} threads", state.threads.len());
+    }
 }
 
 fn agent_boot_gate() -> &'static Mutex<Instant> {
@@ -305,13 +319,40 @@ fn local_append_turn(thread_id: &str, user_input: String, response: String) {
         user_input,
         response: Some(response),
     };
-    state
+    let turns = state
         .turns
         .entry(thread_id.to_string())
-        .or_default()
-        .push(turn);
+        .or_default();
+    turns.push(turn);
+
+    // Limit turns per thread to prevent memory growth
+    const MAX_TURNS_PER_THREAD: usize = 100;
+    if turns.len() > MAX_TURNS_PER_THREAD {
+        turns.drain(0..turns.len().saturating_sub(MAX_TURNS_PER_THREAD));
+    }
+
     if let Some(thread) = state.threads.iter_mut().find(|t| t.id == thread_id) {
         thread.updated_at = chrono::Utc::now().to_rfc3339();
+    }
+
+    // Limit total threads to prevent memory growth
+    const MAX_THREADS: usize = 50;
+    if state.threads.len() > MAX_THREADS {
+        // Remove oldest threads (not the assistant thread)
+        state.threads.retain(|t| t.thread_type == "assistant");
+        // Keep only the most recent non-assistant threads
+        let mut non_assistant: Vec<_> = state.threads.iter().filter(|t| t.thread_type != "assistant").cloned().collect();
+        non_assistant.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        non_assistant.truncate(MAX_THREADS.saturating_sub(1)); // Reserve 1 for assistant
+        state.threads = vec![];
+        if let Some(assistant) = state.assistant_thread.clone() {
+            state.threads.push(assistant);
+        }
+        state.threads.extend(non_assistant);
+
+        // Clean up turns for removed threads
+        let thread_ids: std::collections::HashSet<_> = state.threads.iter().map(|t| t.id.clone()).collect();
+        state.turns.retain(|thread_id, _| thread_ids.contains(thread_id));
     }
 }
 

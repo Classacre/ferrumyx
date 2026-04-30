@@ -1,0 +1,27 @@
+# Dockerfile for fpocket
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install fpocket
+RUN wget https://github.com/Discngine/fpocket/releases/download/4.1/fpocket-4.1.tar.gz \
+    && tar -xzf fpocket-4.1.tar.gz \
+    && cd fpocket-4.1 \
+    && make \
+    && make install \
+    && cd / \
+    && rm -rf fpocket-4.1 fpocket-4.1.tar.gz
+
+# Create a non-root user
+RUN useradd -m -u 1000 fpocketuser
+USER fpocketuser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["fpocket", "--help"]

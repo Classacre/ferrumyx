@@ -1,0 +1,181 @@
+groups:
+  - name: database_alerts
+    rules:
+    - alert: PostgreSQLDown
+      expr: pg_up == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL is down"
+        description: "PostgreSQL has been down for more than 1 minute."
+
+    - alert: PostgreSQLHighConnections
+      expr: pg_stat_activity_count{datname="ferrumyx"} > 80
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High PostgreSQL connection count"
+        description: "PostgreSQL has {{ $value }} active connections."
+
+    - alert: PostgreSQLSlowQueries
+      expr: rate(pg_stat_statements_total_time[5m]) / rate(pg_stat_statements_calls[5m]) > 1000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Slow PostgreSQL queries detected"
+        description: "Average query time is {{ $value }}ms."
+
+    - alert: PgBouncerHighConnections
+      expr: pgbouncer_pools_client_active_connections > 15
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "PgBouncer high connection count"
+        description: "PgBouncer pool has {{ $value }} active connections."
+
+    - alert: DiskSpaceLow
+      expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Low disk space"
+        description: "Disk space is below 10%."
+
+    - alert: HighMemoryUsage
+      expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is above 90%."
+
+   - name: application_alerts
+    rules:
+     - alert: FerrumyxWebDown
+       expr: up{job="ferrumyx-app"} == 0
+       for: 1m
+       labels:
+         severity: critical
+       annotations:
+         summary: "Ferrumyx web service is down"
+         description: "Ferrumyx web service has been down for more than 1 minute."
+
+     - alert: FerrumyxWebHighLatency
+       expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="ferrumyx-app"}[5m])) > 1
+       for: 5m
+       labels:
+         severity: warning
+       annotations:
+         summary: "Ferrumyx web high latency"
+         description: "95th percentile response time is {{ $value }}s."
+
+     - alert: IronclawAgentDown
+       expr: up{job="ironclaw-agent"} == 0
+       for: 1m
+       labels:
+         severity: critical
+       annotations:
+         summary: "IronClaw agent is down"
+         description: "IronClaw agent has been down for more than 1 minute."
+
+     - alert: GatewayServiceDown
+       expr: up{job="gateway-service"} == 0
+       for: 1m
+       labels:
+         severity: warning
+       annotations:
+         summary: "Gateway service is down"
+         description: "Gateway service has been down for more than 1 minute."
+
+     - alert: BioClawWasmDown
+       expr: up{job="bioclaw-wasm"} == 0
+       for: 1m
+       labels:
+         severity: warning
+       annotations:
+         summary: "BioClaw WASM is down"
+         description: "BioClaw WASM has been down for more than 1 minute."
+
+   - name: security_alerts
+    rules:
+     - alert: FailedAuthAttempts
+       expr: rate(failed_auth_total[5m]) > 5
+       for: 5m
+       labels:
+         severity: warning
+       annotations:
+         summary: "High failed authentication attempts"
+         description: "Rate of failed auth is {{ $value }}/s."
+
+     - alert: PHIDataAccess
+       expr: rate(phi_access_total[5m]) > 0
+       for: 1m
+       labels:
+         severity: critical
+       annotations:
+         summary: "PHI data access detected"
+         description: "PHI data access logged."
+
+     - alert: WasmSandboxViolation
+       expr: rate(wasm_violation_total[5m]) > 0
+       for: 1m
+       labels:
+         severity: critical
+       annotations:
+         summary: "WASM sandbox violation"
+         description: "WASM sandbox violation detected."
+
+   - name: business_metrics_alerts
+    rules:
+     - alert: LowDiscoverySuccessRate
+       expr: rate(discovery_success_total[5m]) / rate(discovery_attempts_total[5m]) < 0.8
+       for: 5m
+       labels:
+         severity: warning
+       annotations:
+         summary: "Low discovery success rate"
+         description: "Discovery success rate below 80%."
+
+      - alert: HighAgentJobFailureRate
+        expr: rate(agent_job_failures_total[5m]) / rate(agent_jobs_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High agent job failure rate"
+          description: "Agent job failure rate above 10%."
+
+   - name: container_resource_alerts
+     rules:
+      - alert: ContainerHighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container {{ $labels.container_name }} memory usage above 90%."
+
+      - alert: ContainerHighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) / container_spec_cpu_quota * container_spec_cpu_period > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container {{ $labels.container_name }} CPU usage above 90%."
+
+      - alert: ContainerOOMKilled
+        expr: rate(container_oom_events_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container OOM killed"
+          description: "Container {{ $labels.container_name }} was killed due to out of memory."

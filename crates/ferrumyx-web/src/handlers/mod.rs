@@ -7,6 +7,7 @@ pub mod federation;
 pub mod ingestion;
 pub mod kg;
 pub mod metrics;
+pub mod monitoring;
 pub mod molecules;
 pub mod ner;
 pub mod query;

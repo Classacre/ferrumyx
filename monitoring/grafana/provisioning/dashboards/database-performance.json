@@ -1,0 +1,79 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Database Performance",
+    "tags": ["ferrumyx", "database"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_activity_count{datname=\"ferrumyx\"}",
+            "legendFormat": "Active connections"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Query Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(pg_stat_statements_calls[5m])",
+            "legendFormat": "Queries/s"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Query Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(pg_stat_statements_total_time[5m]) / rate(pg_stat_statements_calls[5m])",
+            "legendFormat": "Avg query time"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Replication Lag",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_replication_lag",
+            "legendFormat": "Replication lag"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "seconds"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 16,
+    "version": 0,
+    "links": []
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "wit_version": "0.3.0",
+  "capabilities": {
+    "http": {
+      "allowlist": [
+        {
+          "host": "www.ebi.ac.uk",
+          "path_prefix": "/ena/browser/api/fasta/",
+          "methods": [
+            "GET"
+          ]
+        },
+        {
+          "host": "trace.ncbi.nlm.nih.gov",
+          "path_prefix": "/Traces/sra/",
+          "methods": [
+            "GET"
+          ]
+        }
+      ],
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "requests_per_hour": 1000
+      }
+    }
+  },
+  "config": {
+    "max_fastq_size": 10000000,
+    "default_max_reads": 100000,
+    "supported_formats": ["text", "base64"]
+  }
+}

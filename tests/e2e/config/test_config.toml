@@ -1,0 +1,58 @@
+# Ferrumyx E2E Test Configuration
+
+[database]
+# Use SQLite for testing instead of PostgreSQL
+url = "sqlite://test_ferrumyx.db"
+max_connections = 5
+min_connections = 1
+
+[embedding]
+backend = "mock"  # Use mock embeddings for faster testing
+embedding_dim = 768
+model = "test-model"
+
+[llm]
+default_backend = "mock"
+mode = "local_only"
+
+[llm.mock]
+# Mock LLM responses for testing
+
+[ingestion]
+sources = ["mock_pubmed", "mock_europepmc"]
+max_results = 10
+enable_embeddings = false
+
+[ingestion.mock_pubmed]
+# Mock PubMed client for testing
+
+[ingestion.mock_europepmc]
+# Mock Europe PMC client for testing
+
+[scoring]
+focus_cancer = "PAAD"  # Pancreatic Adenocarcinoma
+focus_mutation = "KRAS_G12D"
+primary_threshold = 0.5
+secondary_threshold = 0.3
+
+[security]
+audit_log_path = "./tests/e2e/reports/audit.log"
+enforce_data_classification = true
+
+[workspace]
+path = "./tests/e2e/workspace"
+
+# Test-specific settings
+[test]
+sample_data_path = "./tests/e2e/data"
+report_path = "./tests/e2e/reports"
+timeout_seconds = 300
+parallel_workers = 2
+
+[test.performance]
+workload_size = 100
+duration_seconds = 60
+
+[test.integration]
+enable_mocking = true
+mock_responses = true

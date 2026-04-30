@@ -34,14 +34,30 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            model_id: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string(),
-            max_length: 512,
-            batch_size: 32,
-            normalize: true,
-            pooling: PoolingStrategy::Mean,
-            use_gpu: true,
-            cache_dir: None,
-            cache_size: 10_000,
+            model_id: std::env::var("FERRUMYX_EMBED_MODEL_ID")
+                .unwrap_or_else(|_| "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext".to_string()),
+            max_length: std::env::var("FERRUMYX_EMBED_MAX_LENGTH")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(512),
+            batch_size: std::env::var("FERRUMYX_EMBED_BATCH_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(32),
+            normalize: std::env::var("FERRUMYX_EMBED_NORMALIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(true),
+            pooling: PoolingStrategy::Mean, // Could make this configurable too
+            use_gpu: std::env::var("FERRUMYX_EMBED_USE_GPU")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(true),
+            cache_dir: std::env::var("FERRUMYX_EMBED_CACHE_DIR").ok(),
+            cache_size: std::env::var("FERRUMYX_EMBED_CACHE_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10_000),
         }
     }
 }

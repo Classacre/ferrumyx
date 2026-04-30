@@ -1,4 +1,5 @@
 pub mod autonomous_cycle_tool;
+pub mod bio_tools;
 pub mod embedding_backfill_tool;
 pub mod embedding_runtime;
 pub mod ingestion_tool;
@@ -8,8 +9,10 @@ pub mod lab_retriever_tool;
 pub mod lab_run_status_tool;
 pub mod lab_state;
 pub mod lab_validator_tool;
+pub mod llm_audit_tool;
 pub mod molecule_tool;
 pub mod provider_refresh_tool;
+pub mod pubmed_search_tool;
 pub mod query_tool;
 pub mod runtime_profile;
 pub mod scoring_tool;

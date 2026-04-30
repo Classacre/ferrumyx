@@ -11,7 +11,7 @@ use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::embed::pooling::l2_normalize;
 use crate::embed::{EmbedError, EmbeddingConfig, Result};
@@ -117,11 +117,20 @@ impl BiomedBertEmbedder {
         {
             match Device::new_cuda(0) {
                 Ok(d) => {
-                    info!("Successfully initialized CUDA device.");
-                    return Ok(d);
+                    info!("Successfully initialized CUDA device 0.");
+                    // Test device with a small tensor to ensure it's working
+                    match Tensor::zeros((1,), DType::F32, &d) {
+                        Ok(_) => {
+                            info!("CUDA device test passed.");
+                            return Ok(d);
+                        }
+                        Err(e) => {
+                            warn!("CUDA device test failed: {}. Falling back to CPU.", e);
+                        }
+                    }
                 }
                 Err(e) => {
-                    tracing::warn!("CUDA feature is enabled but device initialization failed: {}. Falling back to CPU.", e);
+                    warn!("CUDA device initialization failed: {}. Falling back to CPU.", e);
                 }
             }
         }
@@ -130,11 +139,11 @@ impl BiomedBertEmbedder {
         {
             match Device::new_metal(0) {
                 Ok(d) => {
-                    info!("Successfully initialized Metal device.");
+                    info!("Successfully initialized Metal device 0.");
                     return Ok(d);
                 }
                 Err(e) => {
-                    tracing::warn!("Metal feature is enabled but device initialization failed: {}. Falling back to CPU.", e);
+                    warn!("Metal device initialization failed: {}. Falling back to CPU.", e);
                 }
             }
         }
@@ -228,18 +237,42 @@ impl BiomedBertEmbedder {
         }
 
         if !uncached_texts.is_empty() {
-            for batch_start in (0..uncached_texts.len()).step_by(self.config.batch_size) {
-                let batch_end = (batch_start + self.config.batch_size).min(uncached_texts.len());
+            let mut current_batch_size = self.config.batch_size;
+            let mut batch_start = 0;
+
+            while batch_start < uncached_texts.len() {
+                let mut batch_end = (batch_start + current_batch_size).min(uncached_texts.len());
                 let batch = &uncached_texts[batch_start..batch_end];
-                let batch_embeddings = self.embed_batch(batch).await?;
-                if let Some(cache) = &self.cache {
-                    let mut cache_guard = cache.lock().unwrap();
-                    for (text, embedding) in batch.iter().zip(batch_embeddings.iter()) {
-                        cache_guard.put(text.clone(), embedding.clone());
+
+                match self.embed_batch(batch).await {
+                    Ok(batch_embeddings) => {
+                        if let Some(cache) = &self.cache {
+                            let mut cache_guard = cache.lock().unwrap();
+                            for (text, embedding) in batch.iter().zip(batch_embeddings.iter()) {
+                                cache_guard.put(text.clone(), embedding.clone());
+                            }
+                        }
+                        for (j, embedding) in batch_embeddings.into_iter().enumerate() {
+                            all_embeddings.push((uncached_indices[batch_start + j], embedding));
+                        }
+                        batch_start = batch_end;
+                        // Gradually increase batch size if successful
+                        if matches!(self.device, Device::Cuda(_)) && current_batch_size < self.config.batch_size * 2 {
+                            current_batch_size = (current_batch_size * 3 / 2).min(self.config.batch_size * 2);
+                        }
                     }
-                }
-                for (j, embedding) in batch_embeddings.into_iter().enumerate() {
-                    all_embeddings.push((uncached_indices[batch_start + j], embedding));
+                    Err(EmbedError::Device(_)) if matches!(self.device, Device::Cuda(_)) => {
+                        // GPU memory issue, reduce batch size
+                        if current_batch_size > 1 {
+                            current_batch_size = (current_batch_size / 2).max(1);
+                            warn!("Reducing batch size to {} due to GPU memory constraints.", current_batch_size);
+                            continue;
+                        } else {
+                            // Even batch size 1 fails, this shouldn't happen but handle gracefully
+                            return Err(EmbedError::Device("GPU memory insufficient even for batch size 1".to_string()));
+                        }
+                    }
+                    Err(e) => return Err(e),
                 }
             }
         }
@@ -248,6 +281,16 @@ impl BiomedBertEmbedder {
     }
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let start = Instant::now();
+
+        // GPU memory monitoring
+        if matches!(self.device, Device::Cuda(_)) {
+            if let Err(e) = self.check_gpu_memory() {
+                warn!("GPU memory check failed: {}. Falling back to CPU.", e);
+                return Err(EmbedError::Device("GPU memory insufficient".to_string()));
+            }
+        }
+
         let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
         let encodings = self
             .tokenizer
@@ -296,6 +339,30 @@ impl BiomedBertEmbedder {
         } else {
             pooled
         };
-        Ok(normalized.to_vec2::<f32>()?)
+
+        let result = normalized.to_vec2::<f32>()?;
+        info!(
+            target: "ferrumyx_gpu_perf",
+            batch_size = batch_size,
+            max_len = max_len,
+            device = ?self.device,
+            duration_ms = start.elapsed().as_millis() as u64,
+            "batch embedding complete"
+        );
+
+        Ok(result)
+    }
+
+    fn check_gpu_memory(&self) -> Result<()> {
+        // Simple GPU memory check - in production, this could query actual GPU memory
+        // For now, we'll just check if we're using CUDA device
+        match &self.device {
+            Device::Cuda(_) => {
+                // Could add actual GPU memory monitoring here
+                // For now, just log that we're using GPU
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }

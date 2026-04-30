@@ -13,7 +13,7 @@ ferrumyx-kg        = { path = "../ferrumyx-kg" }
 ferrumyx-ingestion = { path = "../ferrumyx-ingestion" }
 ferrumyx-molecules = { path = "../ferrumyx-molecules" }
 anyhow.workspace = true
-thiserror.workspace = true
+
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
@@ -21,11 +21,11 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-reqwest         = { version = "0.12", features = ["json"] }
+reqwest.workspace = true
 
 # Web framework
-axum            = { version = "0.8", features = ["ws", "macros"] }
-axum-extra      = { version = "0.10", features = ["typed-header"] }
+axum.workspace = true
+
 tower           = "0.5"
 tower-http      = { version = "0.6", features = ["fs", "cors", "compression-gzip", "trace"] }
 
@@ -33,8 +33,13 @@ tower-http      = { version = "0.6", features = ["fs", "cors", "compression-gzip
 tokio-stream    = { version = "0.1", features = ["sync"] }
 futures-core    = "0.3"
 
-# Template rendering
-minijinja       = { version = "2", features = ["loader"] }
+
 
 # Tracing
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+ # Memory monitoring
+ sys-info = "0.9"
+
+[dev-dependencies]
+ferrumyx-test-utils = { path = "../ferrumyx-test-utils" }

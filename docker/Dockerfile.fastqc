@@ -1,0 +1,29 @@
+# Dockerfile for FastQC
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+    openjdk-11-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install FastQC
+RUN wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.9.zip \
+    && unzip fastqc_v0.11.9.zip \
+    && mv FastQC /opt/fastqc \
+    && chmod +x /opt/fastqc/fastqc \
+    && rm fastqc_v0.11.9.zip
+
+# Add FastQC to PATH
+ENV PATH="/opt/fastqc:${PATH}"
+
+# Create a non-root user
+RUN useradd -m -u 1000 fastqcuser
+USER fastqcuser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["fastqc", "--help"]

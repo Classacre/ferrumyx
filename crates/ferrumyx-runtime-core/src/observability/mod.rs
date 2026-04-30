@@ -15,11 +15,13 @@
 mod log;
 mod multi;
 mod noop;
+mod prometheus;
 pub mod traits;
 
 pub use self::log::LogObserver;
 pub use self::multi::MultiObserver;
 pub use self::noop::NoopObserver;
+pub use self::prometheus::PrometheusObserver;
 pub use self::traits::{Observer, ObserverEvent, ObserverMetric};
 
 /// Configuration for the observability backend.
@@ -40,10 +42,17 @@ impl Default for ObservabilityConfig {
 /// Create an observer from configuration.
 ///
 /// Returns a [`NoopObserver`] for "none"/"noop" (or unknown values),
-/// and a [`LogObserver`] for "log".
+/// a [`LogObserver`] for "log", and a [`PrometheusObserver`] for "prometheus".
 pub fn create_observer(config: &ObservabilityConfig) -> Box<dyn Observer> {
     match config.backend.as_str() {
         "log" => Box::new(LogObserver),
+        "prometheus" => match PrometheusObserver::new() {
+            Ok(observer) => Box::new(observer),
+            Err(e) => {
+                tracing::error!("Failed to create Prometheus observer: {}", e);
+                Box::new(NoopObserver)
+            }
+        },
         _ => Box::new(NoopObserver),
     }
 }

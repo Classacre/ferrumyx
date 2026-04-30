@@ -1,0 +1,70 @@
+# Ferrumyx Security Compliance Configuration
+# This file contains configuration for the automated security compliance system
+
+[security]
+# Enable/disable security features
+enabled = true
+environment = "production"  # development, staging, production
+
+[encryption]
+# Encryption settings
+key_rotation_days = 90
+algorithm = "AES-256-GCM"
+key_length = 32
+
+[audit]
+# Audit logging configuration
+enabled = true
+log_level = "info"
+retention_days = 2555  # 7 years for HIPAA compliance
+integrity_check_interval_hours = 24
+
+[phi_detection]
+# PHI detection settings
+enabled = true
+detection_sensitivity = 0.7  # 0.0 to 1.0
+keywords_file = "data/phi_keywords.txt"
+nlp_enabled = false  # Enable when ML models are available
+
+[compliance]
+# Compliance monitoring
+continuous_monitoring = true
+alert_threshold = 0.8  # Alert when compliance drops below this
+report_interval_days = 30
+hipaa_compliance_required = true
+
+[vulnerability_scanning]
+# Vulnerability scanning settings
+enabled = true
+scan_interval_hours = 24
+fail_on_high_severity = true
+auto_update_dependencies = true
+
+[monitoring]
+# Security monitoring
+real_time_alerts = true
+dashboard_enabled = true
+metrics_collection = true
+performance_monitoring = true
+
+[reporting]
+# Automated reporting
+daily_reports = true
+weekly_summaries = true
+monthly_compliance_reports = true
+hipaa_reporting = true
+output_format = "json"  # json, pdf, html
+
+[alerts]
+# Alert configuration
+email_alerts = true
+slack_alerts = false
+critical_alerts_only = true
+alert_cooldown_minutes = 30
+
+[testing]
+# Automated testing
+run_on_build = true
+fail_build_on_security_issues = false
+test_coverage_threshold = 0.8
+integration_tests_enabled = true

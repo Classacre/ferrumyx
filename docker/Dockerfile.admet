@@ -1,0 +1,17 @@
+# Dockerfile for ADMET prediction
+FROM continuumio/miniconda3:latest
+
+# Install ADMET-related packages
+RUN conda install -c conda-forge rdkit scikit-learn pandas numpy -y \
+    && pip install admet-ai \
+    && conda clean --all -f -y
+
+# Create a non-root user
+RUN useradd -m -u 1000 admetuser
+USER admetuser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["python3", "-c", "import admet_ai; print('ADMET ready')"]

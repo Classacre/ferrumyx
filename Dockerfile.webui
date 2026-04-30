@@ -1,0 +1,58 @@
+# Multi-stage Dockerfile for Ferrumyx Web Interface
+# Build stage - Node.js for potential asset optimization
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy static files
+COPY crates/ferrumyx-web/static/ ./static/
+COPY crates/ferrumyx-web/templates/ ./templates/
+
+# If you add build scripts later, install dependencies here
+# COPY package.json package-lock.json ./
+# RUN npm ci --only=production
+
+# For now, just copy files - add optimization scripts as needed
+RUN mkdir -p /app/dist && \
+    cp -r ./static/* /app/dist/ && \
+    cp -r ./templates/* /app/dist/
+
+# Runtime stage - Nginx
+FROM nginx:1.25-alpine
+
+# Install security updates
+RUN apk update && apk upgrade && \
+    apk add --no-cache curl && \
+    rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S ferrumyx && \
+    adduser -S ferrumyx -u 1001 -G ferrumyx
+
+# Copy optimized nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# Copy static assets from builder
+COPY --from=builder /app/dist/ /usr/share/nginx/html/
+
+# Set proper ownership
+RUN chown -R ferrumyx:ferrumyx /usr/share/nginx/html && \
+    chown -R ferrumyx:ferrumyx /var/cache/nginx && \
+    chown -R ferrumyx:ferrumyx /var/log/nginx && \
+    chown -R ferrumyx:ferrumyx /etc/nginx/conf.d && \
+    touch /var/run/nginx.pid && \
+    chown ferrumyx:ferrumyx /var/run/nginx.pid
+
+# Switch to non-root user
+USER ferrumyx
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

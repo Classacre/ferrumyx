@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-ferrumyx-common = { path = "../ferrumyx-common" }
 ferrumyx-db = { path = "../ferrumyx-db" }
 ferrumyx-kg = { path = "../ferrumyx-kg" }
 candle-core.workspace = true
@@ -27,18 +26,17 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 quick-xml.workspace = true
-regex       = "1"
-lazy_static = "1"
+
 lopdf.workspace = true
 tempfile    = "3"
 scraper = "0.25.0"
 url = "2.5.8"
 strsim = "0.11.1"
 sha2.workspace = true
-futures = "0.3"
+
 
 [features]
-default = []
+default = ["cuda"]
 rust-embed = []
 python-embed = []  # Native BiomedBERT via Candle is default
 fastembed_backend = ["dep:fastembed"]

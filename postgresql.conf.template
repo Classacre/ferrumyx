@@ -1,0 +1,57 @@
+# postgresql.conf.template - PostgreSQL configuration template for Ferrumyx
+# Copy this to your PostgreSQL data directory and customize
+
+# Connection Settings
+listen_addresses = '*'
+port = 5432
+max_connections = 100
+shared_preload_libraries = 'pg_stat_statements'
+
+# Memory Settings
+shared_buffers = 256MB
+effective_cache_size = 1GB
+work_mem = 4MB
+maintenance_work_mem = 64MB
+wal_buffers = 16MB
+
+# Checkpoint Settings
+checkpoint_segments = 32
+checkpoint_completion_target = 0.9
+wal_level = replica
+archive_mode = on
+archive_command = 'cp %p /var/backups/ferrumyx/wal/%f'
+
+# Logging
+log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+log_statement = 'ddl'
+log_duration = on
+log_min_duration_statement = 1000
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_lock_waits = on
+
+# pgvector Settings
+# These are defaults but can be tuned based on your workload
+# ivfflat.probes = 10
+
+# Autovacuum Settings (important for pgvector performance)
+autovacuum = on
+autovacuum_max_workers = 3
+autovacuum_naptime = 20s
+autovacuum_vacuum_threshold = 50
+autovacuum_analyze_threshold = 50
+autovacuum_vacuum_scale_factor = 0.02
+autovacuum_analyze_scale_factor = 0.01
+
+# Security
+password_encryption = scram-sha-256
+ssl = on
+ssl_cert_file = '/etc/ssl/certs/ssl-cert-snakeoil.pem'
+ssl_key_file = '/etc/ssl/private/ssl-cert-snakeoil.key'
+
+# Extensions
+# pg_stat_statements settings
+pg_stat_statements.max = 10000
+pg_stat_statements.track = all
+pg_stat_statements.track_utility = off

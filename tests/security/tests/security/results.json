@@ -1,0 +1,111 @@
+{
+  "test_suite": "Ferrumyx Security Validation Suite",
+  "timestamp": "2026-04-29T13:07:05.519090",
+  "results": {
+    "secrets_encryption": {
+      "test_passed": true,
+      "secrets_tested": 3,
+      "encryption_method": "AES-256-GCM",
+      "key_entropy_bits": 352
+    },
+    "data_classification": {
+      "test_passed": false,
+      "queries_tested": 3,
+      "accuracy": 0.6666666666666666,
+      "classification_results": [
+        {
+          "content": "What is the weather like today?",
+          "expected": "PUBLIC",
+          "classified_as": "PUBLIC",
+          "correct": true,
+          "should_pass_gate": true
+        },
+        {
+          "content": "Show me KRAS mutation data for patient records",
+          "expected": "CONFIDENTIAL",
+          "classified_as": "CONFIDENTIAL",
+          "correct": true,
+          "should_pass_gate": false
+        },
+        {
+          "content": "Analyze KRAS G12D inhibitor efficacy from published studies",
+          "expected": "INTERNAL",
+          "classified_as": "PUBLIC",
+          "correct": false,
+          "should_pass_gate": true
+        }
+      ]
+    },
+    "audit_logging": {
+      "test_passed": true,
+      "events_logged": 3,
+      "log_file_exists": true,
+      "events_verified": true,
+      "log_integrity_hash": "256bd983da6cbbb763028214520c4fc685fc1e37252675aab417bf13e98109b3"
+    },
+    "access_control": {
+      "test_passed": true,
+      "tests_run": 5,
+      "accuracy": 1.0,
+      "access_results": [
+        {
+          "role": "admin",
+          "resource": "system_config",
+          "action": "admin",
+          "has_permission": true,
+          "expected": true,
+          "correct": true
+        },
+        {
+          "role": "researcher",
+          "resource": "genomic_data",
+          "action": "write",
+          "has_permission": true,
+          "expected": true,
+          "correct": true
+        },
+        {
+          "role": "viewer",
+          "resource": "publication_data",
+          "action": "read",
+          "has_permission": true,
+          "expected": true,
+          "correct": true
+        },
+        {
+          "role": "viewer",
+          "resource": "system_config",
+          "action": "write",
+          "has_permission": false,
+          "expected": false,
+          "correct": true
+        },
+        {
+          "role": "researcher",
+          "resource": "patient_data",
+          "action": "delete",
+          "has_permission": false,
+          "expected": false,
+          "correct": true
+        }
+      ]
+    },
+    "secure_communication": {
+      "test_passed": true,
+      "endpoints_tested": 4,
+      "secure_endpoints": 4,
+      "insecure_endpoints": 0,
+      "payload_hash": "06e6a76942948dfbed4ec9ace2070fd29c65ea3cd7b2a496946e84cd96f5f1ac",
+      "hash_algorithm": "SHA-256"
+    }
+  },
+  "summary": {
+    "overall_status": "WARNING",
+    "tests_passed": 4,
+    "tests_failed": 1,
+    "security_score": 80.0,
+    "recommendations": [
+      "Security score below 90%, review and improve security controls"
+    ]
+  }
+}

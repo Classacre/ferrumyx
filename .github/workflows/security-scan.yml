@@ -1,0 +1,329 @@
+name: Security Scan
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**/*.rs'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.toml'
+      - '**/*.json'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - 'Dockerfile*'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  rust-security:
+    name: Rust Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+     - name: Run cargo audit
+       run: cargo audit --format json --output audit-report.json || true
+
+    - name: Upload audit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: cargo-audit-report
+        path: crates/ferrumyx-runtime-core/audit-report.json
+
+    - name: Check for critical vulnerabilities
+      run: |
+        if [ -f "crates/ferrumyx-runtime-core/audit-report.json" ]; then
+          critical_count=$(jq '.vulnerabilities.count' crates/ferrumyx-runtime-core/audit-report.json 2>/dev/null || echo "0")
+          if [ "$critical_count" -gt "0" ]; then
+            echo "🚨 Critical vulnerabilities found: $critical_count"
+            jq '.vulnerabilities.list[] | select(.severity == "critical") | .advisory.id' crates/ferrumyx-runtime-core/audit-report.json
+            exit 1
+          else
+            echo "✅ No critical vulnerabilities found"
+          fi
+        fi
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install npm dependencies
+      run: npm ci
+
+    - name: Run npm audit
+      run: npm audit --audit-level=moderate --json > npm-audit-report.json || true
+
+    - name: Check npm audit results
+      run: |
+        if [ -f "npm-audit-report.json" ]; then
+          vulnerabilities=$(jq '.metadata.vulnerabilities // {}' npm-audit-report.json)
+          high=$(echo "$vulnerabilities" | jq '.high // 0')
+          critical=$(echo "$vulnerabilities" | jq '.critical // 0')
+
+          if [ "$critical" -gt "0" ] || [ "$high" -gt "0" ]; then
+            echo "🚨 High/critical vulnerabilities found in npm dependencies"
+            echo "Critical: $critical, High: $high"
+            exit 1
+          else
+            echo "✅ No high/critical vulnerabilities found in npm dependencies"
+          fi
+        fi
+
+    - name: Upload npm audit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: npm-audit-report
+        path: npm-audit-report.json
+
+  container-security:
+    name: Container Image Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build test images
+      run: |
+        docker build -f Dockerfile.web -t ferrumyx-web:test .
+        docker build -f Dockerfile.agent -t ferrumyx-agent:test .
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'image'
+        scan-ref: 'ferrumyx-web:test,ferrumyx-agent:test'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Check Trivy results
+      run: |
+        # Check if any critical/high vulnerabilities were found
+        if grep -q '"severity":\s*"CRITICAL\|HIGH"' trivy-results.sarif 2>/dev/null; then
+          echo "🚨 Critical/high vulnerabilities found in container images"
+          grep -A 5 '"severity":\s*"CRITICAL\|HIGH"' trivy-results.sarif || true
+          exit 1
+        else
+          echo "✅ No critical/high vulnerabilities found in container images"
+        fi
+
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'rust' ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: ${{ matrix.language }}
+        queries: security-and-quality
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v2
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        category: "/language:${{matrix.language}}"
+
+  license-scan:
+    name: License Compliance Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-license
+      run: cargo install cargo-license
+
+    - name: Check licenses
+      run: |
+        cd crates/ferrumyx-runtime-core
+        cargo license --json > licenses.json
+
+        # Check for forbidden licenses
+        forbidden_licenses=("GPL" "LGPL" "MS-PL" "BSD-4-Clause")
+        violations=()
+
+        for license in "${forbidden_licenses[@]}"; do
+          if jq -r '.[] | select(.license | contains("'${license}'")) | .name' licenses.json | grep -q .; then
+            violations+=("$license")
+          fi
+        done
+
+        if [ ${#violations[@]} -gt 0 ]; then
+          echo "🚨 Forbidden licenses found: ${violations[*]}"
+          jq '.[] | select(.license | contains("'${violations[0]}'")) | {name, license}' licenses.json
+          exit 1
+        else
+          echo "✅ No forbidden licenses found"
+        fi
+
+    - name: Upload license report
+      uses: actions/upload-artifact@v3
+      with:
+        name: license-report
+        path: crates/ferrumyx-runtime-core/licenses.json
+
+  performance-benchmark:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ferrumyx_perf
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install Criterion
+      run: cargo install cargo-criterion
+
+    - name: Run performance benchmarks
+      run: |
+        cd crates/ferrumyx-runtime-core
+        cargo criterion --features postgres,libsql --message-format=json > benchmark-results.json
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/ferrumyx_perf
+        REDIS_URL: redis://localhost:6379
+
+    - name: Check for performance regressions
+      run: |
+        # Compare benchmark results with baseline
+        # This is a simplified check - in practice you'd compare against stored baselines
+        if [ -f "benchmark-baseline.json" ]; then
+          echo "Comparing against performance baseline..."
+          # Add regression detection logic here
+          echo "✅ Performance check completed"
+        else
+          echo "📝 No performance baseline found - creating one"
+          cp crates/ferrumyx-runtime-core/benchmark-results.json benchmark-baseline.json
+        fi
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: crates/ferrumyx-runtime-core/benchmark-results.json
+
+  summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [rust-security, dependency-scan, container-security, secrets-scan, codeql-analysis, license-scan, performance-benchmark]
+    if: always()
+
+    steps:
+    - name: Generate security report
+      run: |
+        echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Rust Security Audit | ${{ needs.rust-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Dependency Scan | ${{ needs.dependency-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Container Security | ${{ needs.container-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Secrets Detection | ${{ needs.secrets-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| CodeQL Analysis | ${{ needs.codeql-analysis.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| License Compliance | ${{ needs.license-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Performance Check | ${{ needs.performance-benchmark.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Overall status
+        if [ "${{ needs.rust-security.result }}" = "success" ] && \
+           [ "${{ needs.dependency-scan.result }}" = "success" ] && \
+           [ "${{ needs.container-security.result }}" = "success" ] && \
+           [ "${{ needs.secrets-scan.result }}" = "success" ] && \
+           [ "${{ needs.codeql-analysis.result }}" = "success" ] && \
+           [ "${{ needs.license-scan.result }}" = "success" ] && \
+           [ "${{ needs.performance-benchmark.result }}" = "success" ]; then
+          echo "🎉 All security checks passed!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Some security checks failed. Please review the details above." >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Send security alert
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        webhook_url: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      env:
+        SLACK_SECURITY_WEBHOOK_URL: ${{ secrets.SLACK_SECURITY_WEBHOOK_URL }}

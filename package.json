@@ -1,0 +1,13 @@
+{
+  "name": "wasm-sandbox-validation",
+  "version": "1.0.0",
+  "description": "Comprehensive WASM sandboxing validation for bioinformatics tools",
+  "main": "validate.js",
+  "scripts": {
+    "start": "node validate.js"
+  },
+  "dependencies": {
+    "@biowasm/aioli": "^3.2.1",
+    "pyodide": "^0.25.0"
+  }
+}

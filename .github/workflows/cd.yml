@@ -1,0 +1,301 @@
+name: CD
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      web-image: ${{ steps.meta-web.outputs.tags }}
+      agent-image: ${{ steps.meta-agent.outputs.tags }}
+      deploy-env: ${{ steps.set-env.outputs.deploy-env }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set deployment environment
+      id: set-env
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "deploy-env=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+        elif [ "${{ github.ref_type }}" = "tag" ]; then
+          echo "deploy-env=production" >> $GITHUB_OUTPUT
+        else
+          echo "deploy-env=staging" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (web)
+      id: meta-web
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Extract metadata (agent)
+      id: meta-agent
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push web image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.web
+        push: true
+        tags: ${{ steps.meta-web.outputs.tags }}
+        labels: ${{ steps.meta-web.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push agent image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.agent
+        push: true
+        tags: ${{ steps.meta-agent.outputs.tags }}
+        labels: ${{ steps.meta-agent.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: needs.build-and-push.outputs.deploy-env == 'staging'
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+    - name: Deploy to staging server
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+          git pull origin main
+          export COMPOSE_FILE=docker-compose.staging.yml
+          export FERRUMYX_WEB_IMAGE=${{ needs.build-and-push.outputs.web-image }}
+          export IRONCLAW_AGENT_IMAGE=${{ needs.build-and-push.outputs.agent-image }}
+
+          # Backup current deployment
+          docker tag ferrumyx-web:latest ferrumyx-web:previous || true
+          docker tag ironclaw-agent:latest ironclaw-agent:previous || true
+
+          # Deploy new version
+          docker-compose pull
+          docker-compose up -d --build
+
+          # Wait for services to be healthy
+          timeout 300 bash -c 'until curl -f http://localhost:3000/health; do sleep 10; done'
+
+          # Run health checks
+          bash scripts/health-check.sh --quiet
+
+          # Clean up old images
+          docker image prune -f
+        EOF
+
+    - name: Run staging tests
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+
+          # Run integration tests against staging
+          if [ -f "tests/integration/staging-test.sh" ]; then
+            bash tests/integration/staging-test.sh
+          fi
+        EOF
+
+  deploy-production:
+    name: Deploy to Production
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    if: needs.build-and-push.outputs.deploy-env == 'production'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+
+    - name: Create production backup
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+
+          # Create database backup
+          bash scripts/db-backup.sh --backup-dir /opt/ferrumyx/backups
+
+          # Backup current docker-compose configuration
+          cp docker-compose.prod.yml docker-compose.prod.yml.backup
+        EOF
+
+    - name: Deploy to production server
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+          git pull origin main
+          export COMPOSE_FILE=docker-compose.prod.yml
+          export FERRUMYX_WEB_IMAGE=${{ needs.build-and-push.outputs.web-image }}
+          export IRONCLAW_AGENT_IMAGE=${{ needs.build-and-push.outputs.agent-image }}
+
+          # Backup current deployment
+          docker tag ferrumyx-web:latest ferrumyx-web:rollback || true
+          docker tag ironclaw-agent:latest ironclaw-agent:rollback || true
+
+          # Stop services gracefully
+          docker-compose stop ferrumyx-web ironclaw-agent
+
+          # Deploy new version
+          docker-compose pull
+          docker-compose up -d ferrumyx-web ironclaw-agent
+
+          # Wait for services to be healthy with timeout
+          timeout 600 bash -c '
+            until curl -f http://localhost:3000/health; do
+              echo "Waiting for application to be healthy..."
+              sleep 10
+            done
+          '
+
+          # Run comprehensive health checks
+          if bash scripts/health-check.sh --quiet; then
+            echo "Health checks passed"
+
+            # Start monitoring services
+            docker-compose up -d grafana prometheus loki alertmanager
+
+            # Clean up old images (keep last 3 versions)
+            docker images ferrumyx-web --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" | \
+              tail -n +2 | sort -k2 -r | tail -n +4 | awk "{print \$1}" | xargs docker rmi -f 2>/dev/null || true
+
+            docker images ironclaw-agent --format "table {{.Repository}}:{{.Tag}}\t{{.CreatedAt}}" | \
+              tail -n +2 | sort -k2 -r | tail -n +4 | awk "{print \$1}" | xargs docker rmi -f 2>/dev/null || true
+          else
+            echo "Health checks failed - rolling back"
+            exit 1
+          fi
+        EOF
+
+    - name: Run production smoke tests
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+
+          # Run smoke tests
+          if [ -f "tests/smoke/production-smoke-test.sh" ]; then
+            bash tests/smoke/production-smoke-test.sh
+          else
+            # Basic smoke test
+            curl -f -s http://localhost:3000/health > /dev/null && echo "Smoke test passed" || exit 1
+          fi
+        EOF
+
+    - name: Rollback on failure
+      if: failure()
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_HOST }} << 'EOF'
+          cd /opt/ferrumyx
+
+          echo "Deployment failed - initiating rollback"
+
+          # Stop failed services
+          docker-compose stop ferrumyx-web ironclaw-agent
+
+          # Restore from backup images
+          docker tag ferrumyx-web:rollback ferrumyx-web:latest || true
+          docker tag ironclaw-agent:rollback ironclaw-agent:latest || true
+
+          # Restart services
+          docker-compose up -d ferrumyx-web ironclaw-agent
+
+          # Restore configuration
+          mv docker-compose.prod.yml.backup docker-compose.prod.yml || true
+
+          echo "Rollback completed"
+        EOF
+
+  notify:
+    name: Send Notifications
+    needs: [build-and-push, deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Send Slack notification
+      uses: 8398a7/action-slack@v3
+      if: env.SLACK_WEBHOOK_URL != null
+      with:
+        status: ${{ job.status }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Create deployment summary
+      if: always()
+      run: |
+        echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: ${{ needs.build-and-push.outputs.deploy-env }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Web Image**: ${{ needs.build-and-push.outputs.web-image }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Agent Image**: ${{ needs.build-and-push.outputs.agent-image }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

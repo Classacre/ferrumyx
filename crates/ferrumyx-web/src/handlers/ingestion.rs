@@ -13,6 +13,8 @@ use ferrumyx_ingestion::repository::IngestionRepository;
 
 use crate::handlers::dashboard::NAV_HTML;
 use crate::state::{AppEvent, SharedState};
+use axum::Json;
+use serde_json::json;
 
 // ── Form input ────────────────────────────────────────────────────────────────
 
@@ -162,6 +164,31 @@ pub async fn ingestion_run(
         &summary,
         form.max_results.unwrap_or(100) as i64,
     ))
+}
+
+pub async fn api_ingestion_status(State(state): State<SharedState>) -> Json<serde_json::Value> {
+    let repo = IngestionRepository::new(state.db.clone());
+    let total = repo.paper_count().await.unwrap_or(0);
+    let parsed = repo.paper_count_by_status("parsed").await.unwrap_or(0)
+        + repo.paper_count_by_status("parsed_fast").await.unwrap_or(0)
+        + repo
+            .paper_count_by_status("parsed_light")
+            .await
+            .unwrap_or(0);
+    let pending = repo.paper_count_by_status("pending").await.unwrap_or(0)
+        + repo.paper_count_by_status("processing").await.unwrap_or(0);
+    let failed = repo.paper_count_by_status("failed").await.unwrap_or(0);
+
+    Json(json!({
+        "status": "operational",
+        "stats": {
+            "total_papers": total,
+            "parsed_papers": parsed,
+            "pending_papers": pending,
+            "failed_papers": failed
+        },
+        "message": "Ingestion pipeline is operational"
+    }))
 }
 
 // ── Stats loader ──────────────────────────────────────────────────────────────

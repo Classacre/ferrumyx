@@ -1,0 +1,60 @@
+version: "3.8"
+
+# Local customizations override file
+# Add your local environment-specific overrides here
+# This file is gitignored and won't be committed
+
+services:
+  # Example: Override resource limits for local development
+  ferrumyx-web:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Example: Mount local data directories
+  # bioclaw-wasm:
+  #   volumes:
+  #     - /path/to/local/data:/app/data
+
+  # Example: Add development tools
+  # vscode-dev:
+  #   image: mcr.microsoft.com/devcontainers/rust:latest
+  #   volumes:
+  #     - ..:/workspaces:cached
+  #   working_dir: /workspaces/ferrumyx
+  #   command: sleep infinity
+  #   networks:
+  #     - ferrumyx-network
+
+# Example: Override networks for local testing
+# networks:
+#   ferrumyx-network:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.20.0.0/16

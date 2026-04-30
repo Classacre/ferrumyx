@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 // Third-party
+use ironclaw::prelude::*;
 use rig::providers::{anthropic::Client as AnthropicClient, gemini::Client as GeminiClient, openai::{Client as OpenAiClient, CompletionsClient as OpenAiCompletionsClient}};
 use serde::Deserialize;
 use tokio::process::Command;
@@ -15,25 +16,38 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 // Ferrumyx internal crates
-use ferrumyx_runtime::agent::SessionManager;
 use ferrumyx_runtime::llm::{CooldownConfig, FailoverProvider};
+use ferrumyx_runtime::channels::{ChannelManager, web::GatewayChannel, wasm::{WasmChannelLoader, WasmChannelRuntime, WasmChannelRuntimeConfig}};
+use ferrumyx_runtime::config::GatewayConfig;
+use ferrumyx_runtime::tools::wasm::{WasmToolLoader, load_dev_tools};
+use ferrumyx_runtime::extensions::manager::ExtensionManager;
+use ferrumyx_runtime::pairing::PairingStore;
+use ferrumyx_common::memory;
 
 mod config;
+mod ironclaw_config;
+mod llm_routing;
 mod tools;
+mod channels;
+mod container_orchestrator;
+
+use container_orchestrator::BioContainerOrchestrator;
 
 /// Returns a Boxed CompletionModel to inject into the Agent.
 /// It natively maps the Ferrumyx config directly to `rig-core` LLM clients.
 async fn build_completion_model(
     config: &config::Config,
-) -> anyhow::Result<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> {
+) -> anyhow::Result<Arc<llm_routing::IronClawLlmRouter>> {
     let mode = config.llm.mode.to_lowercase();
     let local_only = mode == "local_only";
     let default_backend = normalize_backend_name(&config.llm.default_backend);
     let local_backend = normalize_backend_name(&config.llm.local_backend);
     let failover_order = resolve_failover_backend_order(&default_backend, &local_backend, &mode);
 
-    let mut providers: Vec<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> = Vec::new();
-    let mut provider_names: Vec<String> = Vec::new();
+    let mut local_providers: Vec<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> = Vec::new();
+    let mut remote_providers: Vec<Arc<dyn ferrumyx_runtime::llm::LlmProvider>> = Vec::new();
+    let mut local_provider_names: Vec<String> = Vec::new();
+    let mut remote_provider_names: Vec<String> = Vec::new();
     let mut seen = HashSet::new();
 
     for backend in failover_order {
@@ -58,37 +72,68 @@ async fn build_completion_model(
         };
 
         if let Some(provider) = maybe_provider {
-            provider_names.push(backend);
-            providers.push(provider);
+            if matches!(backend.as_str(), "ollama" | "openai_compatible") && is_local_backend(&backend, config) {
+                local_provider_names.push(backend);
+                local_providers.push(provider);
+            } else {
+                remote_provider_names.push(backend);
+                remote_providers.push(provider);
+            }
         }
     }
 
-    if providers.is_empty() {
+    if local_providers.is_empty() && remote_providers.is_empty() {
         anyhow::bail!("No LLM providers were successfully configured in ferrumyx.toml");
     }
-    if providers.len() == 1 {
-        tracing::info!("Using single LLM backend: {}", provider_names[0]);
-        return Ok(providers.remove(0));
-    }
 
-    let cooldown_secs = env_u64("FERRUMYX_LLM_FAILOVER_COOLDOWN_SECS", 120).clamp(15, 3600);
-    let failure_threshold =
-        env_u64("FERRUMYX_LLM_FAILOVER_FAILURE_THRESHOLD", 2).clamp(1, 10) as u32;
-    let failover = FailoverProvider::with_cooldown(
-        providers,
-        CooldownConfig {
-            cooldown_duration: Duration::from_secs(cooldown_secs),
-            failure_threshold,
-        },
-    )
-    .map_err(|e| anyhow::anyhow!("failed to build LLM failover chain: {e}"))?;
+    // Build local failover provider
+    let local_provider = if local_providers.len() == 1 {
+        local_providers.remove(0)
+    } else if !local_providers.is_empty() {
+        let cooldown_secs = env_u64("FERRUMYX_LLM_FAILOVER_COOLDOWN_SECS", 120).clamp(15, 3600);
+        let failure_threshold =
+            env_u64("FERRUMYX_LLM_FAILOVER_FAILURE_THRESHOLD", 2).clamp(1, 10) as u32;
+        FailoverProvider::with_cooldown(
+            local_providers,
+            CooldownConfig {
+                cooldown_duration: Duration::from_secs(cooldown_secs),
+                failure_threshold,
+            },
+        )
+        .map_err(|e| anyhow::anyhow!("failed to build local LLM failover chain: {e}"))?
+    } else {
+        anyhow::bail!("No local LLM providers configured, but required for IronClaw routing");
+    };
+
+    // Build remote failover provider (optional)
+    let remote_provider = if remote_providers.len() == 1 {
+        Some(remote_providers.remove(0))
+    } else if !remote_providers.is_empty() {
+        let cooldown_secs = env_u64("FERRUMYX_LLM_FAILOVER_COOLDOWN_SECS", 120).clamp(15, 3600);
+        let failure_threshold =
+            env_u64("FERRUMYX_LLM_FAILOVER_FAILURE_THRESHOLD", 2).clamp(1, 10) as u32;
+        Some(Arc::new(FailoverProvider::with_cooldown(
+            remote_providers,
+            CooldownConfig {
+                cooldown_duration: Duration::from_secs(cooldown_secs),
+                failure_threshold,
+            },
+        )
+        .map_err(|e| anyhow::anyhow!("failed to build remote LLM failover chain: {e}"))?))
+    } else {
+        None
+    };
+
+    // Create IronClaw router
+    let router = llm_routing::IronClawLlmRouter::new(local_provider, remote_provider);
+
     tracing::info!(
-        "LLM failover chain active: {} (cooldown={}s, threshold={})",
-        provider_names.join(" -> "),
-        cooldown_secs,
-        failure_threshold
+        "IronClaw LLM routing active: local={} remote={}",
+        local_provider_names.join(","),
+        remote_provider_names.join(",")
     );
-    Ok(Arc::new(failover))
+
+    Ok(Arc::new(router))
 }
 
 fn normalize_backend_name(raw: &str) -> String {
@@ -97,6 +142,12 @@ fn normalize_backend_name(raw: &str) -> String {
         "local" => "ollama".to_string(),
         other => other.to_string(),
     }
+}
+
+fn is_local_backend(backend: &str, config: &config::Config) -> bool {
+    matches!(backend, "ollama") ||
+    (backend == "openai_compatible" && config.llm.openai_compatible.as_ref()
+        .map(|c| is_local_base_url(&c.base_url)).unwrap_or(false))
 }
 
 fn resolve_failover_backend_order(
@@ -800,17 +851,62 @@ async fn async_main() -> anyhow::Result<()> {
     let db = std::sync::Arc::new(db);
     info!("✅ LanceDB connected and initialized.");
 
+    // Start memory monitoring
+    memory::start_memory_monitoring(1000, Duration::from_secs(30), Duration::from_secs(3600), 10).await;
+
     // Start Phase 3: Knowledge Graph Event Queue
     let _kg_event_tx = ferrumyx_kg::update::start_scoring_event_queue(db.clone());
     info!("✅ KG event-driven scoring queue initialized.");
     spawn_background_provider_refresh_scheduler(db.clone());
 
+    // Initialize Docker container orchestrator for bioinformatics tools
+    info!("Initializing Docker container orchestrator...");
+    let container_orchestrator = match BioContainerOrchestrator::new().await {
+        Ok(orc) => {
+            info!("✅ Docker container orchestrator initialized.");
+            Arc::new(orc)
+        }
+        Err(e) => {
+            tracing::warn!("Could not initialize Docker container orchestrator: {e}");
+            tracing::warn!("Bioinformatics tools will run in placeholder mode.");
+            return Ok(());
+        }
+    };
+
     // Build LLM client
-    let runtime_llm = build_completion_model(&config).await?;
+    let ironclaw_router = build_completion_model(&config).await?;
+    let runtime_llm: Arc<dyn ferrumyx_runtime::llm::LlmProvider> = ironclaw_router.clone();
     let runtime_core_llm = ferrumyx_runtime::llm::to_core_provider(runtime_llm.clone());
 
     // Build Tool Registry
     let runtime_tool_registry = Arc::new(ferrumyx_runtime::tools::ToolRegistry::new());
+
+    // Load WASM bioinformatics tools for secure sandboxed execution
+    info!("Loading WASM bioinformatics tools...");
+    let wasm_config = ferrumyx_runtime::config::WasmConfig::resolve().unwrap_or_default();
+    if wasm_config.enabled {
+        let wasm_loader = WasmToolLoader::new(
+            None, // WASM runtime will be initialized if needed
+            runtime_tool_registry.clone(),
+            None, // No custom secrets store
+        );
+
+        match load_dev_tools(&wasm_loader, &wasm_config.tools_dir).await {
+            Ok(count) => {
+                if count > 0 {
+                    info!("✅ Loaded {} WASM bioinformatics tools: BLAST, FastQC, PyMOL", count);
+                } else {
+                    info!("ℹ️  No WASM tools found (expected in development mode)");
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Could not load WASM tools: {e}");
+                tracing::warn!("Bioinformatics tools will use container-based execution.");
+            }
+        }
+    } else {
+        info!("ℹ️  WASM sandboxing disabled, using container-based execution for bioinformatics tools");
+    }
     runtime_tool_registry.register_sync(Arc::new(tools::ingestion_tool::IngestionTool::new(
         db.clone(),
     )));
@@ -850,6 +946,20 @@ async fn async_main() -> anyhow::Result<()> {
     runtime_tool_registry.register_sync(Arc::new(
         tools::system_command_tool::SystemCommandTool::new(),
     ));
+
+    // Register bioinformatics tools
+    runtime_tool_registry.register_sync(Arc::new(tools::pubmed_search_tool::PubMedSearchTool::new(db.clone())));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::FastQCTool::new(container_orchestrator.clone())));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::BlastTool::new(container_orchestrator.clone())));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::PyMOLTool::new(container_orchestrator.clone())));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::ExpressionAnalysisTool::new()));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::PathwayEnrichmentTool::new()));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::VariantCallingTool::new()));
+    runtime_tool_registry.register_sync(Arc::new(tools::bio_tools::TargetIdentificationTool::new()));
+
+    runtime_tool_registry.register_sync(Arc::new(
+        tools::llm_audit_tool::LlmAuditTool::new(ironclaw_router.clone()),
+    ));
     let tool_registry = runtime_tool_registry.to_core_registry();
 
     // Build Skill Registry
@@ -860,89 +970,173 @@ async fn async_main() -> anyhow::Result<()> {
     ));
     let skill_catalog = std::sync::Arc::new(ferrumyx_runtime::skills::catalog::SkillCatalog::new());
 
-    let deps = ferrumyx_runtime::agent::AgentDeps {
-        store: None,
-        llm: runtime_core_llm.clone(),
-        cheap_llm: None,
-        safety: std::sync::Arc::new(ferrumyx_runtime::safety::SafetyLayer::new(
-            &ferrumyx_runtime::config::SafetyConfig {
-                max_output_length: 100_000,
-                injection_check_enabled: true,
-            },
-        )),
-        tools: tool_registry.clone(),
-        workspace: None,
-        extension_manager: None,
-        skill_registry: Some(skill_registry.clone()),
-        skill_catalog: Some(skill_catalog.clone()),
-        skills_config: ferrumyx_runtime::config::SkillsConfig::default(),
-        hooks: std::sync::Arc::new(ferrumyx_runtime::hooks::HookRegistry::new()),
-        cost_guard: std::sync::Arc::new(ferrumyx_runtime::agent::cost_guard::CostGuard::new(
-            ferrumyx_runtime::agent::cost_guard::CostGuardConfig::default(),
-        )),
-        sse_tx: None,
-        http_interceptor: None,
-        transcription: None,
-        document_extraction: None,
-    };
+    // Enhanced IronClaw agent with full orchestration for oncology discovery
+    let ironclaw_config = ironclaw_config::load_config();
+    let agent = ironclaw::Agent::builder()
+        .name("Ferrumyx Drug Discovery Agent")
+        .model(runtime_llm.clone())
+        .tools(tool_registry.clone())
+        .config(ironclaw_config)
+        .with_max_parallel_jobs(4) // Allow parallel oncology discovery jobs
+        .with_job_timeout(std::time::Duration::from_secs(3600))
+        .with_stuck_threshold(std::time::Duration::from_secs(300))
+        .with_repair_check_interval(std::time::Duration::from_secs(60))
+        .with_max_repair_attempts(3)
+        .with_session_idle_timeout(std::time::Duration::from_secs(86400))
+        .with_max_tool_iterations(50)
+        .with_auto_approve_tools(true)
+        // Configure autonomous oncology discovery routines
+        .with_routine_config(ironclaw::config::RoutineConfig {
+            enabled: true,
+            cron_schedule: "0 */4 * * *".to_string(), // Every 4 hours for discovery cycles
+            event_triggers: vec![
+                "on_new_pubmed_data".to_string(),
+                "on_gene_target_update".to_string(),
+                "on_molecule_pipeline_complete".to_string(),
+            ],
+            webhook_endpoints: vec![],
+        })
+        // Configure heartbeat for proactive monitoring
+        .with_heartbeat_config(ironclaw::config::HeartbeatConfig {
+            enabled: true,
+            interval_secs: 300, // 5 minutes
+            tasks: vec![
+                "check_pubmed_updates".to_string(),
+                "validate_lab_status".to_string(),
+                "monitor_provider_signals".to_string(),
+                "audit_discovery_progress".to_string(),
+            ],
+        })
+        .build()
+        .expect("Failed to build IronClaw agent");
 
-    let session_manager = Arc::new(SessionManager::new());
+    // Set up multi-channel support
     let channels = ferrumyx_runtime::channels::ChannelManager::new();
-    let disable_repl = std::env::var("FERRUMYX_DISABLE_REPL")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    if !disable_repl && std::io::stdin().is_terminal() {
-        channels
-            .add(Box::new(ferrumyx_runtime::channels::ReplChannel::new()))
-            .await;
-    } else {
-        tracing::info!("Non-interactive runtime detected; skipping REPL channel.");
-    }
+    let channel_router = channels::ChannelRouter::new();
 
+    // Add GatewayChannel for web/SSE communication with oncology formatting
     let gw_config = ferrumyx_runtime::config::GatewayConfig {
         host: "127.0.0.1".to_string(),
         port: 3002,
         user_id: "User".to_string(),
         auth_token: Some("ferrumyx-local-dev-token".to_string()),
     };
-    let gateway = ferrumyx_runtime::channels::GatewayChannel::new(gw_config)
-        .with_session_manager(session_manager.clone())
-        .with_llm_provider(runtime_core_llm.clone());
-    channels.add(Box::new(gateway)).await;
+    let gateway = ferrumyx_runtime::channels::web::GatewayChannel::new(gw_config.clone());
+    let oncology_gateway = channels::OncologyChannelWrapper::new(gateway);
+    channels.add(Box::new(oncology_gateway)).await;
 
-    let agent_config = ferrumyx_runtime::config::AgentConfig {
-        name: "Ferrumyx Drug Discovery Agent".to_string(),
-        max_parallel_jobs: 1,
-        job_timeout: std::time::Duration::from_secs(3600),
-        stuck_threshold: std::time::Duration::from_secs(300),
-        repair_check_interval: std::time::Duration::from_secs(60),
-        max_repair_attempts: 3,
-        use_planning: true,
-        session_idle_timeout: std::time::Duration::from_secs(86400),
-        allow_local_tools: true,
-        max_cost_per_day_cents: None,
-        max_actions_per_hour: None,
-        max_tool_iterations: 50,
-        auto_approve_tools: true,
-        default_timezone: "UTC".to_string(),
-    };
+    // Load WASM channels for WhatsApp, Slack, Discord
+    info!("Loading WASM channels for multi-channel support...");
+    let wasm_runtime_config = WasmChannelRuntimeConfig::for_testing();
+    let wasm_runtime = Arc::new(WasmChannelRuntime::new(wasm_runtime_config).unwrap());
+    let pairing_store = Arc::new(PairingStore::new());
+    let wasm_loader = WasmChannelLoader::new(wasm_runtime.clone(), pairing_store.clone(), None);
 
-    let agent = ferrumyx_runtime::agent::Agent::new(
-        agent_config,
-        deps,
-        Arc::new(channels),
-        None,
-        None,
-        None,
-        None,
-        Some(session_manager),
-    );
+    let channels_dir = ferrumyx_runtime::channels::wasm::loader::default_channels_dir();
+    match wasm_loader.load_from_dir(&channels_dir).await {
+        Ok(results) => {
+            if results.success_count() > 0 {
+                info!("✅ Loaded {} WASM channels: {}", results.success_count(),
+                    results.loaded.iter().map(|c| c.name()).collect::<Vec<_>>().join(", "));
+            } else {
+                info!("ℹ️  No WASM channels found in {}", channels_dir.display());
+            }
 
-    tokio::spawn(async move {
+            if !results.errors.is_empty() {
+                for (path, error) in results.errors {
+                    tracing::warn!("Failed to load WASM channel {}: {}", path.display(), error);
+                }
+            }
+
+            // Add loaded WASM channels to the channel manager with oncology formatting
+            for loaded_channel in results.take_channels() {
+                let oncology_channel = channels::OncologyChannelWrapper::new(loaded_channel);
+                channels.add(Box::new(oncology_channel)).await;
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Could not load WASM channels from {}: {}", channels_dir.display(), e);
+        }
+    }
+
+    // Start channel message processing
+    let channel_stream = channels.start().await.expect("Failed to start channels");
+    let agent_clone = Arc::clone(&agent);
+
+    // Bridge channel messages to IronClaw agent
+    let agent_handle = tokio::spawn(async move {
+        info!("Starting IronClaw agent orchestration loop...");
         if let Err(e) = agent.run().await {
-            tracing::error!("Agent loop exited with error: {}", e);
+            tracing::error!("IronClaw agent orchestration exited with error: {}", e);
         }
     });
+
+    // Start channel processing
+    let channel_handle = tokio::spawn(async move {
+        info!("Starting channel message processing...");
+        while let Some(message) = channel_stream.recv().await {
+            tracing::info!(
+                "Channel message from {}: {} (user: {}, thread: {:?})",
+                message.channel, message.content, message.user_id, message.thread_id
+            );
+
+            // Forward message to IronClaw agent
+            let agent = Arc::clone(&agent_clone);
+            tokio::spawn(async move {
+                match agent.handle_message(&message).await {
+                    Ok(Some(response)) => {
+                        tracing::info!("Agent responded: {}", response);
+                        // Send response back through the channel
+                        if let Err(e) = channels.respond(&message, ferrumyx_runtime::channels::OutgoingResponse::text(response)).await {
+                            tracing::error!("Failed to send response: {}", e);
+                        }
+                    }
+                    Ok(None) => {
+                        // No response needed (e.g., system command)
+                    }
+                    Err(e) => {
+                        tracing::error!("Agent failed to handle message: {}", e);
+                        // Send error response
+                        if let Err(send_err) = channels.respond(&message, ferrumyx_runtime::channels::OutgoingResponse::text(format!("Error: {}", e))).await {
+                            tracing::error!("Failed to send error response: {}", send_err);
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    // Start container cleanup task
+    let cleanup_orchestrator = container_orchestrator.clone();
+    let cleanup_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
+        loop {
+            interval.tick().await;
+            if let Err(e) = cleanup_orchestrator.health_check().await {
+                tracing::warn!("Container health check failed: {}", e);
+            }
+            // Note: Automatic cleanup is handled by container auto_remove: true
+        }
+    });
+
+    // Wait for either task to complete
+    tokio::select! {
+        result = agent_handle => {
+            if let Err(e) = result {
+                tracing::error!("Agent task failed: {}", e);
+            }
+        }
+        result = channel_handle => {
+            if let Err(e) = result {
+                tracing::error!("Channel task failed: {}", e);
+            }
+        }
+        result = cleanup_handle => {
+            if let Err(e) = result {
+                tracing::error!("Cleanup task failed: {}", e);
+            }
+        }
+    }
 
     // Build app state and router
     let state = ferrumyx_web::state::AppState::new(db);
@@ -965,5 +1159,187 @@ async fn async_main() -> anyhow::Result<()> {
     axum::serve(listener, router).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use ferrumyx_test_utils::{mocks::MockHttpClient, fixtures::TestFixtureManager};
+    use tokio::test;
+
+    #[test]
+    fn test_normalize_backend_name() {
+        assert_eq!(normalize_backend_name("openai"), "openai");
+        assert_eq!(normalize_backend_name("openai-compatible"), "openai_compatible");
+        assert_eq!(normalize_backend_name("compat"), "openai_compatible");
+        assert_eq!(normalize_backend_name("local"), "ollama");
+        assert_eq!(normalize_backend_name("ANTHROPIC"), "anthropic");
+    }
+
+    #[test]
+    fn test_is_local_backend() {
+        let config = config::Config::default();
+
+        assert!(is_local_backend("ollama", &config));
+        assert!(!is_local_backend("openai", &config));
+        assert!(!is_local_backend("anthropic", &config));
+    }
+
+    #[test]
+    fn test_resolve_failover_backend_order() {
+        let default_backend = "openai".to_string();
+        let local_backend = "ollama".to_string();
+
+        // Test local_only mode
+        let order = resolve_failover_backend_order(&default_backend, &local_backend, "local_only");
+        assert!(order.contains(&"ollama".to_string()));
+        assert!(!order.contains(&"openai".to_string()));
+
+        // Test prefer_local mode
+        let order = resolve_failover_backend_order(&default_backend, &local_backend, "prefer_local");
+        assert_eq!(order[0], "ollama");
+        assert!(order.contains(&"openai".to_string()));
+
+        // Test any mode
+        let order = resolve_failover_backend_order(&default_backend, &local_backend, "any");
+        assert!(order.contains(&"openai".to_string()));
+        assert!(order.contains(&"ollama".to_string()));
+    }
+
+    #[test]
+    fn test_env_bool() {
+        std::env::set_var("TEST_BOOL_TRUE", "true");
+        std::env::set_var("TEST_BOOL_FALSE", "false");
+        std::env::set_var("TEST_BOOL_ONE", "1");
+        std::env::set_var("TEST_BOOL_ZERO", "0");
+
+        assert!(env_bool("TEST_BOOL_TRUE", false));
+        assert!(!env_bool("TEST_BOOL_FALSE", true));
+        assert!(env_bool("TEST_BOOL_ONE", false));
+        assert!(!env_bool("TEST_BOOL_ZERO", true));
+        assert_eq!(env_bool("NON_EXISTENT", true), true);
+        assert_eq!(env_bool("NON_EXISTENT", false), false);
+    }
+
+    #[test]
+    fn test_env_u64() {
+        std::env::set_var("TEST_U64", "12345");
+        std::env::set_var("TEST_U64_INVALID", "not_a_number");
+
+        assert_eq!(env_u64("TEST_U64", 0), 12345);
+        assert_eq!(env_u64("TEST_U64_INVALID", 999), 999);
+        assert_eq!(env_u64("NON_EXISTENT", 42), 42);
+    }
+
+    #[test]
+    fn test_env_f64() {
+        std::env::set_var("TEST_F64", "3.14");
+        std::env::set_var("TEST_F64_INVALID", "not_a_number");
+
+        assert_eq!(env_f64("TEST_F64", 0.0), 3.14);
+        assert_eq!(env_f64("TEST_F64_INVALID", 2.71), 2.71);
+        assert_eq!(env_f64("NON_EXISTENT", 1.0), 1.0);
+    }
+
+    #[test]
+    fn test_parse_seed_genes() {
+        let raw = "KRAS, TP53, EGFR,invalid, BRCA1,, EGFR";
+        let genes = parse_seed_genes(raw);
+
+        assert_eq!(genes.len(), 4);
+        assert!(genes.contains(&"KRAS".to_string()));
+        assert!(genes.contains(&"TP53".to_string()));
+        assert!(genes.contains(&"EGFR".to_string()));
+        assert!(genes.contains(&"BRCA1".to_string()));
+        // Duplicates should be removed
+        assert_eq!(genes.iter().filter(|&g| g == "EGFR").count(), 1);
+    }
+
+    #[test]
+    fn test_looks_like_gene_symbol() {
+        assert!(looks_like_gene_symbol("KRAS"));
+        assert!(looks_like_gene_symbol("TP53"));
+        assert!(looks_like_gene_symbol("EGFR"));
+        assert!(looks_like_gene_symbol("BRCA1"));
+        assert!(looks_like_gene_symbol("MYC-1"));
+
+        assert!(!looks_like_gene_symbol("kras")); // lowercase
+        assert!(!looks_like_gene_symbol("A")); // too short
+        assert!(!looks_like_gene_symbol("VERYVERYLONGGENENAME")); // too long
+        assert!(!looks_like_gene_symbol("GENE@SYMBOL")); // invalid char
+        assert!(!looks_like_gene_symbol("")); // empty
+    }
+
+    #[test]
+    fn test_background_provider_refresh_config_from_env() {
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_ENABLED", "false");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_INTERVAL_SECS", "1800");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_MAX_GENES", "50");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_BATCH_SIZE", "10");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_RETRIES", "2");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_CANCER_CODE", "LUAD");
+        std::env::set_var("FERRUMYX_PHASE4_BG_REFRESH_GENES", "KRAS,TP53");
+
+        let config = BackgroundProviderRefreshConfig::from_env();
+
+        assert!(!config.enabled);
+        assert_eq!(config.interval_secs, 1800);
+        assert_eq!(config.max_genes, 50);
+        assert_eq!(config.batch_size, 10);
+        assert_eq!(config.retries, 2);
+        assert_eq!(config.cancer_code, Some("LUAD".to_string()));
+        assert_eq!(config.seed_genes, vec!["KRAS".to_string(), "TP53".to_string()]);
+
+        // Clean up
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_ENABLED");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_INTERVAL_SECS");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_MAX_GENES");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_BATCH_SIZE");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_RETRIES");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_CANCER_CODE");
+        std::env::remove_var("FERRUMYX_PHASE4_BG_REFRESH_GENES");
+    }
+
+    #[test]
+    fn test_is_local_base_url() {
+        assert!(is_local_base_url("http://localhost:11434"));
+        assert!(is_local_base_url("https://127.0.0.1:8080"));
+        assert!(!is_local_base_url("https://api.openai.com"));
+        assert!(!is_local_base_url("https://api.anthropic.com"));
+    }
+
+    #[test]
+    fn test_pick_ollama_model_for_hardware() {
+        // This is a basic test - in a real scenario we'd mock the system info
+        let model = pick_ollama_model_for_hardware();
+        assert!(!model.is_empty());
+        assert!(model.starts_with("llama"));
+    }
+
+    #[tokio::test]
+    async fn test_ollama_healthy() {
+        let client = reqwest::Client::new();
+
+        // Test with invalid URL (should return false)
+        let result = ollama_healthy(&client, "http://invalid-url-that-does-not-exist").await;
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_sync_runtime_env_from_config() {
+        let mut config = config::Config::default();
+        config.llm.default_backend = "anthropic".to_string();
+        config.llm.anthropic = Some(config::AnthropicBackendConfig {
+            api_key: "test-key".to_string(),
+            model: "claude-3".to_string(),
+        });
+
+        sync_runtime_env_from_config(&config);
+
+        assert_eq!(std::env::var("LLM_BACKEND").unwrap(), "anthropic");
+        assert_eq!(std::env::var("ANTHROPIC_API_KEY").unwrap(), "test-key");
+        assert_eq!(std::env::var("ANTHROPIC_MODEL").unwrap(), "claude-3");
+    }
 }
 

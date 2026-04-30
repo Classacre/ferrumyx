@@ -1,16 +1,23 @@
 <#
 .SYNOPSIS
-Ferrumyx Windows Easy Start Script
+Ferrumyx v2.0.0 Windows Easy Start Script
 
 .DESCRIPTION
-This script installs Rust and Ollama, selects the best model based on RAM, and starts the agent.
+This script installs Rust and Ollama, sets up PostgreSQL, selects the best model based on RAM, and starts the IronClaw-powered Ferrumyx agent with BioClaw skills.
 #>
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host " Ferrumyx Easy Start (Windows) " -ForegroundColor Cyan
+Write-Host " Ferrumyx v2.0.0 Easy Start (Windows) " -ForegroundColor Cyan
+Write-Host " IronClaw + BioClaw Integration " -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
+
+# Prerequisites: Ensure PostgreSQL is installed and running with pgvector extension
+Write-Host "⚠️  Prerequisites: PostgreSQL with pgvector extension must be installed and running." -ForegroundColor Yellow
+Write-Host "   Install from: https://www.postgresql.org/download/windows/" -ForegroundColor Yellow
+Write-Host "   Enable pgvector: CREATE EXTENSION vector;" -ForegroundColor Yellow
+Write-Host ""
 
 # 1. Check/Install Rust
 if (!(Get-Command cargo -ErrorAction SilentlyContinue)) {
@@ -97,7 +104,7 @@ if (Test-Path $configFile) {
 Write-Host "Building and starting Ferrumyx Agent..." -ForegroundColor Cyan
 $env:RUST_LOG = "info"
 
-$cargoArgs = @("run", "--release", "--bin", "ferrumyx-web")
+$cargoArgs = @("run", "--release", "-p", "ferrumyx-web")
 
 # If CUDA capable, pass the feature flag to root compilation so the workspace member picks it up
 if ($cudaEnabled) {
@@ -106,8 +113,10 @@ if ($cudaEnabled) {
     $cargoArgs += "ferrumyx-ingestion/cuda"
 }
 
-Write-Host "Waiting for server to start, will attempt to open http://localhost:3001 in your browser..." -ForegroundColor Yellow
-Start-Job -ScriptBlock { Start-Sleep -Seconds 5; Start-Process "http://localhost:3001" } | Out-Null
+Write-Host "Waiting for IronClaw-powered Ferrumyx server to start..." -ForegroundColor Yellow
+Write-Host "Features: WASM sandboxing, BioClaw skills, multi-channel support, encrypted secrets" -ForegroundColor Cyan
+Write-Host "Will attempt to open http://localhost:3000 in your browser..." -ForegroundColor Yellow
+Start-Job -ScriptBlock { Start-Sleep -Seconds 5; Start-Process "http://localhost:3000" } | Out-Null
 
 try {
     & cargo $cargoArgs

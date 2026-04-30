@@ -1,0 +1,27 @@
+# Dockerfile for NCBI BLAST
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install BLAST
+RUN wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.13.0+-x64-linux.tar.gz \
+    && tar -xzf ncbi-blast-2.13.0+-x64-linux.tar.gz \
+    && mv ncbi-blast-2.13.0+ /opt/blast \
+    && rm ncbi-blast-2.13.0+-x64-linux.tar.gz
+
+# Add BLAST to PATH
+ENV PATH="/opt/blast/bin:${PATH}"
+
+# Create a non-root user
+RUN useradd -m -u 1000 blastuser
+USER blastuser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["blastn", "--help"]

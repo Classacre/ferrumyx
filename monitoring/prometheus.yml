@@ -1,0 +1,103 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  - job_name: 'ferrumyx-postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 10s
+    metrics_path: /metrics
+
+  - job_name: 'ferrumyx-app'
+    static_configs:
+      - targets: ['ferrumyx-web:3000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'ferrumyx-pgbouncer'
+    static_configs:
+      - targets: ['postgres:6432']
+    scrape_interval: 30s
+    params:
+      format: ['prometheus']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'nvidia-gpu-exporter'
+    static_configs:
+      - targets: ['nvidia-gpu-exporter:9400']
+    scrape_interval: 10s
+
+  - job_name: 'pgbouncer'
+    static_configs:
+      - targets: ['postgres:6432']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    params:
+      format: ['prometheus']
+
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'ironclaw-agent'
+    static_configs:
+      - targets: ['ironclaw-agent:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'gateway-service'
+    static_configs:
+      - targets: ['gateway-service:8081']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+   - job_name: 'bioclaw-wasm'
+     static_configs:
+       - targets: ['bioclaw-wasm:8082']
+     scrape_interval: 15s
+     metrics_path: /metrics
+
+   - job_name: 'ferrumyx-ingestion'
+     static_configs:
+       - targets: ['ferrumyx-ingestion:8083']
+     scrape_interval: 15s
+     metrics_path: /metrics
+
+   - job_name: 'ferrumyx-kg'
+     static_configs:
+       - targets: ['ferrumyx-kg:8084']
+     scrape_interval: 15s
+     metrics_path: /metrics
+
+   - job_name: 'ferrumyx-ranker'
+     static_configs:
+       - targets: ['ferrumyx-ranker:8085']
+     scrape_interval: 15s
+     metrics_path: /metrics
+
+   - job_name: 'ferrumyx-molecules'
+     static_configs:
+       - targets: ['ferrumyx-molecules:8086']
+     scrape_interval: 15s
+     metrics_path: /metrics
+
+   - job_name: 'cadvisor'
+     static_configs:
+       - targets: ['cadvisor:8080']
+     scrape_interval: 15s
+     metrics_path: /metrics

@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "wit_version": "0.3.0",
+  "capabilities": {
+    "http": {
+      "allowlist": [
+        {
+          "host": "files.rcsb.org",
+          "path_prefix": "/download/",
+          "methods": [
+            "GET"
+          ]
+        },
+        {
+          "host": "www.rcsb.org",
+          "path_prefix": "/",
+          "methods": [
+            "GET"
+          ]
+        },
+        {
+          "host": "alphafold.ebi.ac.uk",
+          "path_prefix": "/files/",
+          "methods": [
+            "GET"
+          ]
+        }
+      ],
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "requests_per_hour": 1000
+      }
+    }
+  },
+  "config": {
+    "supported_styles": ["cartoon", "ribbon", "sticks", "spheres"],
+    "default_style": "cartoon",
+    "max_script_length": 10000
+  }
+}

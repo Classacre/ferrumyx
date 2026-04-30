@@ -1,0 +1,77 @@
+# Oncology Target Discovery Test Scenario
+# Comprehensive workflow test for KRAS G12D in Pancreatic Cancer
+
+[test_scenario]
+name = "KRAS_G12D_PDAC_Discovery"
+description = "End-to-end test of oncology target discovery workflow for KRAS G12D in pancreatic ductal adenocarcinoma"
+
+[queries]
+# Initial discovery queries
+discovery = [
+    "KRAS G12D mutation pancreatic cancer",
+    "KRAS G12D inhibitors clinical trials",
+    "KRAS G12D PDAC treatment resistance"
+]
+
+# Follow-up research queries
+research = [
+    "KRAS G12D allele frequency PDAC",
+    "KRAS G12D downstream signaling pathways",
+    "KRAS G12D targeted therapy resistance mechanisms"
+]
+
+[expected_entities]
+genes = ["KRAS", "TP53", "CDKN2A", "SMAD4"]
+mutations = ["G12D", "G12V", "G12R", "Q61H"]
+cancer_types = ["Pancreatic Ductal Adenocarcinoma", "PDAC", "Pancreatic Cancer"]
+drugs = ["MRTX1133", "adagrasib", "sotorasib", "adagrasib"]
+
+[expected_relations]
+# Format: subject -> predicate -> object
+relations = [
+    "KRAS_G12D -> associated_with -> PDAC",
+    "KRAS_G12D -> activates -> MAPK_PATHWAY",
+    "KRAS_G12D -> activates -> PI3K_PATHWAY",
+    "MRTX1133 -> inhibits -> KRAS_G12D",
+    "KRAS_G12D -> confers -> THERAPY_RESISTANCE"
+]
+
+[validation_rules]
+# Rules to validate test results
+min_papers = 10
+min_entities = 20
+min_relations = 15
+required_confidence_threshold = 0.7
+max_processing_time_seconds = 300
+
+[performance_targets]
+ingestion_throughput = 20  # papers per minute
+query_latency = 200       # milliseconds
+memory_usage = 1024       # MB
+cpu_usage = 80           # percentage
+
+[security_requirements]
+data_classification = "INTERNAL"
+audit_logging = true
+encryption_enabled = true
+
+[integration_tests]
+web_api_endpoints = [
+    "/api/query",
+    "/api/targets",
+    "/api/kg",
+    "/api/ingestion/status"
+]
+
+wasm_tools = [
+    "literature_search",
+    "entity_extraction",
+    "relation_extraction",
+    "target_scoring"
+]
+
+autonomous_cycles = [
+    "literature_update",
+    "target_rescoring",
+    "validation_checks"
+]

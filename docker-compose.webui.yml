@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  ferrumyx-webui:
+    build:
+      context: .
+      dockerfile: Dockerfile.webui
+    container_name: ferrumyx-webui
+    ports:
+      - "${FERRUMYX_WEB_PORT:-8080}:80"
+    environment:
+      - API_ENDPOINT=${API_ENDPOINT:-http://ferrumyx-api:3000}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - NODE_ENV=${NODE_ENV:-production}
+    networks:
+      - ferrumyx-network
+    depends_on:
+      - ferrumyx-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # Optional: Mount logs for monitoring
+      - ./logs/nginx:/var/log/nginx
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+
+  ferrumyx-api:
+    # Your API service configuration here
+    # build: ./crates/ferrumyx-web
+    # or use existing Dockerfile
+    image: ferrumyx-web:latest
+    container_name: ferrumyx-api
+    ports:
+      - "${FERRUMYX_API_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+    networks:
+      - ferrumyx-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  ferrumyx-network:
+    driver: bridge
+
+volumes:
+  nginx-logs:

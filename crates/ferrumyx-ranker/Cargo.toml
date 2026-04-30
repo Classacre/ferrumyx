@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 ferrumyx-common = { path = "../ferrumyx-common" }
 anyhow.workspace = true
-thiserror.workspace = true
+
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -19,4 +19,7 @@ uuid.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 ferrumyx-ingestion = { version = "0.1.0", path = "../ferrumyx-ingestion" }
-ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }
+ ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }
+
+[dev-dependencies]
+ferrumyx-test-utils = { path = "../ferrumyx-test-utils" }

@@ -1,0 +1,50 @@
+version: "3.8"
+
+# GPU-enabled Docker Compose override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+
+services:
+  ferrumyx-ingestion:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 12G
+          cpus: '3.0'
+        reservations:
+          memory: 8G
+          cpus: '2.0'
+    environment:
+      - FERRUMYX_EMBED_USE_GPU=true
+      - FERRUMYX_EMBED_BATCH_SIZE=64
+      - CUDA_VISIBLE_DEVICES=0
+    image: ferrumyx-ingestion:gpu
+
+  # GPU monitoring
+  nvidia-gpu-exporter:
+    image: nvidia/dcgm-exporter:latest
+    runtime: nvidia
+    environment:
+      - DCGM_EXPORTER_LISTEN=:9400
+    ports:
+      - "9400:9400"
+    volumes:
+      - /var/run/nvidia-container-runtime.sock:/var/run/nvidia-container-runtime.sock:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Optional: GPU-accelerated monitoring dashboard
+  grafana:
+    environment:
+      - GF_INSTALL_PLUGINS=nvidia-dcgm-datasource
+    volumes:
+      - ./monitoring/grafana/gpu-dashboards:/var/lib/grafana/dashboards/gpu:ro

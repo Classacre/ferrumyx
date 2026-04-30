@@ -24,18 +24,15 @@ impl EntityRepository {
     pub async fn insert(&self, entity: &Entity) -> Result<()> {
         let client = self.db.client();
         client.execute(
-            "INSERT INTO entities (id, external_id, name, canonical_name, entity_type, synonyms, description, source_db, metadata, created_at, updated_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())",
+            "INSERT INTO entities (id, paper_id, entity_type, entity_text, normalized_id, score, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())",
             &[
                 &entity.id,
-                &entity.external_id,
-                &entity.name,
-                &entity.canonical_name,
+                &entity.paper_id,
                 &entity.entity_type,
-                &entity.synonyms,
-                &entity.description,
-                &entity.source_db,
-                &entity.metadata,
+                &entity.entity_text,
+                &entity.normalized_id,
+                &entity.score,
             ],
         ).await?;
         Ok(())
@@ -59,10 +56,10 @@ impl EntityRepository {
         Ok(row.map(entity_from_row))
     }
 
-    /// Find entities by external ID (e.g., HGNC ID, ChEMBL ID).
-    pub async fn find_by_external_id(&self, external_id: &str) -> Result<Vec<Entity>> {
+    /// Find entities by normalized ID.
+    pub async fn find_by_normalized_id(&self, normalized_id: &str) -> Result<Vec<Entity>> {
         let client = self.db.client();
-        let rows = client.query("SELECT * FROM entities WHERE external_id = $1", &[&external_id]).await?;
+        let rows = client.query("SELECT * FROM entities WHERE normalized_id = $1", &[&normalized_id]).await?;
         Ok(rows.into_iter().map(entity_from_row).collect())
     }
 
@@ -135,19 +132,15 @@ impl EntityRepository {
     pub async fn update(&self, entity: &Entity) -> Result<()> {
         let client = self.db.client();
         client.execute(
-            "UPDATE entities SET external_id = $2, name = $3, canonical_name = $4, entity_type = $5, \
-             synonyms = $6, description = $7, source_db = $8, metadata = $9, updated_at = NOW() \
+            "UPDATE entities SET paper_id = $2, entity_type = $3, entity_text = $4, normalized_id = $5, score = $6 \
              WHERE id = $1",
             &[
                 &entity.id,
-                &entity.external_id,
-                &entity.name,
-                &entity.canonical_name,
+                &entity.paper_id,
                 &entity.entity_type,
-                &entity.synonyms,
-                &entity.description,
-                &entity.source_db,
-                &entity.metadata,
+                &entity.entity_text,
+                &entity.normalized_id,
+                &entity.score,
             ],
         ).await?;
         Ok(())
@@ -206,15 +199,11 @@ impl EntityRepository {
 fn entity_from_row(row: Row) -> Entity {
     Entity {
         id: row.get("id"),
-        external_id: row.get("external_id"),
-        name: row.get("name"),
-        canonical_name: row.get("canonical_name"),
+        paper_id: row.get("paper_id"),
         entity_type: row.get("entity_type"),
-        synonyms: row.get("synonyms"),
-        description: row.get("description"),
-        source_db: row.get("source_db"),
-        metadata: row.get("metadata"),
+        entity_text: row.get("entity_text"),
+        normalized_id: row.get("normalized_id"),
+        score: row.get("score"),
         created_at: row.get::<_, chrono::DateTime<chrono::Utc>>("created_at"),
-        updated_at: row.get::<_, chrono::DateTime<chrono::Utc>>("updated_at"),
     }
 }

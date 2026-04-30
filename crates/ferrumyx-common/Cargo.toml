@@ -10,10 +10,23 @@ anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml = "0.9"
+serde_yaml.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
 axum.workspace = true
-url = "2.5.8"
+
+memory-stats = "1.2"
+tokio.workspace = true
+toml.workspace = true
+
+# For database errors
+tokio-postgres = { version = "0.7", optional = true }
+deadpool-postgres = { version = "0.10", optional = true }
+libsql = { version = "0.4", optional = true }
+
+[features]
+default = []
+postgres = ["dep:tokio-postgres", "dep:deadpool-postgres"]
+libsql = ["dep:libsql"]

@@ -1,0 +1,23 @@
+# Dockerfile for AutoDock Vina
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install AutoDock Vina
+RUN wget https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.3/vina_1.2.3_linux_x86_64 \
+    && chmod +x vina_1.2.3_linux_x86_64 \
+    && mv vina_1.2.3_linux_x86_64 /usr/local/bin/vina
+
+# Create a non-root user
+RUN useradd -m -u 1000 vinauser
+USER vinauser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["vina", "--help"]

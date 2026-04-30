@@ -1,7 +1,7 @@
 //! HGNC gene symbol normalisation logic.
 //! Ported from ferrumyx-ingestion to ferrumyx-kg.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -56,27 +56,48 @@ impl HgncNormaliser {
     pub async fn from_download() -> Result<Self> {
         let cache_path = Self::cache_path();
         if let Ok(tsv) = fs::read_to_string(&cache_path) {
-            tracing::info!("Loaded HGNC dataset from cache: {}", cache_path.display());
-            return Self::from_tsv(&tsv);
+            if let Ok(self_) = Self::from_tsv(&tsv) {
+                tracing::info!("Loaded HGNC dataset from cache: {}", cache_path.display());
+                return Ok(self_);
+            }
         }
 
         tracing::info!(
             "Downloading HGNC complete set from {}",
             HGNC_COMPLETE_SET_URL
         );
-        let resp = reqwest::get(HGNC_COMPLETE_SET_URL)
-            .await
-            .context("HGNC download failed")?
-            .text()
-            .await
-            .context("HGNC response read failed")?;
-
-        if let Some(parent) = cache_path.parent() {
-            let _ = fs::create_dir_all(parent);
+        match reqwest::get(HGNC_COMPLETE_SET_URL).await {
+            Ok(resp) => match resp.text().await {
+                Ok(resp) => {
+                    if let Some(parent) = cache_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    let _ = fs::write(&cache_path, &resp);
+                    match Self::from_tsv(&resp) {
+                        Ok(self_) => Ok(self_),
+                        Err(e) => {
+                            tracing::warn!("Failed to parse HGNC TSV: {}, using empty", e);
+                            Ok(Self::empty())
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read HGNC response: {}, using empty", e);
+                    Ok(Self::empty())
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Failed to download HGNC: {}, using empty", e);
+                Ok(Self::empty())
+            }
         }
-        let _ = fs::write(&cache_path, &resp);
+    }
 
-        Self::from_tsv(&resp)
+    fn empty() -> Self {
+        Self {
+            lookup: HashMap::new(),
+            n_records: 0,
+        }
     }
 
     /// Synchronous version for use in spawn_blocking.

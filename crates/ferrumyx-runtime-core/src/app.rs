@@ -25,6 +25,7 @@ use crate::tools::mcp::{McpProcessManager, McpSessionManager};
 use crate::tools::wasm::SharedCredentialRegistry;
 use crate::tools::wasm::WasmToolRuntime;
 use crate::workspace::{EmbeddingProvider, Workspace};
+use ferrumyx_monitoring::MonitoringState;
 
 /// Fully initialized application components, ready for channel wiring
 /// and agent construction.
@@ -53,6 +54,7 @@ pub struct AppComponents {
     pub session: Arc<SessionManager>,
     pub catalog_entries: Vec<crate::extensions::RegistryEntry>,
     pub dev_loaded_tool_names: Vec<String>,
+    pub monitoring: Option<Arc<MonitoringState>>,
 }
 
 /// Options that control optional init phases.
@@ -912,6 +914,18 @@ impl AppBuilder {
             },
         ));
 
+        // Initialize monitoring system
+        let monitoring = match ferrumyx_monitoring::init_monitoring().await {
+            Ok(monitoring) => {
+                tracing::info!("Monitoring system initialized");
+                Some(Arc::new(monitoring))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize monitoring system: {}", e);
+                None
+            }
+        };
+
         tracing::info!(
             "Tool registry initialized with {} total tools",
             tools.count()
@@ -941,6 +955,7 @@ impl AppBuilder {
             session: self.session,
             catalog_entries,
             dev_loaded_tool_names,
+            monitoring,
         })
     }
 }

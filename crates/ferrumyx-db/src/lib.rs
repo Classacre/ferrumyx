@@ -41,6 +41,7 @@ pub mod papers;
 pub mod phase4_signals;
 pub mod schema;
 pub mod target_scores;
+pub mod workspace_memory;
 
 pub use chunks::ChunkRepository;
 pub use database::{Database, };
@@ -65,14 +66,15 @@ pub use papers::PaperRepository;
 pub use phase4_signals::Phase4SignalRepository;
 pub use schema::EntProviderRefreshRun;
 pub use schema::{
-    Chunk, Entity, EntityMention, EntityType, KgConflict, KgFact, Paper, TargetScore,
+    Chunk, Entity, EntityMention, EntityType, KgConflict, KgFact, Paper, TargetScore, WorkspaceMemory,
     EMBEDDING_DIM, TABLE_CHUNKS, TABLE_ENTITIES, TABLE_ENTITY_MENTIONS, TABLE_KG_CONFLICTS,
-    TABLE_KG_FACTS, TABLE_PAPERS, TABLE_TARGET_SCORES,
+    TABLE_KG_FACTS, TABLE_PAPERS, TABLE_TARGET_SCORES, TABLE_WORKSPACE_MEMORY,
 };
 pub use schema::{
     EntCbioMutationFrequency, EntChemblTarget, EntCosmicMutationFrequency, EntGtexExpression,
     EntReactomeGene, EntTcgaSurvival,
 };
 pub use target_scores::TargetScoreRepository;
+pub use workspace_memory::WorkspaceMemoryRepository;
 
 

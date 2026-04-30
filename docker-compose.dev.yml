@@ -1,0 +1,151 @@
+version: "3.8"
+
+services:
+  # Development Web Server with hot-reload
+  ferrumyx-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.dev
+      args:
+        - DEBUG=${DEBUG}
+        - HOT_RELOAD=${HOT_RELOAD}
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port for Rust
+    volumes:
+      - .:/app
+      - /app/target
+      - /app/node_modules
+    environment:
+      - FERRUMYX_WEB_ADDR=0.0.0.0:3000
+      - FERRUMYX_DATABASE_URL=${DATABASE_URL}
+      - FERRUMYX_REDIS_URL=${REDIS_URL}
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+      - BIOCLAW_TOOLS_ENABLED=${BIOCLAW_TOOLS_ENABLED}
+      - LOG_LEVEL=debug
+      - DEBUG=${DEBUG}
+      - HOT_RELOAD=${HOT_RELOAD}
+      - RUST_BACKTRACE=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ironclaw-agent:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    command: ["cargo", "watch", "-x", "run --bin ferrumyx-web"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development IronClaw Agent with hot-reload
+  ironclaw-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent.dev
+    volumes:
+      - ./crates/ferrumyx-agent:/app/crates/ferrumyx-agent
+      - ./crates/ferrumyx-runtime:/app/crates/ferrumyx-runtime
+      - /app/target
+    environment:
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+      - IRONCLAW_ENDPOINT=${IRONCLAW_ENDPOINT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - BIOCLAW_WASM_PATH=${BIOCLAW_WASM_PATH}
+      - LOG_LEVEL=debug
+      - DEBUG=${DEBUG}
+      - RUST_BACKTRACE=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ferrumyx-network
+    command: ["cargo", "watch", "-x", "run --bin ironclaw-agent"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development PostgreSQL (exposed for local tools)
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # Development Redis (exposed for local tools)
+  redis:
+    ports:
+      - "6379:6379"
+
+  # Development BioClaw WASM with volume mounts
+  bioclaw-wasm:
+    volumes:
+      - ./wasm:/app/wasm
+      - ./data:/app/data
+    environment:
+      - BIOCLAW_WASM_PATH=/app/wasm
+      - BIOCLAW_TOOLS_ENABLED=${BIOCLAW_TOOLS_ENABLED}
+      - DEBUG=${DEBUG}
+
+  # Development Gateway Service with debug logging
+  gateway-service:
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - WHATSAPP_API_KEY=${WHATSAPP_API_KEY}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - IRONCLAW_API_KEY=${IRONCLAW_API_KEY}
+      - LOG_LEVEL=debug
+      - DEBUG=${DEBUG}
+    volumes:
+      - ./crates/ferrumyx-web:/app/crates/ferrumyx-web
+      - /app/target
+
+  # Development Monitoring (exposed ports for local access)
+  prometheus:
+    ports:
+      - "9090:9090"
+
+  grafana:
+    ports:
+      - "3001:3000"
+
+  alertmanager:
+    ports:
+      - "9093:9093"
+
+  # Additional development tools
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@ferrumyx.dev
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    depends_on:
+      - postgres
+    networks:
+      - ferrumyx-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
+    depends_on:
+      - redis
+    networks:
+      - ferrumyx-network
+
+volumes:
+  pgadmin_data:

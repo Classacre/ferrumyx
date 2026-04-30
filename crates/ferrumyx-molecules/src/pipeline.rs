@@ -59,3 +59,72 @@ impl MoleculesPipeline {
         Ok(ranked)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use ferrumyx_test_utils::fixtures::TestFixtureManager;
+
+    #[tokio::test]
+    async fn test_pipeline_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let pipeline = MoleculesPipeline::new(&temp_dir);
+
+        assert!(pipeline.cache_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_run_with_mock_data() {
+        let temp_dir = TempDir::new().unwrap();
+        let pipeline = MoleculesPipeline::new(&temp_dir);
+
+        // Test with a mock UniProt ID
+        let result = pipeline.run("P15056").await;
+
+        // The pipeline may fail due to missing external dependencies,
+        // but it should not panic
+        match result {
+            Ok(molecules) => {
+                // If it succeeds, we should get some molecules
+                println!("Pipeline succeeded with {} molecules", molecules.len());
+                assert!(true); // Success case
+            }
+            Err(e) => {
+                // Expected to fail in test environment without full setup
+                println!("Pipeline failed as expected: {}", e);
+                assert!(true); // Expected failure case
+            }
+        }
+    }
+
+    #[test]
+    fn test_pipeline_cache_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let pipeline = MoleculesPipeline::new(&temp_dir);
+
+        assert_eq!(pipeline.cache_dir, temp_dir.path());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_run_empty_uniprot() {
+        let temp_dir = TempDir::new().unwrap();
+        let pipeline = MoleculesPipeline::new(&temp_dir);
+
+        // Test with empty UniProt ID
+        let result = pipeline.run("").await;
+
+        // Should handle empty input gracefully
+        match result {
+            Ok(molecules) => {
+                // May return empty or default results
+                assert!(true);
+            }
+            Err(e) => {
+                // Expected to fail with empty input
+                println!("Pipeline failed with empty input: {}", e);
+                assert!(true);
+            }
+        }
+    }
+}

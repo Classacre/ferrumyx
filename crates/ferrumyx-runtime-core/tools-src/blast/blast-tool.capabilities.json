@@ -1,0 +1,61 @@
+{
+  "version": "0.2.0",
+  "wit_version": "0.3.0",
+  "capabilities": {
+    "http": {
+      "allowlist": [
+        {
+          "host": "blast.ncbi.nlm.nih.gov",
+          "path_prefix": "/",
+          "methods": [
+            "GET",
+            "POST"
+          ]
+        }
+      ],
+      "credentials": {
+        "ncbi_api_key": {
+          "secret_name": "ncbi_api_key",
+          "location": {
+            "type": "query",
+            "parameter": "api_key"
+          },
+          "host_patterns": [
+            "blast.ncbi.nlm.nih.gov"
+          ]
+        }
+      },
+      "rate_limit": {
+        "requests_per_minute": 10,
+        "requests_per_hour": 100
+      }
+    },
+    "secrets": {
+      "allowed_names": [
+        "ncbi_api_key"
+      ]
+    }
+  },
+  "auth": {
+    "secret_name": "ncbi_api_key",
+    "display_name": "NCBI BLAST API",
+    "instructions": "Create an API key at https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/",
+    "setup_url": "https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/",
+    "token_hint": "NCBI API key",
+    "env_var": "NCBI_API_KEY"
+  },
+  "setup": {
+    "required_secrets": [
+      {
+        "name": "ncbi_api_key",
+        "prompt": "NCBI API Key (get one from NCBI E-utilities)"
+      }
+    ]
+  },
+  "config": {
+    "default_program": "blastp",
+    "default_database": "nr",
+    "default_evalue": "1e-5",
+    "max_sequence_length": 10000
+  }
+}

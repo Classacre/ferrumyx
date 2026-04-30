@@ -147,42 +147,28 @@ impl std::str::FromStr for EntityType {
     }
 }
 
-/// Entity record
+/// Entity record (paper-specific)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Entity {
     pub id: uuid::Uuid,
-    pub external_id: String,
-    pub name: String,
-    pub canonical_name: Option<String>,
-    pub entity_type: String,
-    pub synonyms: Option<String>,
-    pub description: Option<String>,
-    pub source_db: String,
-    pub metadata: Option<String>,
+    pub paper_id: uuid::Uuid,
+    pub entity_type: String,  // 'GENE', 'DISEASE', 'CHEMICAL'
+    pub entity_text: String,
+    pub normalized_id: Option<String>,
+    pub score: Option<f32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Entity {
-    pub fn new(
-        entity_type: EntityType,
-        name: String,
-        external_id: String,
-        source_db: String,
-    ) -> Self {
-        let now = chrono::Utc::now();
+    pub fn new(paper_id: uuid::Uuid, entity_type: String, entity_text: String) -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
-            external_id,
-            name,
-            canonical_name: None,
-            entity_type: entity_type.to_string(),
-            synonyms: None,
-            description: None,
-            source_db,
-            metadata: None,
-            created_at: now,
-            updated_at: now,
+            paper_id,
+            entity_type,
+            entity_text,
+            normalized_id: None,
+            score: None,
+            created_at: chrono::Utc::now(),
         }
     }
 }
@@ -612,6 +598,30 @@ impl IngestionAudit {
 }
 
 // =============================================================================
+// Workspace Memory Schema
+// =============================================================================
+
+/// Workspace memory record
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceMemory {
+    pub id: uuid::Uuid,
+    pub scope: String,  // 'global', 'thread', 'user'
+    pub content: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl WorkspaceMemory {
+    pub fn new(scope: String, content: String) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            scope,
+            content,
+            created_at: chrono::Utc::now(),
+        }
+    }
+}
+
+// =============================================================================
 // Table Names
 // =============================================================================
 
@@ -623,6 +633,7 @@ pub const TABLE_ENTITY_MENTIONS: &str = "entity_mentions";
 pub const TABLE_KG_CONFLICTS: &str = "kg_conflicts";
 pub const TABLE_TARGET_SCORES: &str = "target_scores";
 pub const TABLE_INGESTION_AUDIT: &str = "ingestion_audit";
+pub const TABLE_WORKSPACE_MEMORY: &str = "workspace_memory";
 
 // Entropy specific tables
 pub const TABLE_ENT_GENES: &str = "ent_genes";

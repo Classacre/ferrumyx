@@ -1,0 +1,69 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Security Monitoring",
+    "tags": ["ferrumyx", "security"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Failed Authentication Attempts",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(failed_auth_total[5m])",
+            "legendFormat": "Failed auth/s"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "PHI Data Access",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(phi_access_total[5m])",
+            "legendFormat": "PHI access"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "WASM Sandbox Violations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(wasm_violation_total[5m])",
+            "legendFormat": "Violations"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Active Sessions",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "active_sessions_total",
+            "legendFormat": "Active sessions"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 16,
+    "version": 0,
+    "links": []
+  }
+}

@@ -1,0 +1,32 @@
+# Dockerfile.redis - Custom Redis with security hardening for Ferrumyx
+FROM redis:7-alpine
+
+# Install security updates and minimal dependencies
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    su-exec \
+    && rm -rf /var/cache/apk/*
+
+# Create redis user if not exists (official image does, but ensure)
+RUN addgroup -g 1000 -S redis && \
+    adduser -S redis -u 1000 -G redis
+
+# Copy custom redis configuration for security
+COPY redis.conf /etc/redis/redis.conf
+
+# Set proper ownership
+RUN chown redis:redis /etc/redis/redis.conf && \
+    chown -R redis:redis /data
+
+# Switch to non-root user
+USER redis
+
+# Expose port
+EXPOSE 6379
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD redis-cli ping
+
+# Start Redis with custom config
+CMD ["redis-server", "/etc/redis/redis.conf"]

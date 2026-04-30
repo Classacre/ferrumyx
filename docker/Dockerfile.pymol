@@ -1,0 +1,35 @@
+# Dockerfile for PyMOL (open-source version)
+FROM ubuntu:20.04
+
+# Install dependencies for PyMOL
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    git \
+    build-essential \
+    freeglut3-dev \
+    libpng-dev \
+    libfreetype6-dev \
+    libxml2-dev \
+    libmsgpack-dev \
+    libnetcdf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build PyMOL open-source
+RUN git clone https://github.com/schrodinger/pymol-open-source.git /tmp/pymol \
+    && cd /tmp/pymol \
+    && python3 setup.py build \
+    && python3 setup.py install \
+    && cd / \
+    && rm -rf /tmp/pymol
+
+# Create a non-root user
+RUN useradd -m -u 1000 pymoluser
+USER pymoluser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["pymol", "-c", "print('PyMOL ready')"]

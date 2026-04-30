@@ -714,9 +714,228 @@ impl TargetQueryEngine {
                         .await;
                         if cbio_mutation.is_some() {
                             cbio_source = Some("cosmic_table");
-                        }
-                    }
-                }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ferrumyx_test_utils::fixtures::TestFixtureManager;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_data_classification_functions() {
+        assert_eq!(FactProvenance::Provider as u8, 0);
+        assert_eq!(FactProvenance::Extracted as u8, 1);
+        assert_eq!(FactProvenance::Generic as u8, 2);
+
+        assert_eq!(ConfidenceTier::High as u8, 0);
+        assert_eq!(ConfidenceTier::Medium as u8, 1);
+        assert_eq!(ConfidenceTier::Low as u8, 2);
+    }
+
+    #[test]
+    fn test_classify_fact_provenance() {
+        // Provider facts
+        let provider_fact = KgFact {
+            id: uuid::Uuid::new_v4(),
+            subject_id: uuid::Uuid::new_v4(),
+            subject_name: "KRAS".to_string(),
+            predicate: "mutation_frequency_cbioportal".to_string(),
+            object_id: uuid::Uuid::new_v4(),
+            object_name: "PAAD".to_string(),
+            confidence: 0.8,
+            evidence_type: "provider".to_string(),
+            evidence: Some("provider=cbioportal".to_string()),
+            sample_size: None,
+            paper_id: uuid::Uuid::new_v4(),
+        };
+        assert_eq!(classify_fact_provenance(&provider_fact), FactProvenance::Provider);
+
+        // Extracted facts
+        let extracted_fact = KgFact {
+            id: uuid::Uuid::new_v4(),
+            subject_id: uuid::Uuid::new_v4(),
+            subject_name: "KRAS".to_string(),
+            predicate: "binds_to".to_string(),
+            object_id: uuid::Uuid::new_v4(),
+            object_name: "EGFR".to_string(),
+            confidence: 0.7,
+            evidence_type: "extracted".to_string(),
+            evidence: None,
+            sample_size: None,
+            paper_id: uuid::Uuid::new_v4(),
+        };
+        assert_eq!(classify_fact_provenance(&extracted_fact), FactProvenance::Extracted);
+
+        // Generic facts
+        let generic_fact = KgFact {
+            id: uuid::Uuid::new_v4(),
+            subject_id: uuid::Uuid::new_v4(),
+            subject_name: "KRAS".to_string(),
+            predicate: "mentions".to_string(),
+            object_id: uuid::Uuid::new_v4(),
+            object_name: "cancer".to_string(),
+            confidence: 0.3,
+            evidence_type: "generic".to_string(),
+            evidence: None,
+            sample_size: None,
+            paper_id: uuid::Uuid::new_v4(),
+        };
+        assert_eq!(classify_fact_provenance(&generic_fact), FactProvenance::Generic);
+    }
+
+    #[test]
+    fn test_classify_confidence_tier() {
+        let provider_fact = KgFact {
+            id: uuid::Uuid::new_v4(),
+            subject_id: uuid::Uuid::new_v4(),
+            subject_name: "KRAS".to_string(),
+            predicate: "mutation_frequency_cbioportal".to_string(),
+            object_id: uuid::Uuid::new_v4(),
+            object_name: "PAAD".to_string(),
+            confidence: 0.8,
+            evidence_type: "provider".to_string(),
+            evidence: Some("provider=cbioportal".to_string()),
+            sample_size: None,
+            paper_id: uuid::Uuid::new_v4(),
+        };
+
+        // High confidence provider
+        let high_conf_provider = KgFact { confidence: 0.7, ..provider_fact.clone() };
+        assert_eq!(classify_confidence_tier(&high_conf_provider, FactProvenance::Provider), ConfidenceTier::High);
+
+        // Medium confidence provider
+        let med_conf_provider = KgFact { confidence: 0.5, ..provider_fact.clone() };
+        assert_eq!(classify_confidence_tier(&med_conf_provider, FactProvenance::Provider), ConfidenceTier::Medium);
+
+        // High confidence extracted
+        let high_conf_extracted = KgFact { confidence: 0.9, ..provider_fact.clone() };
+        assert_eq!(classify_confidence_tier(&high_conf_extracted, FactProvenance::Extracted), ConfidenceTier::High);
+
+        // Low confidence extracted
+        let low_conf_extracted = KgFact { confidence: 0.4, ..provider_fact.clone() };
+        assert_eq!(classify_confidence_tier(&low_conf_extracted, FactProvenance::Extracted), ConfidenceTier::Low);
+    }
+
+    #[test]
+    fn test_fact_signal_weight() {
+        // Provider high confidence
+        assert_eq!(fact_signal_weight(FactProvenance::Provider, ConfidenceTier::High, "binds_to"), 1.18 * 1.28);
+
+        // Extracted medium confidence
+        assert_eq!(fact_signal_weight(FactProvenance::Extracted, ConfidenceTier::Medium, "binds_to"), 1.0 * 1.0);
+
+        // Generic low confidence
+        assert_eq!(fact_signal_weight(FactProvenance::Generic, ConfidenceTier::Low, "binds_to"), 0.74 * 0.68);
+
+        // Special predicate weights
+        assert_eq!(fact_signal_weight(FactProvenance::Extracted, ConfidenceTier::High, "mentions"), 1.18 * 1.0 * 0.52);
+    }
+
+    #[test]
+    fn test_contains_ascii_case_insensitive() {
+        assert!(contains_ascii_case_insensitive("Hello World", "hello"));
+        assert!(contains_ascii_case_insensitive("Hello World", "WORLD"));
+        assert!(!contains_ascii_case_insensitive("Hello World", "goodbye"));
+        assert!(contains_ascii_case_insensitive("Hello", "Hello"));
+        assert!(!contains_ascii_case_insensitive("Hel", "Hello"));
+        assert!(contains_ascii_case_insensitive("", ""));
+    }
+
+    #[test]
+    fn test_fields_contain_any_ascii_keyword() {
+        let fields = vec!["This is a test", "with some keywords", "like poor prognosis"];
+
+        assert!(fields_contain_any_ascii_keyword(&fields, &["poor", "bad"]));
+        assert!(fields_contain_any_ascii_keyword(&fields, &["test", "other"]));
+        assert!(!fields_contain_any_ascii_keyword(&fields, &["excellent", "good"]));
+    }
+
+    #[test]
+    fn test_provider_refresh_request_default() {
+        let req = ProviderRefreshRequest::default();
+
+        assert!(req.genes.is_empty());
+        assert!(req.cancer_code.is_none());
+        assert_eq!(req.max_genes, 24);
+        assert_eq!(req.batch_size, 6);
+        assert_eq!(req.retries, 1);
+        assert!(!req.offline_strict);
+    }
+
+    #[test]
+    fn test_provider_refresh_report_default() {
+        let report = ProviderRefreshReport::default();
+
+        assert_eq!(report.genes_requested, 0);
+        assert_eq!(report.genes_processed, 0);
+        assert_eq!(report.cbio_attempted, 0);
+        assert_eq!(report.cbio_success, 0);
+        assert_eq!(report.cbio_failed, 0);
+        assert_eq!(report.cbio_skipped, 0);
+        assert!(report.provider_decisions.is_empty());
+        assert!(report.provider_timing_ms.is_empty());
+    }
+
+    #[test]
+    fn test_timed_cache_entry() {
+        use std::time::Instant;
+
+        let value = "test_value".to_string();
+        let inserted_at = Instant::now();
+
+        let entry = TimedCacheEntry { value: value.clone(), inserted_at };
+
+        assert_eq!(entry.value, value);
+        // Can't test inserted_at exactly due to Instant, but we can check it's recent
+    }
+
+    #[test]
+    fn test_in_process_ttl_cache() {
+        use std::time::Duration;
+
+        let cache = InProcessTtlCache::<String>::new(Duration::from_secs(1), 10);
+
+        // Initially empty
+        assert!(cache.get_cloned("key1").is_none());
+
+        // Insert and retrieve
+        cache.insert("key1".to_string(), "value1".to_string());
+        assert_eq!(cache.get_cloned("key1"), Some("value1".to_string()));
+
+        // Insert another
+        cache.insert("key2".to_string(), "value2".to_string());
+        assert_eq!(cache.get_cloned("key2"), Some("value2".to_string()));
+        assert_eq!(cache.get_cloned("key1"), Some("value1".to_string()));
+    }
+
+    #[test]
+    fn test_is_gene_like() {
+        // This function is defined elsewhere, but we can test basic assumptions
+        // For now, just ensure it doesn't panic
+        let _ = is_gene_like("KRAS");
+        let _ = is_gene_like("ABC123");
+        let _ = is_gene_like("not_a_gene");
+    }
+
+    #[test]
+    fn test_is_cancer_like() {
+        // This function is defined elsewhere, but we can test basic assumptions
+        let _ = is_cancer_like("PAAD");
+        let _ = is_cancer_like("Pancreatic Adenocarcinoma");
+        let _ = is_cancer_like("not_cancer");
+    }
+
+    #[test]
+    fn test_normalize_provider_cancer_code() {
+        // This function is defined elsewhere, but we can test basic assumptions
+        let _ = normalize_provider_cancer_code("PAAD");
+        let _ = normalize_provider_cancer_code("PANCREATIC");
+        let _ = normalize_provider_cancer_code("UNK");
+    }
+}
                 if cbio_mutation.is_none() {
                     cbio_mutation = get_cached_cbio_mutation_frequency_any_cancer(
                         &signal_repo,

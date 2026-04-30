@@ -149,16 +149,12 @@ impl Database {
         create_if_missing!(schema::TABLE_ENTITIES, r#"
             CREATE TABLE IF NOT EXISTS entities (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                external_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                canonical_name TEXT,
-                entity_type TEXT NOT NULL,
-                synonyms TEXT,
-                description TEXT,
-                source_db TEXT NOT NULL,
-                metadata TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
+                paper_id UUID REFERENCES papers(id) ON DELETE CASCADE,
+                entity_type TEXT NOT NULL,  -- 'GENE', 'DISEASE', 'CHEMICAL'
+                entity_text TEXT NOT NULL,
+                normalized_id TEXT,
+                score FLOAT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
             )"#);
 
         // Entity mentions table
@@ -225,6 +221,57 @@ impl Database {
                 resolution TEXT NOT NULL,
                 detected_at TIMESTAMPTZ DEFAULT NOW()
             )"#);
+
+        // Workspace memory table
+        create_if_missing!(schema::TABLE_WORKSPACE_MEMORY, r#"
+            CREATE TABLE IF NOT EXISTS workspace_memory (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                scope TEXT,  -- 'global', 'thread', 'user'
+                content TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )"#);
+
+        // Create indexes for performance
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_papers_pmid ON papers(pmid)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_paper_id ON chunks(paper_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_paper_id ON entities(paper_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kg_facts_paper_id ON kg_facts(paper_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kg_facts_subject_id ON kg_facts(subject_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kg_facts_object_id ON kg_facts(object_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_target_scores_gene_id ON target_scores(gene_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_target_scores_cancer_id ON target_scores(cancer_id)",
+            &[]
+        ).await?;
+        self.client.execute(
+            "CREATE INDEX IF NOT EXISTS idx_target_scores_current ON target_scores(is_current) WHERE is_current = true",
+            &[]
+        ).await?;
 
         // Create vector index
         self.client.execute(

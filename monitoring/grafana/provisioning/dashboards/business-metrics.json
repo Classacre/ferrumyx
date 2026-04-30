@@ -1,0 +1,89 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Business Metrics",
+    "tags": ["ferrumyx", "business"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Discovery Success Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(discovery_success_total[5m]) / rate(discovery_attempts_total[5m]) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "percent"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Agent Job Success Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(1 - rate(agent_job_failures_total[5m]) / rate(agent_jobs_total[5m])) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "percent"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "BioClaw Execution Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(bioclaw_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Message Delivery Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(message_delivered_total[5m]) / rate(message_sent_total[5m]) * 100",
+            "legendFormat": "Delivery %"
+          }
+        ],
+        "yaxes": [
+          {
+            "unit": "percent"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 16,
+    "version": 0,
+    "links": []
+  }
+}

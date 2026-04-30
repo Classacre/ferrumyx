@@ -94,9 +94,13 @@ fn render_dashboard(
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
                 Dashboard Analytics
             </h1>
-            <p class="text-muted">High-level overview of knowledge extraction and drug target scoring</p>
+            <p class="text-muted">IronClaw-powered oncology discovery with secure multi-channel workflows</p>
         </div>
         <div class="top-toolbar">
+            <a href="/monitoring" class="btn btn-outline btn-ghost">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                Monitoring
+            </a>
             <button class="btn btn-outline btn-ghost" onclick="location.reload()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
                 Sync

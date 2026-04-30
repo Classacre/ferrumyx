@@ -17,18 +17,26 @@ ferrumyx-ranker = { path = "../ferrumyx-ranker" }
 ferrumyx-molecules = { path = "../ferrumyx-molecules" }
 ferrumyx-web        = { path = "../ferrumyx-web" }
 ferrumyx-runtime = { path = "../ferrumyx-runtime" }
-rig-core            = "0.30"
-axum                = { version = "0.8", features = ["ws", "macros"] }
+
+axum.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-toml            = { version = "0.8" }
+toml.workspace = true
 async-trait     = "0.1"
-reqwest         = { version = "0.12", features = ["json"] }
+reqwest.workspace = true
 ferrumyx-db = { version = "0.1.0", path = "../ferrumyx-db" }
 uuid = { workspace = true, features = ["v4"] }
 chrono.workspace = true
 sysinfo = "0.33"
+ironclaw.workspace = true
+regex = "1.10"
+once_cell = "1.19"
+ bollard = "0.18"
+ futures-util = "0.3"
+
+[dev-dependencies]
+ferrumyx-test-utils = { path = "../ferrumyx-test-utils" }

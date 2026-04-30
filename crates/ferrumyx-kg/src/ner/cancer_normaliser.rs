@@ -1,6 +1,6 @@
 //! Cancer type normalisation logic using MSKCC OncoTree.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -51,30 +51,52 @@ impl CancerNormaliser {
         let cache_path = Self::cache_path();
         if let Ok(raw) = fs::read_to_string(&cache_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
-                info!(
-                    "Loaded OncoTree dataset from cache: {}",
-                    cache_path.display()
-                );
-                return Self::from_json(&json);
+                if let Ok(self_) = Self::from_json(&json) {
+                    info!(
+                        "Loaded OncoTree dataset from cache: {}",
+                        cache_path.display()
+                    );
+                    return Ok(self_);
+                }
             }
         }
 
         info!("Downloading OncoTree dataset from {}", ONCOTREE_JSON_URL);
-        let resp = reqwest::get(ONCOTREE_JSON_URL)
-            .await
-            .context("OncoTree download failed")?
-            .json::<serde_json::Value>()
-            .await
-            .context("OncoTree JSON parse failed")?;
-
-        if let Some(parent) = cache_path.parent() {
-            let _ = fs::create_dir_all(parent);
+        match reqwest::get(ONCOTREE_JSON_URL).await {
+            Ok(resp) => match resp.json::<serde_json::Value>().await {
+                Ok(resp) => {
+                    if let Some(parent) = cache_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    if let Ok(raw) = serde_json::to_string(&resp) {
+                        let _ = fs::write(&cache_path, raw);
+                    }
+                    match Self::from_json(&resp) {
+                        Ok(self_) => Ok(self_),
+                        Err(e) => {
+                            tracing::warn!("Failed to parse OncoTree JSON: {}, using empty", e);
+                            Ok(Self::empty())
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse OncoTree response: {}, using empty", e);
+                    Ok(Self::empty())
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Failed to download OncoTree: {}, using empty", e);
+                Ok(Self::empty())
+            }
         }
-        if let Ok(raw) = serde_json::to_string(&resp) {
-            let _ = fs::write(&cache_path, raw);
-        }
+    }
 
-        Self::from_json(&resp)
+    fn empty() -> Self {
+        Self {
+            lookup: HashMap::new(),
+            pattern_kinds: HashMap::new(),
+            records: HashMap::new(),
+        }
     }
 
     /// Synchronous version for use in spawn_blocking.

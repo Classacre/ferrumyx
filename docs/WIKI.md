@@ -24,14 +24,14 @@ This wiki documents the implementation as it exists in the repository today. It 
 
 ## 1) System Overview
 
-Ferrumyx is an autonomous biomedical discovery platform implemented as a Rust workspace. The system centers around:
+Ferrumyx v2.0.0 is an autonomous biomedical discovery platform built on IronClaw's secure agent framework and BioClaw's bioinformatics methodology. The system centers around:
 
-- Agent-driven orchestration (`ferrumyx-agent`).
-- Literature ingestion and evidence extraction (`ferrumyx-ingestion`, `ferrumyx-kg`).
-- Target prioritization (`ferrumyx-ranker`).
-- Downstream molecule pipeline (`ferrumyx-molecules`).
-- Embedded storage and federation (`ferrumyx-db`, `ferrumyx-common`).
-- Interactive UI/API layer (`ferrumyx-web`).
+- IronClaw-powered agent orchestration with WASM sandboxing (`ferrumyx-agent`).
+- Literature ingestion and BioClaw-inspired evidence extraction (`ferrumyx-ingestion`, `ferrumyx-kg`).
+- Target prioritization with conversational workflows (`ferrumyx-ranker`).
+- Secure molecule pipeline with container orchestration (`ferrumyx-molecules`).
+- PostgreSQL + pgvector storage with encrypted secrets (`ferrumyx-db`, `ferrumyx-common`).
+- Multi-channel interactive UI/API layer (`ferrumyx-web`, channels-src/).
 
 Core entry points:
 
@@ -43,7 +43,7 @@ Core entry points:
 
 ### `crates/ferrumyx-agent`
 
-Owns bootstrapping, tool registration, and runtime orchestration. It wires DB + providers + runtime agent loop + web stack.
+Owns IronClaw agent orchestration, WASM tool sandboxing, BioClaw skill integration, and multi-channel routing. It wires PostgreSQL + encrypted secrets + LLM providers + IronClaw agent loop + web stack.
 
 Key files:
 
@@ -53,7 +53,7 @@ Key files:
 
 ### `crates/ferrumyx-ingestion`
 
-Implements source retrieval, dedup, full-text processing, chunking, entity/relation extraction handoff, and embedding updates.
+Implements IronClaw-scheduled source retrieval, dedup, full-text processing, chunking, BioClaw entity/relation extraction handoff, and pgvector embedding updates with job orchestration.
 
 Key files:
 
@@ -65,7 +65,7 @@ Key files:
 
 ### `crates/ferrumyx-kg`
 
-Handles extraction and score-generation primitives for KG-backed prioritization.
+Handles BioClaw-inspired entity/relation extraction, knowledge graph construction, and conversational scoring primitives for oncology target prioritization.
 
 Key files:
 
@@ -101,7 +101,7 @@ Key files:
 
 ### `crates/ferrumyx-db`
 
-Owns LanceDB schema/repositories plus federation package/trust/lineage persistence.
+Owns PostgreSQL + pgvector schema/repositories, encrypted secrets management, and federation package/trust/lineage persistence with comprehensive monitoring.
 
 Key files:
 
@@ -114,7 +114,7 @@ Key files:
 
 ### `crates/ferrumyx-web`
 
-Exposes Axum routes for UI and APIs: ingestion, query, KG, ranker, chat, federation, metrics, settings.
+Exposes IronClaw web gateway with multi-channel support, Axum routes for UI/APIs: ingestion, query, KG, ranker, chat, federation, monitoring, settings.
 
 Key files:
 
@@ -125,8 +125,9 @@ Key files:
 
 ### Runtime bridge crates
 
-- `crates/ferrumyx-runtime`: runtime adapters used by agent code.
-- `crates/ferrumyx-runtime-core`: shared runtime-core DB/config/workspace internals.
+- `crates/ferrumyx-runtime`: IronClaw runtime adapters with WASM tool support and container orchestration.
+- `crates/ferrumyx-runtime-core`: shared runtime-core with Docker orchestration and encrypted secrets management.
+- `crates/ferrumyx-monitoring`: performance metrics, health checks, and Prometheus integration.
 
 ## 3) Runtime Execution Model
 

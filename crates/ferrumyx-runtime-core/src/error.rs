@@ -81,8 +81,8 @@ pub enum DatabaseError {
     #[error("Query failed: {0}")]
     Query(String),
 
-    #[error("Entity not found: {entity} with id {id}")]
-    NotFound { entity: String, id: String },
+    #[error("Entity not found: {0}")]
+    NotFound(String),
 
     #[error("Constraint violation: {0}")]
     Constraint(String),
@@ -460,13 +460,9 @@ mod tests {
 
     #[test]
     fn database_error_display() {
-        let err = DatabaseError::NotFound {
-            entity: "conversation".to_string(),
-            id: "abc-123".to_string(),
-        };
+        let err = DatabaseError::NotFound("conversation abc-123".to_string());
         let msg = err.to_string();
         assert!(msg.contains("conversation"), "Should mention entity: {msg}");
-        assert!(msg.contains("abc-123"), "Should mention id: {msg}");
 
         let err = DatabaseError::Query("syntax error near SELECT".to_string());
         assert!(err.to_string().contains("syntax error"));

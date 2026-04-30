@@ -1,0 +1,16 @@
+# Dockerfile for RDKit
+FROM continuumio/miniconda3:latest
+
+# Install RDKit via conda
+RUN conda install -c conda-forge rdkit -y \
+    && conda clean --all -f -y
+
+# Create a non-root user
+RUN useradd -m -u 1000 rdkituser
+USER rdkituser
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["python3", "-c", "from rdkit import Chem; print('RDKit ready')"]
