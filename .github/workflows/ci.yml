@@ -80,37 +80,37 @@ jobs:
     - name: Install npm dependencies
       run: npm ci
 
-     - name: Check formatting (Rust)
-       run: cargo fmt --all -- --check
+    - name: Check formatting (Rust)
+      run: cargo fmt --all -- --check
 
-     - name: Check clippy
-       run: cargo clippy -- -D warnings
+    - name: Check clippy
+      run: cargo clippy -- -D warnings
 
-      - name: Run workspace tests
-        run: cargo test --workspace --features postgres,libsql
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ferrumyx_test
-          REDIS_URL: redis://localhost:6379
+    - name: Run workspace tests
+      run: cargo test --workspace --features postgres,libsql
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/ferrumyx_test
+        REDIS_URL: redis://localhost:6379
 
-      - name: Install cargo-tarpaulin for coverage
-        run: cargo install cargo-tarpaulin
+    - name: Install cargo-tarpaulin for coverage
+      run: cargo install cargo-tarpaulin
 
-      - name: Run tests with coverage
-        run: cargo tarpaulin --workspace --features postgres,libsql --out Xml --output-dir coverage-reports
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ferrumyx_test
-          REDIS_URL: redis://localhost:6379
+    - name: Run tests with coverage
+      run: cargo tarpaulin --workspace --features postgres,libsql --out Xml --output-dir coverage-reports
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/ferrumyx_test
+        REDIS_URL: redis://localhost:6379
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: coverage-reports/cobertura.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: coverage-reports/cobertura.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
 
-     - name: Build release
-       run: cargo build --release --features postgres,libsql
+    - name: Build release
+      run: cargo build --release --features postgres,libsql
 
     - name: Run lint (JavaScript/TypeScript)
       run: npm run lint || true
