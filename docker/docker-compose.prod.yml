@@ -10,9 +10,9 @@ services:
     environment:
       - FERRUMYX_DATABASE_URL=postgresql://ferrumyx:${DB_PASSWORD}@postgres:5432/ferrumyx
       - FERRUMYX_REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      - DB_PASSWORD_FILE=/run/secrets/db_password
-      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
-      - API_KEYS_FILE=/run/secrets/api_keys
+      - DB_PASSWORD_FILE=/run/config/db_password
+      - REDIS_PASSWORD_FILE=/run/config/redis_password
+      - API_KEYS_FILE=/run/config/api_keys
     deploy:
       resources:
         limits:
@@ -31,7 +31,7 @@ services:
     secrets:
       - api_keys
     environment:
-      - API_KEYS_FILE=/run/secrets/api_keys
+      - API_KEYS_FILE=/run/config/api_keys
     deploy:
       resources:
         limits:
@@ -50,7 +50,7 @@ services:
     secrets:
       - db_password
     environment:
-      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_PASSWORD_FILE=/run/config/db_password
     deploy:
       resources:
         limits:
@@ -68,7 +68,7 @@ services:
   redis:
     secrets:
       - redis_password
-    command: redis-server --requirepassfile /run/secrets/redis_password --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepassfile /run/config/redis_password --maxmemory 256mb --maxmemory-policy allkeys-lru
     deploy:
       resources:
         limits:
@@ -123,8 +123,8 @@ services:
       - api_keys
       - webhook_secret
     environment:
-      - WEBHOOK_SECRET_FILE=/run/secrets/webhook_secret
-      - API_KEYS_FILE=/run/secrets/api_keys
+      - WEBHOOK_SECRET_FILE=/run/config/webhook_secret
+      - API_KEYS_FILE=/run/config/api_keys
     deploy:
       resources:
         limits:
@@ -158,7 +158,7 @@ services:
     secrets:
       - grafana_admin_password
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/config/grafana_admin_password
     deploy:
       resources:
         limits:
@@ -205,16 +205,23 @@ services:
 
 secrets:
   db_password:
-    file: ./secrets/db_password.txt
+    file: ./config/db_password.txt
+    target: /run/config/db_password
   redis_password:
-    file: ./secrets/redis_password.txt
+    file: ./config/redis_password.txt
+    target: /run/config/redis_password
   api_keys:
-    file: ./secrets/api_keys.json
+    file: ./config/api_keys.json
+    target: /run/config/api_keys
   webhook_secret:
-    file: ./secrets/webhook_secret.txt
+    file: ./config/webhook_secret.txt
+    target: /run/config/webhook_secret
   ssl_cert:
-    file: ./secrets/ssl_cert.pem
+    file: ./config/ssl_cert.pem
+    target: /run/config/ssl_cert
   ssl_key:
-    file: ./secrets/ssl_key.pem
+    file: ./config/ssl_key.pem
+    target: /run/config/ssl_key
   grafana_admin_password:
-    file: ./secrets/grafana_admin_password.txt
+    file: ./config/grafana_admin_password.txt
+    target: /run/config/grafana_admin_password

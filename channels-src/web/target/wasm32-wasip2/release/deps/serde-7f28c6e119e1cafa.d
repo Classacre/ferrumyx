@@ -1,0 +1,14 @@
+D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\deps\serde-7f28c6e119e1cafa.d: C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\build\serde-6efb18bb0d027360\out/private.rs
+
+D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\deps\libserde-7f28c6e119e1cafa.rlib: C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\build\serde-6efb18bb0d027360\out/private.rs
+
+D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\deps\libserde-7f28c6e119e1cafa.rmeta: C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\build\serde-6efb18bb0d027360\out/private.rs
+
+C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs:
+C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs:
+C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs:
+C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:
+C:\Users\nieuw\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs:
+D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\build\serde-6efb18bb0d027360\out/private.rs:
+
+# env-dep:OUT_DIR=D:\\AI\\Ferrumyx\\channels-src\\web\\target\\wasm32-wasip2\\release\\build\\serde-6efb18bb0d027360\\out

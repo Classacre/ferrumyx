@@ -158,9 +158,9 @@ async fn generate_env_file(
 
     // Docker secrets (production)
     if matches!(options.environment, super::wizard::Environment::Production) {
-        env_vars.insert("DB_PASSWORD_FILE".to_string(), "/run/secrets/db_password".to_string());
-        env_vars.insert("REDIS_PASSWORD_FILE".to_string(), "/run/secrets/redis_password".to_string());
-        env_vars.insert("API_KEYS_FILE".to_string(), "/run/secrets/api_keys".to_string());
+        env_vars.insert("DB_PASSWORD_FILE".to_string(), "/run/config/db_password".to_string());
+        env_vars.insert("REDIS_PASSWORD_FILE".to_string(), "/run/config/redis_password".to_string());
+        env_vars.insert("API_KEYS_FILE".to_string(), "/run/config/api_keys".to_string());
     }
 
     // Generate .env content
@@ -235,9 +235,9 @@ NODE_ENV=production
 COMPOSE_PROJECT_NAME=ferrumyx-prod
 
 # Secrets (Docker secrets in production)
-DB_PASSWORD_FILE=/run/secrets/db_password
-REDIS_PASSWORD_FILE=/run/secrets/redis_password
-API_KEYS_FILE=/run/secrets/api_keys
+DB_PASSWORD_FILE=/run/config/db_password
+REDIS_PASSWORD_FILE=/run/config/redis_password
+API_KEYS_FILE=/run/config/api_keys
 "#;
         fs::write(&example_path, example_content)?;
         println!("Generated: {}", example_path.display());

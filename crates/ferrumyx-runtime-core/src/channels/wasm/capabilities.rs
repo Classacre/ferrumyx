@@ -291,7 +291,7 @@ mod tests {
         assert!(result.is_err());
 
         // Block path traversal
-        let result = caps.validate_workspace_path("../secrets/key.txt");
+        let result = caps.validate_workspace_path("../config/key.txt");
         assert!(result.is_err());
 
         // Block null bytes

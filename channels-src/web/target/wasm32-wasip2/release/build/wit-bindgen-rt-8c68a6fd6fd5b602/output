@@ -1,0 +1,2 @@
+cargo:rustc-link-lib=wit_bindgen_cabi_realloc0_36_0
+cargo:rustc-link-search=native=D:\AI\Ferrumyx\channels-src\web\target\wasm32-wasip2\release\build\wit-bindgen-rt-8c68a6fd6fd5b602\out

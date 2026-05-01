@@ -44,13 +44,6 @@ Operational procedures and runbooks for common tasks and incident response.
 - [Scaling Procedures](./runbooks/scaling-procedures.md)
 - [Incident Response](./runbooks/incident-response.md)
 
-### [Reports](./reports/)
-Assessment reports, audits, and analysis documents.
-
-- [Production Readiness](./reports/production-readiness.md)
-- [Security Audit](./reports/security-audit.md)
-- [Performance Analysis](./reports/performance-analysis.md)
-
 ## Getting Help
 
 If you can't find what you're looking for:

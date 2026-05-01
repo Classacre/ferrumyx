@@ -511,7 +511,7 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_PASSWORD_FILE: /run/config/db_password
     volumes: [postgres_data:/var/lib/postgresql/data]
     secrets: [db_password]
 ```

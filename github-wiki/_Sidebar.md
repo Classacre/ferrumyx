@@ -35,10 +35,7 @@
     * [Incident Response](runbooks/incident-response)
     * [Production Deployment](runbooks/production-deployment)
     * [Development Environment Setup](runbooks/development-environment-setup)
-  * **Reports**
-    * [Performance Analysis](reports/performance-analysis)
-    * [Production Readiness](reports/production-readiness)
-    * [Security Audit](reports/security-audit)
+
 * **Configuration**
   * [Configuration and Tunable Parameters](Configuration-and-Tunable-Parameters)
   * [Resource Limits](resource-limits)

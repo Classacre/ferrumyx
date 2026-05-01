@@ -498,7 +498,7 @@ mod tests {
         assert!(result.is_some());
 
         // Disallowed prefix
-        let result = state.workspace_read("secrets/api_key.txt").unwrap();
+        let result = state.workspace_read("config/api_key.txt").unwrap();
         assert!(result.is_none());
     }
 

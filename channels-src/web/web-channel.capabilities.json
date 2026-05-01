@@ -1,0 +1,37 @@
+{
+  "version": "0.2.0",
+  "wit_version": "0.3.0",
+  "type": "channel",
+  "name": "web",
+  "description": "Web HTTP channel for handling web interface messages",
+  "setup": {
+    "required_secrets": [],
+    "setup_url": null
+  },
+  "capabilities": {
+    "http": {
+      "allowlist": [],
+      "rate_limit": {
+        "requests_per_minute": 100,
+        "requests_per_hour": 5000
+      }
+    },
+    "secrets": {
+      "allowed_names": []
+    },
+    "channel": {
+      "allowed_paths": ["/api/chat", "/api/messages"],
+      "allow_polling": false,
+      "workspace_prefix": "channels/web/",
+      "emit_rate_limit": {
+        "messages_per_minute": 200,
+        "messages_per_hour": 10000
+      }
+    }
+  },
+  "config": {
+    "owner_id": null,
+    "dm_policy": "open",
+    "allow_from": []
+  }
+}
