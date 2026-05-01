@@ -36,13 +36,16 @@ This runbook provides comprehensive procedures for deploying Ferrumyx to product
 
 ### Automated Deployment (Recommended)
 
-#### Using Deploy Script
+#### Using Ferrumyx CLI (Recommended)
 ```bash
 # On deployment server
 cd /opt/ferrumyx
 
-# Run production deployment
-bash scripts/deploy.sh
+# Run complete production setup
+ferrumyx-setup setup --environment production
+
+# Or configuration only (then deploy manually)
+ferrumyx-setup setup --environment production --config-only
 ```
 
 #### Using GitHub Actions

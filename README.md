@@ -54,11 +54,8 @@ Get Ferrumyx running in under 5 minutes with Docker.
 git clone https://github.com/Classacre/ferrumyx.git
 cd ferrumyx
 
-# Start services
-docker-compose up -d
-
-# Run database migrations
-docker-compose exec ferrumyx-web bash scripts/db-migrate.sh
+# Run complete setup (configuration + infrastructure)
+ferrumyx-setup setup --environment development
 
 # Access web interface
 open http://localhost:3000

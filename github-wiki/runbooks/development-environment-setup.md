@@ -1,112 +1,80 @@
 # Development Environment Setup Runbook
 
 ## Overview
-This runbook provides step-by-step instructions for setting up a local development environment for Ferrumyx.
+This runbook provides step-by-step instructions for setting up a local development environment for Ferrumyx using the ferrumyx-setup CLI tool.
 
 ## Prerequisites
 - Docker and Docker Compose installed
 - Git client
 - At least 8GB RAM available
 - 20GB free disk space
+- Ferrumyx repository cloned
 
-## Quick Setup (Automated)
+## Quick Setup (CLI-Based - Recommended)
 
-### Option 1: Using Setup Script (Recommended)
+### Option 1: Complete Setup (Configuration + Infrastructure)
 ```bash
 # Clone the repository
 git clone https://github.com/Classacre/ferrumyx.git
 cd ferrumyx
 
-# Run development setup script
-bash scripts/dev-setup.sh
+# Run complete development setup
+ferrumyx-setup setup --environment development
 ```
 
-### Option 2: Manual Setup
-
-#### Step 1: Clone and Initialize Repository
+### Option 2: Configuration Only (Then Manual Infrastructure)
 ```bash
+# Clone the repository
 git clone https://github.com/Classacre/ferrumyx.git
 cd ferrumyx
-git submodule update --init --recursive
+
+# Configure environment interactively
+ferrumyx-setup wizard --environment development
+
+# Then start services manually
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
-#### Step 2: Environment Configuration
+### Option 3: Non-Interactive Setup
 ```bash
-# Copy environment template
-cp .env.example .env.dev
+# Clone the repository
+git clone https://github.com/Classacre/ferrumyx.git
+cd ferrumyx
 
-# Edit environment variables (optional - defaults should work)
-nano .env.dev
-```
-
-#### Step 3: Install Dependencies
-```bash
-# Install Rust (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-
-# Install Node.js dependencies (if web UI exists)
-npm install
-
-# Install development tools
-cargo install cargo-watch
-cargo install cargo-criterion
-```
-
-#### Step 4: Start Development Services
-```bash
-# Use development compose file
-export COMPOSE_FILE=docker-compose.dev.yml
-
-# Start all services
-docker-compose up -d
-
-# Or start specific services
-docker-compose up -d postgres redis
-```
-
-#### Step 5: Run Database Migrations
-```bash
-# Wait for database to be ready
-sleep 10
-
-# Run migrations
-bash scripts/db-migrate.sh
+# Run automated setup with defaults
+ferrumyx-setup setup --environment development --non-interactive
 ```
 
 ## Development Workflow
 
 ### Starting Development
 ```bash
-# Start all development services
+# Start all development services (if not using CLI setup)
 docker-compose -f docker-compose.dev.yml up -d
 
-# Start hot reload for Rust code
-bash scripts/dev-watch.sh
-
-# In another terminal, start web UI development server
-npm run dev
+# Or use CLI for complete setup
+ferrumyx-setup setup --environment development
 ```
 
 ### Running Tests
 ```bash
 # Run all tests
-cargo test --features postgres,libsql
+cargo test --workspace --features postgres
 
 # Run specific test
 cargo test test_function_name
 
-# Run with coverage
-cargo tarpaulin --features postgres,libsql
+# Run with coverage (requires cargo-tarpaulin)
+cargo tarpaulin --workspace --features postgres --out Xml
 ```
 
 ### Code Quality Checks
 ```bash
 # Format code
-cargo fmt
+cargo fmt --all
 
 # Run clippy
-cargo clippy -- -D warnings
+cargo clippy --workspace -- -D warnings
 
 # Run lint (JavaScript/TypeScript)
 npm run lint
@@ -140,8 +108,11 @@ docker-compose -f docker-compose.dev.yml exec redis redis-cli
 # Check health endpoints
 curl http://localhost:3000/health
 
-# Run health checks
-bash scripts/health-check.sh --detailed
+# Run configuration validation
+ferrumyx-setup validate
+
+# Check service health (manual)
+docker-compose -f docker-compose.dev.yml ps
 ```
 
 ## Environment Configuration
@@ -217,8 +188,8 @@ docker run hello-world
 
 ### Getting Help
 1. Check the logs: `docker-compose -f docker-compose.dev.yml logs`
-2. Run health checks: `bash scripts/health-check.sh`
-3. Review documentation: `docs/DEVELOPMENT.md`
+2. Validate configuration: `ferrumyx-setup validate`
+3. Review documentation: See wiki sections above
 4. Create an issue: https://github.com/Classacre/ferrumyx/issues
 
 ## Cleanup
@@ -243,9 +214,9 @@ docker-compose -f docker-compose.dev.yml down
 # Remove database volume
 docker volume rm ferrumyx_postgres_data_dev
 
-# Restart fresh
+# Restart fresh (CLI will handle setup)
 docker-compose -f docker-compose.dev.yml up -d
-bash scripts/db-migrate.sh
+ferrumyx-setup setup --environment development --config-only
 ```
 
 ## Performance Tips
