@@ -1,5 +1,6 @@
 //! Secure credential handling and key generation
 
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use rand::prelude::*;
 use std::io::{self, Write};
 
@@ -130,7 +131,7 @@ pub fn validate_encryption_key(key: &str) -> Result<(), String> {
     if key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit()) {
         // Valid hex-encoded 32-byte key
         Ok(())
-    } else if key.len() == 44 && base64::decode(key).is_ok() {
+    } else if key.len() == 44 && BASE64.decode(key).is_ok() {
         // Valid base64-encoded 32-byte key
         Ok(())
     } else if key.len() >= 32 {

@@ -1,6 +1,6 @@
 //! Configuration file generation for Ferrumyx setup
 
-use crate::security::{generate_secure_password, generate_secure_key};
+use crate::security::generate_secure_password;
 use ferrumyx_config::{FerrumyxConfig, LlmProviderConfig};
 use std::collections::HashMap;
 use std::fs;

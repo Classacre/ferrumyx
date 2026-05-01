@@ -8,10 +8,10 @@ mod config;
 mod security;
 mod validate;
 mod backup;
+mod infrastructure;
 
 use clap::{Parser, Subcommand};
 use console::style;
-use ferrumyx_config::FerrumyxConfig;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -25,17 +25,21 @@ input validation, and automated file generation for both development and product
 
 Features:
 - Interactive step-by-step configuration wizard
+- Complete infrastructure setup (Docker, database, services)
 - Secure password input with masking
 - Real-time input validation with feedback
 - Automated .env and configuration file generation
 - Cross-platform support (Windows, macOS, Linux)
 - Configuration backup and restore capabilities
+- Health checking and service validation
 
 Examples:
-    ferrumyx-setup wizard          # Run interactive setup wizard
-    ferrumyx-setup validate        # Validate existing configuration
-    ferrumyx-setup backup          # Create configuration backup
-    ferrumyx-setup restore backup.json  # Restore from backup
+    ferrumyx-setup wizard                    # Interactive configuration wizard
+    ferrumyx-setup setup                     # Complete setup (config + infrastructure)
+    ferrumyx-setup setup --config-only       # Configuration only
+    ferrumyx-setup validate                  # Validate existing configuration
+    ferrumyx-setup backup                    # Create configuration backup
+    ferrumyx-setup restore backup.json       # Restore from backup
 ")]
 struct Cli {
     #[command(subcommand)]
@@ -93,13 +97,33 @@ enum Commands {
 
     /// Generate secure random keys and passwords
     Generate {
-        /// Type of secret to generate (password/jwt-key/encryption-key)
+        /// Type of secret to generate
         #[arg(short, long)]
-        secret_type: String,
+        secret_type: Option<String>,
 
-        /// Length of generated secret
+        /// Length of generated secret (for passwords/keys)
         #[arg(short, long, default_value = "32")]
         length: usize,
+    },
+
+    /// Complete Ferrumyx setup (configuration + infrastructure)
+    #[command()]
+    Setup {
+        /// Environment type (development/production)
+        #[arg(short, long, default_value = "development")]
+        environment: String,
+
+        /// Skip infrastructure setup (configuration only)
+        #[arg(long)]
+        config_only: bool,
+
+        /// Non-interactive mode (uses defaults)
+        #[arg(long)]
+        non_interactive: bool,
+
+        /// Skip final health checks
+        #[arg(long)]
+        skip_health_check: bool,
     },
 }
 
@@ -153,7 +177,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", style("==========================").green());
 
             let secret = security::generate_secure_key(length);
+            let secret_type = secret_type.unwrap_or_else(|| "key".to_string());
             println!("Generated {}: {}", secret_type, style(&secret).red());
+        }
+
+        Commands::Setup {
+            environment,
+            config_only,
+            non_interactive,
+            skip_health_check,
+        } => {
+            println!("{}", style("🚀 Complete Ferrumyx Setup").bold().cyan());
+            println!("{}", style("========================").cyan());
+
+            println!("Environment: {}", style(&environment).yellow());
+            println!("Configuration Only: {}", style(config_only).yellow());
+            println!("Non-Interactive: {}", style(non_interactive).yellow());
+
+            // Run configuration setup
+            println!("\n{}", style("📝 Phase 1: Configuration Setup").bold());
+            let output_dir = std::path::PathBuf::from(".");
+            if non_interactive {
+                wizard::run_non_interactive(&environment, &output_dir).await?;
+            } else {
+                wizard::run_interactive(&environment, &output_dir).await?;
+            }
+
+            if !config_only {
+                infrastructure::run_full_setup(&environment, skip_health_check).await?;
+            }
+
+            println!("\n{}", style("✅ Ferrumyx setup completed successfully!").green().bold());
+            println!("You can now run: {}", style("docker-compose up -d").cyan());
         }
     }
 

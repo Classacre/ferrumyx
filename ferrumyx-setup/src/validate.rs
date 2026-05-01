@@ -409,7 +409,7 @@ fn validate_env_file(content: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let key = parts[0].trim();
-        let value = parts[1].trim();
+        let _value = parts[1].trim();
 
         // Validate key format
         if key.is_empty() {

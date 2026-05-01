@@ -1,8 +1,8 @@
 //! Interactive setup wizard for Ferrumyx configuration
 
 use crate::config::{generate_config_files, ConfigOptions};
-use crate::security::{generate_secure_key, generate_secure_password, validate_api_key};
-use crate::validate::{validate_database_url, validate_llm_provider};
+use crate::security::{generate_secure_password, generate_secure_key, validate_api_key};
+use crate::validate::validate_database_url;
 use console::{style, Term};
 use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect, Input, Password, Select};
 use ferrumyx_config::{
@@ -393,7 +393,7 @@ async fn configure_openai_compatible(theme: &ColorfulTheme) -> Result<(String, H
 }
 
 /// Configure security settings
-async fn configure_security(theme: &ColorfulTheme, environment: &Environment) -> Result<SecurityConfig, Box<dyn std::error::Error>> {
+async fn configure_security(theme: &ColorfulTheme, _environment: &Environment) -> Result<SecurityConfig, Box<dyn std::error::Error>> {
     println!("{}", style("Security Configuration").bold().blue());
     println!("{}", style("======================").blue());
 
