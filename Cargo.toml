@@ -13,8 +13,8 @@ members = [
     "crates/ferrumyx-runtime-core",
     "crates/ferrumyx-monitoring",
     "crates/ferrumyx-security",
-    "crates/ferrumyx-test-utils",
-    "crates/ferrumyx-config"
+    "crates/ferrumyx-config",
+    "ferrumyx-setup"
 ]
 
 [workspace.package]

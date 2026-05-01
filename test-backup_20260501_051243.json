@@ -1,0 +1,90 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-05-01T05:12:43.191783900Z",
+    "environment": "development",
+    "ferrumyx_version": "0.1.0",
+    "includes_sensitive": true,
+    "description": "Ferrumyx configuration backup created on 2026-05-01 05:12:43 UTC"
+  },
+  "config": {
+    "version": "1.0.0",
+    "database": {
+      "url": "postgresql://localhost:5432/ferrumyx",
+      "pool_size": 10,
+      "backend": "postgresql"
+    },
+    "llm": {
+      "default_provider": "openai",
+      "providers": {}
+    },
+    "security": {
+      "jwt_secret": "super-secret-jwt-key-that-is-long-enough-for-production-use",
+      "encryption_key": "super-secret-encryption-key-that-is-long-enough-for-production-use",
+      "audit_enabled": true
+    },
+    "performance": {
+      "max_concurrent": 100,
+      "timeout_seconds": 30,
+      "caching_enabled": true
+    },
+    "channels": {
+      "enabled": false,
+      "whatsapp": null,
+      "slack": null,
+      "discord": null
+    },
+    "monitoring": {
+      "metrics_enabled": true,
+      "metrics_endpoint": "/metrics",
+      "log_level": "info",
+      "health_checks_enabled": true
+    }
+  },
+  "environment": {
+    "REDIS_URL": "redis://redis:6379",
+    "OPENAI_API_KEY": "sk-demo",
+    "FERRUMYX_DATABASE_URL": "postgresql://ferrumyx:testpass@postgres:5432/ferrumyx",
+    "RUST_LOG": "info,ferrumyx=debug,ironclaw=info",
+    "ALERTMANAGER_PORT": "9093",
+    "REDIS_PASSWORD": "testredis",
+    "REDIS_PASSWORD_FILE": "/run/secrets/redis_password",
+    "PUBMED_API_KEY": "",
+    "SLACK_BOT_TOKEN": "xoxb-demo-slack-token",
+    "IRONCLAW_API_KEY": "demo_key",
+    "POSTGRES_PASSWORD": "testpass",
+    "ENCRYPTION_KEY": "32-char-encryption-key-demo-key",
+    "POE_API_KEY": "demo",
+    "LOG_LEVEL": "info",
+    "BIOCLAW_TOOLS_ENABLED": "pubmed,blast,pymol,fastqc,fpocket,vina,rdkit,admet",
+    "API_KEYS_FILE": "/run/secrets/api_keys",
+    "JWT_SECRET": "demo-jwt-secret-key",
+    "SESSION_SECRET": "demo-session-secret",
+    "READONLY_PASSWORD": "readonly",
+    "FERRUMYX_REDIS_URL": "redis://:testredis@redis:6379",
+    "EUROPEPMC_API_KEY": "",
+    "FERRUMYX_WEB_ADDR": "0.0.0.0:3000",
+    "LITERATURE_DATA_PATH": "./data/literature",
+    "POSTGRES_DB": "ferrumyx",
+    "PROMETHEUS_PORT": "9090",
+    "DEBUG": "true",
+    "WEBHOOK_SECRET": "demo-webhook-secret",
+    "GRAFANA_ADMIN_PASSWORD": "admin",
+    "NODE_ENV": "production",
+    "DATABASE_URL": "postgresql://ferrumyx:testpass@localhost:5432/ferrumyx",
+    "DISCORD_BOT_TOKEN": "demo-discord-token",
+    "MOLECULAR_DATA_PATH": "./data/molecular",
+    "HOT_RELOAD": "true",
+    "POSTGRES_USER": "ferrumyx",
+    "BIOCLAW_WASM_PATH": "./wasm",
+    "COMPOSE_PROJECT_NAME": "ferrumyx-prod",
+    "IRONCLAW_ENDPOINT": "https://api.ironclaw.near.ai",
+    "WHATSAPP_API_KEY": "demo-whatsapp-key",
+    "ANTHROPIC_API_KEY": "sk-ant-demo",
+    "DB_PASSWORD_FILE": "/run/secrets/db_password",
+    "DEPMAP_DATA_PATH": "./data/depmap"
+  },
+  "additional_files": {
+    "config/ferrumyx.example.toml": "# ferrumyx.toml — Ferrumyx configuration\r\n# Copy this to ferrumyx.toml and edit for your environment.\r\n# ferrumyx.toml is gitignored; never commit API keys.\r\n#\r\n# Quick start (API-only, no GPU needed):\r\n#   1. Copy to ferrumyx.toml\r\n#   2. Set llm.default_backend = \"openai\" (or \"anthropic\" / \"gemini\")\r\n#   3. Set the api_key for your chosen provider\r\n#   4. Set embedding.backend = \"openai\" and embedding.api_key\r\n\r\n[database]\r\nurl            = \"./data/lancedb\"\r\nmax_connections = 10\r\nmin_connections = 2\r\n\r\n# ── LLM ──────────────────────────────────────────────────────────────────────\r\n[llm]\r\n# Mode: \"local_only\" | \"prefer_local\" | \"any\"\r\n# \"local_only\"   — only Ollama / local endpoints (no API keys needed)\r\n# \"prefer_local\" — use local when available, fall back to remote for PUBLIC data\r\n# \"any\"          — use the default_backend for all PUBLIC data (recommended for API-only)\r\nmode = \"prefer_local\"\r\n\r\n# Which backend to use for PUBLIC data (scientific literature, not patient data)\r\n# Options: \"openai\" | \"anthropic\" | \"gemini\" | \"openai_compatible\" | \"ollama\"\r\ndefault_backend = \"ollama\"\r\n\r\n# Backend used for CONFIDENTIAL / INTERNAL data (must be local)\r\n# Leave as \"ollama\" even if you don't have Ollama running — it simply won't be\r\n# called unless you ingest data classified as INTERNAL or CONFIDENTIAL.\r\nlocal_backend = \"ollama\"\r\n\r\n# Allow INTERNAL-classified data to be sent to remote backends (with audit log)\r\n# Default: false (safer). Set true only if you understand the privacy implications.\r\nallow_internal_remote = false\r\n\r\n# ── Provider: OpenAI ─────────────────────────────────────────────────────────\r\n[llm.openai]\r\n# Get your key at https://platform.openai.com/api-keys\r\napi_key  = \"\"                         # or set env var FERRUMYX_OPENAI_API_KEY\r\nmodel    = \"gpt-4o-mini\"              # cheap + fast; use \"gpt-4o\" for higher quality\r\n# Options: gpt-4o | gpt-4o-mini | gpt-4-turbo | o1 | o1-mini | o3-mini\r\n\r\n# ── Provider: Anthropic ───────────────────────────────────────────────────────\r\n[llm.anthropic]\r\n# Get your key at https://console.anthropic.com/\r\napi_key  = \"\"                         # or set env var FERRUMYX_ANTHROPIC_API_KEY\r\nmodel    = \"claude-haiku-4-5\"         # fastest + cheapest; use claude-sonnet for quality\r\n# Options: claude-opus-4 | claude-sonnet-4-6 | claude-haiku-4-5\r\n\r\n# ── Provider: Google Gemini ───────────────────────────────────────────────────\r\n[llm.gemini]\r\n# Get your key at https://aistudio.google.com/app/apikey\r\napi_key  = \"\"                         # or set env var FERRUMYX_GEMINI_API_KEY\r\nmodel    = \"gemini-1.5-flash\"         # free tier available; 1M context\r\n# Options: gemini-1.5-pro | gemini-1.5-flash | gemini-2.0-flash | gemini-2.5-pro\r\n\r\n# ── Provider: OpenAI-Compatible ──────────────────────────────────────────────\r\n# Use for: Groq, TogetherAI, OpenRouter, LMStudio, vLLM, Mistral, etc.\r\n[llm.openai_compatible]\r\nbase_url = \"https://api.groq.com/openai\"  # example: Groq\r\napi_key  = \"\"                              # or env var FERRUMYX_COMPAT_API_KEY\r\nmodel    = \"llama-3.3-70b-versatile\"      # change to match your provider's model\r\ncached_chat = true                         # enable cache hints when provider/model supports it\r\n# Other examples:\r\n#   Groq:       base_url = \"https://api.groq.com/openai\"\r\n#   OpenRouter: base_url = \"https://openrouter.ai/api\"\r\n#   TogetherAI: base_url = \"https://api.together.xyz\"\r\n#   LMStudio:   base_url = \"http://localhost:1234\"       api_key = \"\"\r\n#   vLLM:       base_url = \"http://localhost:8000\"       api_key = \"\"\r\n#   Mistral:    base_url = \"https://api.mistral.ai\"\r\n\r\n# ── Provider: Ollama (local) ─────────────────────────────────────────────────\r\n[llm.ollama]\r\nbase_url = \"http://localhost:11434\"\r\nmodel    = \"llama3.1:8b\"\r\n# GPU not required — quantised models run on CPU (slower but free)\r\n# Recommended if compute is available: mistral-nemo, llama3.1:70b, biomistral\r\n\r\n# ── Spending limits ───────────────────────────────────────────────────────────\r\n[llm.limits]\r\nmax_tokens_per_day_openai    = 500_000\r\nmax_tokens_per_day_anthropic = 500_000\r\nmax_tokens_per_day_gemini    = 1_000_000\r\nmax_cost_per_day_usd         = 20.0\r\nalert_cost_threshold_usd     = 15.0\r\n\r\n[llm.rate_limits]\r\nopenai_rpm     = 60\r\nanthropic_rpm  = 40\r\ngemini_rpm     = 60\r\ncompat_rpm     = 60\r\nollama_rpm     = 120\r\n\r\n# ── Embedding ─────────────────────────────────────────────────────────────────\r\n[embedding]\r\n# Which backend to use for text embeddings (written to paper_chunks.embedding)\n# \"rust_native\"     — Microsoft BiomedBERT via Candle (recommended, no API key)\n# \"fastembed\"       — ONNX Runtime via fastembed-rs (highest local CPU throughput; requires `ferrumyx-ingestion/fastembed_backend`)\n# \"openai\"           — text-embedding-3-small (1536-dim, fast, cheap)\n# \"gemini\"           — text-embedding-004 (768-dim, good quality, free tier)\n# \"ollama\"           — local Ollama embedding model\nbackend         = \"rust_native\"\napi_key         = \"\"         # only needed for openai/gemini\r\nembedding_model = \"microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext\"\r\n# Alternatives:\r\n#   OpenAI:        backend = \"openai\", embedding_model = \"text-embedding-3-small\", embedding_dim = 1536\n#   Gemini:        backend = \"gemini\", embedding_model = \"text-embedding-004\", embedding_dim = 768\n#   Ollama:        backend = \"ollama\", embedding_model = \"nomic-embed-text\", embedding_dim = 768\n#   FastEmbed:     backend = \"fastembed\", embedding_model = \"BGEBaseENV15Q\", embedding_dim = 768 (feature `ferrumyx-ingestion/fastembed_backend`)\nembedding_dim   = 768        # BiomedBERT outputs 768-dim vectors\n\r\n# ── Ingestion ─────────────────────────────────────────────────────────────────\r\n[ingestion]\r\n# Default sources enabled for all ingestion jobs\r\nsources = [\"pubmed\", \"europepmc\"]\r\n# Full list: [\"pubmed\", \"europepmc\", \"biorxiv\", \"medrxiv\", \"clinicaltrials\", \"crossref\"]\r\n\r\n[ingestion.pubmed]\r\n# Optional NCBI API key for 10 req/s (vs 3 req/s without)\r\n# Register free at https://www.ncbi.nlm.nih.gov/account/\r\napi_key             = \"\"    # or env var FERRUMYX_PUBMED_API_KEY\r\nrequests_per_second = 3     # 10 with API key\r\n\r\n[ingestion.europepmc]\r\nrequests_per_second = 5\r\n\r\n[ingestion.crossref]\n# CrossRef \"polite pool\" — set a valid email for higher rate limits\nmailto              = \"your@email.com\"\nrequests_per_second = 5\n\n[ingestion.performance]\n# Validation mode: \"off\" | \"audit\" | \"strict\"\nvalidation_mode = \"audit\"\n# Chunk fingerprint scope: \"paper\" (recommended) | \"global\" | \"off\"\nchunk_fingerprint_scope = \"paper\"\n# Parse-quality guardrails for full text\npdf_parse_fallback_enabled = true\npdf_parse_min_sections = 2\npdf_parse_min_chars = 1200\npdf_parse_negative_revalidate_secs = 1800\n# Relation extraction quality telemetry thresholds\npredicate_coverage_min_unique = 6\npredicate_coverage_max_generic_share = 0.55\n\n# ── Scoring ───────────────────────────────────────────────────────────────────\n[scoring]\nfocus_cancer    = \"PAAD\"\nfocus_mutation  = \"G12D\"\nprimary_threshold   = 0.65\nsecondary_threshold = 0.45\n\n# ── Knowledge Graph Rendering ────────────────────────────────────────────────\n[graph]\ndefault_mode = \"2d\"   # \"2d\" or \"3d\"\ndefault_lens = \"analysis\" # \"analysis\" | \"atlas\" | \"path\"\nrender_preset = \"analytical\" # \"analytical\" or \"dense\"\n\n[graph.mode_2d]\nmax_nodes = 260\nmax_links = 1000\n\n[graph.mode_3d]\nmax_nodes = 200\nmax_links = 650\n\n[graph.layout]\nhub_suppression = 0.62\nper_node_edge_cap = 12\natlas_max_clusters = 40\n\n# ── NER service ───────────────────────────────────────────────────────────────\n[ner]\n# Default uses Rust-based Aho-Corasick trie matching (fast, no Docker needed)\r\n# Options: \"trie\" (recommended) | \"scispacy\" (Docker Python service)\r\nprimary = \"trie\"\r\n# service_url is only needed if primary = \"scispacy\"\r\n# service_url = \"http://localhost:8001\"\r\n\r\n# ── Structural analysis ───────────────────────────────────────────────────────\r\n[structural]\nalphafold_cache_dir = \"./data/alphafold\"\npdb_cache_dir       = \"./data/pdb\"\nfpocket_binary      = \"fpocket\"   # must be on PATH\n\n# ── Ranker Phase 4 ───────────────────────────────────────────────────────────\n[ranker.phase4]\n# For cohorts above this size, ranker reads provider cache rows only and avoids\n# live provider API fanout during interactive ranking.\nprovider_live_fetch_max_candidates = 8\nsource_backed_only = true\nn3n4_semantic_fallback = false\nstructural_source_only = false\n\n[ranker.phase4.structural]\nprewarm_enabled = true\nprewarm_max_genes = 8\ncache_dir = \"data/structural_cache\"\nfpocket_enabled = true\nfpocket_bin = \"fpocket\"\n\n[ranker.phase4.provider_refresh]\nadaptive_enabled = true\nbase_interval_secs = 900\nmin_interval_secs = 180\nmax_interval_secs = 21600\nstale_force_after_secs = 86400\nbackoff_factor = 2\nsuccess_accel_div = 2\nrecent_runs = 8\n\n[ranker.phase4.background_refresh]\nenabled = true\ninterval_secs = 900\nmax_genes = 24\nbatch_size = 6\nretries = 1\nfact_scan_limit = 4000\nmin_gene_mentions = 2\nalert_error_rate = 0.55\nalert_streak_runs = 3\ncancer_code = \"\"   # Optional (e.g. \"PAAD\")\nseed_genes = \"\"    # Optional CSV seed list (e.g. \"KRAS,EGFR,BRAF\")\n\n[ranker.providers.cbioportal]\nbase_url = \"https://www.cbioportal.org/api\"\ntimeout_secs = 10\n# api_token = \"\"\n\n[ranker.providers.cosmic]\nbase_url = \"https://cancer.sanger.ac.uk/cosmic/api\"\ntimeout_secs = 10\nmutation_data_path = \"\"\n# api_key = \"\"\n\n# ── Audit ─────────────────────────────────────────────────────────────────────\n[audit]\nlog_llm_calls    = true\nlog_ingestion    = true\nlog_kg_changes   = true\r\nretain_days      = 365\r\n"
+  }
+}
